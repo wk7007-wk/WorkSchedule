@@ -1393,29 +1393,31 @@ async function loadData(){
   }
   dataLoaded = true;
 
-  // 자동 휴무 생성 + 고정 스케줄 적용
-  generateAutoDayoffs();
-  autoApplyFixed(dk);
-
-  // 첫 실행 시 전 데이터 삭제 후 고정값 초기화
-  const initVer = localStorage.getItem('ws_init_ver');
-  if(initVer !== 'v3'){
-    // 기존 스케줄 전부 클리어
-    for(let i=0; i<localStorage.length; i++){
-      const key = localStorage.key(i);
-      if(key && key.startsWith('ws_sched_')){
-        localStorage.removeItem(key);
-        i--; // 키 삭제 후 인덱스 조정
-      }
-    }
-    daySchedule = {};
+  try {
+    // 자동 휴무 생성 + 고정 스케줄 적용
+    generateAutoDayoffs();
     autoApplyFixed(dk);
-    localStorage.setItem('ws_init_ver', 'v3');
-  }
+
+    // 첫 실행 시 전 데이터 삭제 후 고정값 초기화
+    const initVer = localStorage.getItem('ws_init_ver');
+    if(initVer !== 'v3'){
+      // 기존 스케줄 전부 클리어
+      for(let i=0; i<localStorage.length; i++){
+        const key = localStorage.key(i);
+        if(key && key.startsWith('ws_sched_')){
+          localStorage.removeItem(key);
+          i--; // 키 삭제 후 인덱스 조정
+        }
+      }
+      daySchedule = {};
+      autoApplyFixed(dk);
+      localStorage.setItem('ws_init_ver', 'v3');
+    }
+  } catch(e) { console.error('loadData init error:', e); }
 
   $loading.style.display = 'none';
   $tabContent.style.display = '';
-  renderAll();
+  try { renderAll(); } catch(e) { console.error('renderAll error:', e); }
   loadWeekSchedules();
   updateConfirmBtn();
 }
@@ -1533,12 +1535,14 @@ function updateDateDisplay(){
 // Render all
 // ============================================================
 function renderAll(){
-  updateDateDisplay();
-  renderBriefing();
-  renderCurrentTab();
-  renderWeek();
-  checkLogistics();
-  buildCalButtons();
+  try {
+    updateDateDisplay();
+    renderBriefing();
+    renderCurrentTab();
+    renderWeek();
+    checkLogistics();
+    buildCalButtons();
+  } catch(e) { console.error('renderAll error:', e); }
 }
 
 // ============================================================
