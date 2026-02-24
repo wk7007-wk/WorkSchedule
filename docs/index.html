@@ -667,6 +667,7 @@ select.form-input{
     <button class="btn nav-btn" id="nextDay" aria-label="다음 날">▶</button>
   </div>
   <div class="header-right">
+    <button class="btn btn-sm" id="resetFixedBtn" style="font-size:.65rem;padding:3px 6px;min-width:auto;min-height:28px;color:#9090A8;border-color:#2E2E52;">재배치</button>
     <button class="btn btn-sm" id="confirmDayBtn" style="font-size:.7rem;padding:4px 8px;min-width:auto;min-height:30px;color:#707088;border-color:#2E2E52;">작업중</button>
     <button class="btn btn-sm" id="refreshBtn" aria-label="새로고침" style="font-size:1rem;padding:6px 8px;color:#9090A8;">↻</button>
     <button class="btn btn-sm btn-gold" id="monthViewBtn" aria-label="월간 보기" style="font-size:1rem;padding:6px 8px;">📅</button>
@@ -1435,6 +1436,32 @@ function autoApplyFixed(dk){
     }
   }
   return changed;
+}
+
+// 고정근무자 클리어 후 재배치 (고정 스케줄 강제 덮어쓰기)
+function resetToFixed(dk){
+  for(const empName in FIXED_SCHEDULES){
+    const fix = FIXED_SCHEDULES[empName];
+    if(fix.type === 'variable' || !fix.start) continue;
+    const empId = findEmpIdByName(empName);
+    if(!empId) continue;
+    if(isDayOff(empId, dk)){
+      delete daySchedule[empId];
+    } else {
+      daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role};
+    }
+  }
+  lsSaveSchedule(dk, daySchedule);
+  for(const empName in FIXED_SCHEDULES){
+    const fix = FIXED_SCHEDULES[empName];
+    if(fix.type === 'variable' || !fix.start) continue;
+    const empId = findEmpIdByName(empName);
+    if(!empId) continue;
+    const s = daySchedule[empId];
+    fbPut(FB_SCHEDULES+'/'+dk+'/'+empId, s || null);
+  }
+  renderCurrentTab();
+  showToast('고정 스케줄 재배치 완료');
 }
 
 async function onDateChange(){
@@ -2860,6 +2887,13 @@ $('prevDay').addEventListener('click', ()=>{
 $('nextDay').addEventListener('click', ()=>{
   currentDate.setDate(currentDate.getDate()+1);
   onDateChange();
+});
+
+// 고정 스케줄 재배치 버튼
+$('resetFixedBtn').addEventListener('click', ()=>{
+  if(!confirm('고정근무자 스케줄을 초기화하고 재배치합니다.\n(변칙 직원 스케줄은 유지)')) return;
+  const dk = dateKey(currentDate);
+  resetToFixed(dk);
 });
 
 // 확정/작업중 토글
