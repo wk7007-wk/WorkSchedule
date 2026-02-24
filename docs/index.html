@@ -76,179 +76,118 @@ body{
 }
 .timeline-title .today-info{font-size:.8rem;color:#FFD700;}
 
-.timeline-scroll{
-  overflow-x:hidden;
-  overflow-y:visible;
-  position:relative;
-}
-
-/* Fixed name column */
-.tl-name-col{
-  position:sticky;left:0;z-index:10;
+/* Vertical Timeline */
+.vt-header{
+  display:flex;
+  position:sticky;top:0;z-index:10;
   background:#1e1e3a;
-  display:flex;align-items:center;
-  padding:0 6px;
-  min-width:50px;max-width:50px;
-  border-right:1px solid #2E2E52;
-  font-size:.72rem;font-weight:600;
-  gap:4px;
-  min-height:36px;
+  border-bottom:2px solid #2E2E52;
 }
-.tl-name-col .dot{
-  width:8px;height:8px;border-radius:50%;flex-shrink:0;
-}
-.tl-name-col .name-text{
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  color:#E0E0EC;
-}
-
-/* Hours column (right) */
-.tl-hours-col{
-  display:flex;align-items:center;justify-content:center;
+.vt-time-hdr{
   min-width:32px;max-width:32px;
-  font-size:.7rem;font-weight:700;color:#FFFFFF;
-  background:#1e1e3a;
-  border-left:1px solid #2E2E52;
-}
-
-/* Timeline bar area */
-.tl-bar-area{
-  position:relative;
-  flex:1;
-  min-height:36px;
-  cursor:pointer;
-}
-
-/* Row */
-.tl-row{
-  display:flex;
-  border-bottom:1px solid #2E2E52;
-  min-height:36px;
-}
-.tl-row:last-child{border-bottom:none;}
-.tl-row:active .tl-bar-area{background:#2A2A4580;}
-
-/* Header row */
-.tl-header-row{
-  display:flex;
-  border-bottom:1px solid #2E2E52;
-  min-height:28px;
-  background:#1e1e3a;
-}
-.tl-header-row .tl-name-col{
-  min-height:28px;font-size:.7rem;color:#707088;
-}
-.tl-header-row .tl-hours-col{
-  min-height:28px;font-size:.7rem;color:#707088;
-}
-.tl-header-bar-area{
-  flex:1;
-  display:flex;
-  position:relative;
-}
-.tl-hour-label{
-  flex:1;
   display:flex;align-items:center;justify-content:center;
   font-size:.6rem;color:#707088;
-  border-left:1px solid #2E2E5240;
+  border-right:1px solid #2E2E52;
+  padding:6px 0;
 }
-.tl-hour-label:first-child{border-left:none;}
-.tl-hour-label.current-hour{color:#FFD700;font-weight:700;}
-
-/* Bar inside bar area */
-.shift-bar{
-  position:absolute;
-  top:4px;bottom:4px;
-  border-radius:4px;
-  display:flex;align-items:center;
-  padding:0 6px;
-  font-size:.7rem;font-weight:600;
-  overflow:hidden;
-  white-space:nowrap;
-  cursor:pointer;
-  transition:opacity .15s;
-  z-index:2;
-}
-.shift-bar:active{opacity:.7;}
-.shift-bar .bar-text{
-  overflow:hidden;text-overflow:ellipsis;
-}
-
-/* Grid lines inside bar area */
-.tl-grid-lines{
-  position:absolute;top:0;left:0;right:0;bottom:0;
-  display:flex;
-  pointer-events:none;
-  z-index:1;
-}
-.tl-grid-line{
+.vt-emp-hdr{
   flex:1;
-  border-left:1px solid #2E2E5230;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:6px 2px;
+  border-right:1px solid #2E2E5230;
+  min-height:44px;
 }
-.tl-grid-line:first-child{border-left:none;}
-.tl-grid-line.current-hour-line{
-  border-left:2px solid #FFD70080;
-}
+.vt-emp-hdr:last-child{border-right:none;}
+.vt-emp-hdr .vt-dot{width:8px;height:8px;border-radius:50%;margin-bottom:2px;}
+.vt-emp-hdr .vt-name{font-size:.62rem;color:#E0E0EC;font-weight:600;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
 
-/* Current time indicator */
-.current-time-line{
-  position:absolute;top:0;bottom:0;width:2px;
-  background:#FFD700;
-  z-index:5;
+.vt-wrapper{
+  position:relative;
+  max-height:65vh;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+}
+.vt-body{
+  display:flex;
+  position:relative;
+}
+.vt-time-col{
+  min-width:32px;max-width:32px;
+  border-right:1px solid #2E2E52;
+  flex-shrink:0;
+}
+.vt-hour-label{
+  display:flex;align-items:flex-start;justify-content:center;
+  font-size:.6rem;color:#707088;
+  border-bottom:1px solid #2E2E5230;
+  padding-top:2px;
+}
+.vt-hour-label.current-hour{color:#FFD700;font-weight:700;}
+.vt-emp-col{
+  flex:1;
+  position:relative;
+  border-right:1px solid #2E2E5215;
+  cursor:pointer;
+}
+.vt-emp-col:last-child{border-right:none;}
+.vt-grid-line{
+  position:absolute;left:0;right:0;
+  border-bottom:1px solid #2E2E5220;
   pointer-events:none;
 }
-.current-time-dot{
-  position:absolute;top:-3px;left:-3px;
-  width:8px;height:8px;border-radius:50%;
-  background:#FFD700;
+.vt-shift{
+  position:absolute;left:2px;right:2px;
+  border-radius:4px;
+  cursor:pointer;
+  z-index:2;
+  display:flex;align-items:center;justify-content:center;
+  flex-direction:column;
+  overflow:hidden;
+  transition:opacity .15s;
+  min-height:12px;
+}
+.vt-shift:active{opacity:.7;}
+.vt-shift .vt-role{font-size:.58rem;font-weight:700;}
+.vt-shift .vt-time-label{font-size:.5rem;opacity:.8;}
+
+/* Current time line (horizontal gold) */
+.vt-now{
+  position:absolute;left:0;right:0;
+  height:2px;background:#FFD700;
+  z-index:5;pointer-events:none;
+}
+.vt-now-dot{
+  position:absolute;left:30px;top:-3px;
+  width:8px;height:8px;border-radius:50%;background:#FFD700;
+}
+.vt-now-label{
+  position:absolute;left:2px;top:-10px;
+  font-size:.5rem;color:#FFD700;font-weight:700;
+  background:#1A1A30cc;padding:0 3px;border-radius:2px;
 }
 
 /* Summary row */
-.tl-summary-row{
+.vt-summary{
   display:flex;
   border-top:2px solid #2E2E52;
-  min-height:32px;
   background:#1e1e3a;
 }
-.tl-summary-row .tl-name-col{
-  min-height:32px;font-size:.75rem;color:#FFD700;font-weight:700;
+.vt-summary-time{
+  min-width:32px;max-width:32px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.6rem;color:#FFD700;font-weight:700;
+  border-right:1px solid #2E2E52;
+  min-height:30px;
 }
-.tl-summary-row .tl-hours-col{min-height:32px;}
-.tl-summary-bar-area{
-  flex:1;
-  display:flex;
-  position:relative;
-}
-.tl-summary-cell{
+.vt-summary-cell{
   flex:1;
   display:flex;align-items:center;justify-content:center;
-  font-size:.65rem;font-weight:700;
-  border-left:1px solid #2E2E5240;
+  font-size:.65rem;font-weight:700;color:#FFFFFF;
+  min-height:30px;
+  border-right:1px solid #2E2E5215;
 }
-.tl-summary-cell:first-child{border-left:none;}
-.tl-summary-cell.cnt-0{color:#E74C3C;}
-.tl-summary-cell.cnt-1{color:#E67E22;}
-.tl-summary-cell.cnt-2{color:#9090A8;}
-.tl-summary-cell.cnt-3{color:#2ECC71;}
-
-/* Role summary row */
-.tl-role-row{
-  display:flex;
-  border-top:1px solid #2E2E52;
-  min-height:24px;
-  background:#1A1A30;
-}
-.tl-role-row .tl-name-col{
-  min-height:24px;font-size:.65rem;color:#707088;
-}
-.tl-role-row .tl-hours-col{min-height:24px;}
-.tl-role-cell{
-  flex:1;
-  display:flex;align-items:center;justify-content:center;
-  font-size:.55rem;color:#707088;
-  border-left:1px solid #2E2E5220;
-}
-.tl-role-cell:first-child{border-left:none;}
+.vt-summary-cell:last-child{border-right:none;}
 
 /* ===== Week Overview ===== */
 .week-section{
@@ -675,11 +614,11 @@ select.form-input{
 @media(max-width:400px){
   .header h1{font-size:1rem;}
   .date-display{font-size:.9rem;min-width:90px;}
-  .tl-name-col{min-width:44px;max-width:44px;padding:0 4px;font-size:.65rem;}
-  .tl-hours-col{min-width:28px;max-width:28px;font-size:.65rem;}
-  .shift-bar{font-size:.55rem;padding:0 3px;}
-  .tl-summary-cell{font-size:.6rem;}
-  .tl-role-cell{font-size:.5rem;}
+  .vt-time-hdr,.vt-time-col,.vt-summary-time{min-width:28px;max-width:28px;}
+  .vt-emp-hdr .vt-name{font-size:.55rem;}
+  .vt-hour-label{font-size:.55rem;}
+  .vt-shift .vt-role{font-size:.5rem;}
+  .vt-shift .vt-time-label{font-size:.45rem;}
 }
 </style>
 </head>
@@ -709,7 +648,7 @@ select.form-input{
     <span class="today-info" id="todayInfo"></span>
   </div>
   <div class="loading" id="loadingIndicator"><div class="spinner"></div>불러오는 중...</div>
-  <div class="timeline-scroll" id="timelineScroll" style="display:none;">
+  <div id="timelineScroll" style="display:none;">
     <div id="timelineContent"></div>
   </div>
 </div>
@@ -1259,8 +1198,11 @@ function renderAll(){
 }
 
 // ============================================================
-// Timeline Rendering (MAIN FEATURE)
+// Timeline Rendering — VERTICAL LAYOUT
 // ============================================================
+const HOUR_HEIGHT = 32; // px per hour row
+const VT_TOTAL_HEIGHT = TL_HOURS.length * HOUR_HEIGHT; // 22 * 32 = 704px
+
 function renderTimeline(){
   if(!dataLoaded) return;
   const container = $timelineContent;
@@ -1269,207 +1211,150 @@ function renderTimeline(){
   const empKeys = Object.keys(employees);
   const now = new Date();
   const isToday = isSameDay(currentDate, now);
-  const currentMinuteOfDay = isToday ? timeToMinutesFrom6(pad(now.getHours())+':'+pad(now.getMinutes())) : -1;
-  const currentHourIdx = isToday ? TL_HOURS.indexOf(now.getHours()) : -1;
 
-  // --- Header row ---
-  const headerRow = document.createElement('div');
-  headerRow.className = 'tl-header-row';
-
-  const headerName = document.createElement('div');
-  headerName.className = 'tl-name-col';
-  headerName.innerHTML = '<span style="color:#707088">직원</span>';
-  headerRow.appendChild(headerName);
-
-  const headerBarArea = document.createElement('div');
-  headerBarArea.className = 'tl-header-bar-area';
-  // Sparse labels: show every 2 hours for fit-to-screen
-  const SHOW_HOURS = new Set([6,8,10,12,14,16,18,20,22,0,2]);
-  TL_HOURS.forEach((h, idx) => {
-    const label = document.createElement('div');
-    label.className = 'tl-hour-label';
-    if(isToday && h === now.getHours()) label.classList.add('current-hour');
-    label.textContent = SHOW_HOURS.has(h) ? pad(h) : '';
-    headerBarArea.appendChild(label);
-  });
-  headerRow.appendChild(headerBarArea);
-
-  const headerHours = document.createElement('div');
-  headerHours.className = 'tl-hours-col';
-  headerHours.innerHTML = '<span style="color:#707088;font-size:.65rem">시간</span>';
-  headerRow.appendChild(headerHours);
-
-  container.appendChild(headerRow);
-
-  // --- Employee rows ---
   if(empKeys.length === 0){
-    const emptyRow = document.createElement('div');
-    emptyRow.style.cssText = 'padding:30px;text-align:center;color:#9090A8;font-size:.9rem;';
-    emptyRow.textContent = '직원을 먼저 추가해주세요';
-    container.appendChild(emptyRow);
+    container.innerHTML = '<div style="padding:30px;text-align:center;color:#9090A8;font-size:.9rem;">직원을 먼저 추가해주세요</div>';
     return;
   }
 
+  // --- Header (employee names, sticky) ---
+  const header = document.createElement('div');
+  header.className = 'vt-header';
+
+  const timeHdr = document.createElement('div');
+  timeHdr.className = 'vt-time-hdr';
+  timeHdr.textContent = '시간';
+  header.appendChild(timeHdr);
+
+  empKeys.forEach(empId => {
+    const emp = employees[empId];
+    const hdr = document.createElement('div');
+    hdr.className = 'vt-emp-hdr';
+    hdr.innerHTML = '<div class="vt-dot" style="background:'+(emp.color||'#9090A8')+'"></div><div class="vt-name">'+emp.name+'</div>';
+    header.appendChild(hdr);
+  });
+  container.appendChild(header);
+
+  // --- Scrollable body ---
+  const wrapper = document.createElement('div');
+  wrapper.className = 'vt-wrapper';
+
+  const body = document.createElement('div');
+  body.className = 'vt-body';
+  body.style.height = VT_TOTAL_HEIGHT + 'px';
+
+  // Time column (left)
+  const timeCol = document.createElement('div');
+  timeCol.className = 'vt-time-col';
+  const SHOW_HOURS = new Set([6,8,10,12,14,16,18,20,22,0,2]);
+  TL_HOURS.forEach((h, idx) => {
+    const label = document.createElement('div');
+    label.className = 'vt-hour-label';
+    label.style.height = HOUR_HEIGHT + 'px';
+    if(isToday && h === now.getHours()) label.classList.add('current-hour');
+    label.textContent = SHOW_HOURS.has(h) ? pad(h) : '';
+    timeCol.appendChild(label);
+  });
+  body.appendChild(timeCol);
+
+  // Employee columns
   empKeys.forEach(empId => {
     const emp = employees[empId];
     const shift = daySchedule[empId];
-    const row = document.createElement('div');
-    row.className = 'tl-row';
+    const col = document.createElement('div');
+    col.className = 'vt-emp-col';
 
-    // Name column
-    const nameCol = document.createElement('div');
-    nameCol.className = 'tl-name-col';
-    nameCol.innerHTML = '<div class="dot" style="background:'+(emp.color||'#9090A8')+'"></div><span class="name-text">'+emp.name+'</span>';
-    row.appendChild(nameCol);
-
-    // Bar area
-    const barArea = document.createElement('div');
-    barArea.className = 'tl-bar-area';
-
-    // Grid lines
-    const gridLines = document.createElement('div');
-    gridLines.className = 'tl-grid-lines';
+    // Hour grid lines
     TL_HOURS.forEach((h, idx) => {
       const line = document.createElement('div');
-      line.className = 'tl-grid-line';
-      if(isToday && h === now.getHours()) line.classList.add('current-hour-line');
-      gridLines.appendChild(line);
+      line.className = 'vt-grid-line';
+      line.style.top = (idx * HOUR_HEIGHT) + 'px';
+      line.style.height = HOUR_HEIGHT + 'px';
+      col.appendChild(line);
     });
-    barArea.appendChild(gridLines);
 
-    // Shift bar
+    // Shift block
     if(shift && shift.start && shift.end){
-      const bar = document.createElement('div');
-      bar.className = 'shift-bar';
-      const leftPct = timeToPercent(shift.start);
-      const rightPct = timeToPercent(shift.end);
-      let widthPct = rightPct - leftPct;
-      if(widthPct <= 0) widthPct += 100; // wraps past 03:00
-      bar.style.left = leftPct + '%';
-      bar.style.width = Math.min(widthPct, 100 - leftPct) + '%';
-      bar.style.background = (emp.color||'#9090A8') + '30';
-      bar.style.borderLeft = '3px solid '+(emp.color||'#9090A8');
-      bar.style.color = emp.color||'#E0E0EC';
+      const block = document.createElement('div');
+      block.className = 'vt-shift';
+      const topPct = timeToPercent(shift.start);
+      const bottomPct = timeToPercent(shift.end);
+      let heightPct = bottomPct - topPct;
+      if(heightPct <= 0) heightPct += 100;
 
-      const startLabel = shift.start.replace(/^0/,'').replace(':00','');
-      const endLabel = shift.end.replace(/^0/,'').replace(':00','');
-      const roleLabel = shift.role ? ' '+shift.role : '';
-      bar.innerHTML = '<span class="bar-text">'+startLabel+'-'+endLabel+roleLabel+'</span>';
-      bar.addEventListener('click', (e)=>{
+      const topPx = topPct / 100 * VT_TOTAL_HEIGHT;
+      const heightPx = Math.min(heightPct / 100 * VT_TOTAL_HEIGHT, VT_TOTAL_HEIGHT - topPx);
+      block.style.top = topPx + 'px';
+      block.style.height = heightPx + 'px';
+      block.style.background = (emp.color||'#9090A8') + '35';
+      block.style.borderTop = '3px solid '+(emp.color||'#9090A8');
+
+      const roleText = shift.role || '';
+      const timeText = shift.start.replace(/^0/,'')+'-'+shift.end.replace(/^0/,'');
+      const hours = calcHours(shift.start, shift.end);
+      block.innerHTML =
+        (roleText ? '<span class="vt-role" style="color:'+(emp.color||'#E0E0EC')+'">'+roleText+'</span>' : '')+
+        '<span class="vt-time-label" style="color:'+(emp.color||'#E0E0EC')+'">'+timeText+'</span>'+
+        '<span class="vt-time-label" style="color:#FFFFFF">'+hours+'h</span>';
+
+      block.addEventListener('click', (e)=>{
         e.stopPropagation();
         openShiftModal(empId);
       });
-      barArea.appendChild(bar);
+      col.appendChild(block);
     }
 
-    // Current time indicator
-    if(isToday && currentMinuteOfDay >= 0 && currentMinuteOfDay <= TL_TOTAL_MINUTES){
-      const pct = (currentMinuteOfDay / TL_TOTAL_MINUTES) * 100;
-      const timeLine = document.createElement('div');
-      timeLine.className = 'current-time-line';
-      timeLine.style.left = pct + '%';
-      timeLine.innerHTML = '<div class="current-time-dot"></div>';
-      barArea.appendChild(timeLine);
+    col.addEventListener('click', ()=> openShiftModal(empId));
+    body.appendChild(col);
+  });
+
+  // Current time line (horizontal gold)
+  if(isToday){
+    const currentMin = timeToMinutesFrom6(pad(now.getHours())+':'+pad(now.getMinutes()));
+    if(currentMin >= 0 && currentMin <= TL_TOTAL_MINUTES){
+      const topPx = (currentMin / TL_TOTAL_MINUTES) * VT_TOTAL_HEIGHT;
+      const nowLine = document.createElement('div');
+      nowLine.className = 'vt-now';
+      nowLine.style.top = topPx + 'px';
+      nowLine.innerHTML = '<div class="vt-now-dot"></div><span class="vt-now-label">현재 '+pad(now.getHours())+':'+pad(now.getMinutes())+'</span>';
+      body.appendChild(nowLine);
     }
+  }
 
-    barArea.addEventListener('click', ()=> openShiftModal(empId));
-    row.appendChild(barArea);
+  wrapper.appendChild(body);
+  container.appendChild(wrapper);
 
-    // Hours column
-    const hoursCol = document.createElement('div');
-    hoursCol.className = 'tl-hours-col';
+  // --- Summary row (hours per employee) ---
+  const summary = document.createElement('div');
+  summary.className = 'vt-summary';
+
+  const sumTime = document.createElement('div');
+  sumTime.className = 'vt-summary-time';
+  sumTime.textContent = '합계';
+  summary.appendChild(sumTime);
+
+  empKeys.forEach(empId => {
+    const shift = daySchedule[empId];
+    const cell = document.createElement('div');
+    cell.className = 'vt-summary-cell';
     if(shift && shift.start && shift.end){
-      const h = calcHours(shift.start, shift.end);
-      hoursCol.textContent = h + 'h';
+      cell.textContent = calcHours(shift.start, shift.end) + 'h';
     } else {
-      hoursCol.textContent = '-';
-      hoursCol.style.color = '#707088';
+      cell.textContent = '-';
+      cell.style.color = '#707088';
     }
-    row.appendChild(hoursCol);
-
-    container.appendChild(row);
+    summary.appendChild(cell);
   });
+  container.appendChild(summary);
 
-  // --- Summary row (concurrent workers per hour) ---
-  const summaryRow = document.createElement('div');
-  summaryRow.className = 'tl-summary-row';
-
-  const summaryName = document.createElement('div');
-  summaryName.className = 'tl-name-col';
-  summaryName.innerHTML = '<span style="color:#FFD700;font-weight:700">인원</span>';
-  summaryRow.appendChild(summaryName);
-
-  const summaryBarArea = document.createElement('div');
-  summaryBarArea.className = 'tl-summary-bar-area';
-
-  TL_HOURS.forEach((hour) => {
-    let count = 0;
-    empKeys.forEach(empId => {
-      const shift = daySchedule[empId];
-      if(shift && shift.start && shift.end){
-        if(isHourInShift(hour, shift.start, shift.end)){
-          count++;
-        }
-      }
-    });
-    const cell = document.createElement('div');
-    cell.className = 'tl-summary-cell';
-    if(count === 0) cell.classList.add('cnt-0');
-    else if(count === 1) cell.classList.add('cnt-1');
-    else if(count === 2) cell.classList.add('cnt-2');
-    else cell.classList.add('cnt-3');
-    cell.textContent = count;
-    summaryBarArea.appendChild(cell);
-  });
-  summaryRow.appendChild(summaryBarArea);
-
-  const summaryHours = document.createElement('div');
-  summaryHours.className = 'tl-hours-col';
-  summaryHours.textContent = '';
-  summaryRow.appendChild(summaryHours);
-
-  container.appendChild(summaryRow);
-
-  // --- Role summary row (placeholder) ---
-  const roleRow = document.createElement('div');
-  roleRow.className = 'tl-role-row';
-
-  const roleName = document.createElement('div');
-  roleName.className = 'tl-name-col';
-  roleName.innerHTML = '<span style="color:#707088;font-size:.6rem">역할</span>';
-  roleRow.appendChild(roleName);
-
-  const roleBarArea = document.createElement('div');
-  roleBarArea.style.cssText = 'flex:1;display:flex;';
-  TL_HOURS.forEach((hour) => {
-    let roles = {주방:0, 배달:0, 오전:0};
-    empKeys.forEach(empId => {
-      const shift = daySchedule[empId];
-      if(shift && shift.start && shift.end && shift.role){
-        if(isHourInShift(hour, shift.start, shift.end)){
-          if(roles[shift.role] !== undefined) roles[shift.role]++;
-        }
-      }
-    });
-    const cell = document.createElement('div');
-    cell.className = 'tl-role-cell';
-    const parts = [];
-    if(roles.주방 > 0) parts.push('주'+roles.주방);
-    if(roles.배달 > 0) parts.push('배'+roles.배달);
-    if(roles.오전 > 0) parts.push('오'+roles.오전);
-    cell.textContent = parts.length > 0 ? parts.join('/') : '-';
-    if(parts.length > 0) cell.style.color = '#9090A8';
-    roleBarArea.appendChild(cell);
-  });
-  roleRow.appendChild(roleBarArea);
-
-  const roleHours = document.createElement('div');
-  roleHours.className = 'tl-hours-col';
-  roleHours.textContent = '';
-  roleRow.appendChild(roleHours);
-
-  container.appendChild(roleRow);
-
+  // Auto-scroll to current time area
+  if(isToday){
+    setTimeout(()=>{
+      const currentMin = timeToMinutesFrom6(pad(now.getHours())+':'+pad(now.getMinutes()));
+      const topPx = (currentMin / TL_TOTAL_MINUTES) * VT_TOTAL_HEIGHT;
+      wrapper.scrollTop = Math.max(0, topPx - wrapper.clientHeight / 3);
+    }, 100);
+  }
 }
 
 function isHourInShift(hour, start, end){
