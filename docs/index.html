@@ -452,7 +452,8 @@ select.form-input{
   min-height:36px;
   display:flex;align-items:center;
 }
-.role-pill.selected{background:#2ECC71;color:#121225;border-color:#2ECC71;font-weight:600;}
+.role-pill.selected{background:var(--pill-color,#2ECC71);color:#121225;border-color:var(--pill-color,#2ECC71);font-weight:600;}
+.role-pill.disabled{opacity:.3;pointer-events:none;text-decoration:line-through;}
 
 /* Presets */
 .presets{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
@@ -666,6 +667,7 @@ select.form-input{
     <button class="btn nav-btn" id="nextDay" aria-label="다음 날">▶</button>
   </div>
   <div class="header-right">
+    <button class="btn btn-sm" id="confirmDayBtn" style="font-size:.7rem;padding:4px 8px;min-width:auto;min-height:30px;color:#707088;border-color:#2E2E52;">작업중</button>
     <button class="btn btn-sm" id="refreshBtn" aria-label="새로고침" style="font-size:1rem;padding:6px 8px;color:#9090A8;">↻</button>
     <button class="btn btn-sm btn-gold" id="monthViewBtn" aria-label="월간 보기" style="font-size:1rem;padding:6px 8px;">📅</button>
   </div>
@@ -789,10 +791,11 @@ select.form-input{
       <div class="emp-chips" id="shiftEmpChips"></div>
     </div>
     <div class="form-group">
-      <label>역할 (복수=0.5명)</label>
+      <label>역할 <span id="shiftRoleNote" style="color:#707088;font-size:.65rem;"></span></label>
       <div class="role-pills" id="shiftRolePills">
-        <div class="role-pill" data-role="주방">🍳 주방</div>
-        <div class="role-pill" data-role="배달">🛵 배달</div>
+        <div class="role-pill" data-role="주방" style="--pill-color:#E67E22;">주방</div>
+        <div class="role-pill" data-role="차배달" style="--pill-color:#4ECDC4;">차배달</div>
+        <div class="role-pill" data-role="오토바이" style="--pill-color:#FFD700;">오토바이</div>
       </div>
     </div>
     <!-- 게이지형 시간 선택 -->
@@ -886,8 +889,8 @@ select.form-input{
       <select class="form-input" id="empRole">
         <option value="">미지정</option>
         <option value="주방">주방</option>
-        <option value="배달">배달</option>
-        <option value="오전">오전</option>
+        <option value="차배달">차배달</option>
+        <option value="오토바이">오토바이</option>
       </select>
     </div>
     <div class="form-group">
@@ -969,13 +972,86 @@ const DEFAULT_EMPLOYEES = {
 // 직원이름 → {start, end, role, type}
 // type: 'fixed'=매일 고정, 'variable'=변칙(수동)
 const FIXED_SCHEDULES = {
-  '이원규': {start:'10:00', end:'20:00', role:'주방,배달', type:'fixed'},
-  '히오':   {start:'18:00', end:'03:00', role:'주방,배달', type:'fixed'},
-  '리':     {start:'18:00', end:'03:00', role:'주방,배달', type:'fixed'},
-  '박준모': {start:'17:00', end:'03:00', role:'주방,배달', type:'fixed'},
-  '전묘정': {start:'17:00', end:'03:00', role:'주방,배달', type:'fixed'},
+  '이원규': {start:'10:00', end:'20:00', role:'주방,오토바이', type:'fixed'},
+  '히오':   {start:'18:00', end:'03:00', role:'주방', type:'fixed'},
+  '리':     {start:'18:00', end:'03:00', role:'주방', type:'fixed'},
+  '박준모': {start:'17:00', end:'03:00', role:'주방,차배달', type:'fixed'},
+  '전묘정': {start:'17:00', end:'03:00', role:'주방', type:'fixed'},
   '대유':   {start:null, end:null, role:'', type:'variable'}, // 변칙 — 수동 입력
 };
+
+// 직원별 가능 역할 (능력)
+const EMP_CAPABILITIES = {
+  '이원규': ['주방','차배달','오토바이'],
+  '박준모': ['주방','차배달'],
+  '대유':   ['주방','차배달'],
+  '전묘정': ['주방'],
+  '리':     ['주방'],
+  '히오':   ['주방'],
+  '권연옥': ['주방'],
+};
+
+// 역할 표시 (색상 텍스트, 이모지 지양)
+const ROLE_LABELS = {'주방':'주방','차배달':'차','오토바이':'바이크'};
+const ROLE_COLORS = {'주방':'#E67E22','차배달':'#4ECDC4','오토바이':'#FFD700'};
+
+// 시간대별 역할 제한
+function getRoleLimits(hour){
+  const isPeak = hour >= 17 && hour <= 19; // 17~19시 (피크)
+  const isNight = (hour >= 17 || hour < 3); // 17~03시
+  return {
+    '차배달': {max:1, min:0},
+    '오토바이': {max:1, min:0},
+    '주방': {max: isPeak ? 4 : 3, min: isNight ? 2 : 1},
+  };
+}
+
+// 충돌 감지: 시간대별 역할 인원 초과/부족 체크
+function detectConflicts(empKeys, dk){
+  const conflicts = {}; // empId → [{hour, role, type, msg}]
+  const checkHours = [10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
+
+  for(const h of checkHours){
+    const hStr = pad(h)+':00';
+    const hMin = timeToMinutesFrom6(hStr);
+    const roleEmps = {'주방':[],'차배달':[],'오토바이':[]};
+
+    empKeys.forEach(empId => {
+      if(isDayOff(empId, dk)) return;
+      const shift = daySchedule[empId];
+      if(!shift || !shift.start || !shift.end) return;
+      const sMin = timeToMinutesFrom6(shift.start);
+      let eMin = timeToMinutesFrom6(shift.end);
+      if(eMin <= sMin) eMin += 24*60;
+      if(hMin >= sMin && hMin < eMin){
+        const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
+        if(roles.length === 0) roleEmps['주방'].push(empId);
+        roles.forEach(r => { if(roleEmps[r]) roleEmps[r].push(empId); });
+      }
+    });
+
+    const limits = getRoleLimits(h);
+
+    for(const role in limits){
+      const emps = roleEmps[role] || [];
+      const lim = limits[role];
+      // max 초과 → 뒤쪽 직원 충돌
+      if(emps.length > lim.max){
+        for(let i = lim.max; i < emps.length; i++){
+          if(!conflicts[emps[i]]) conflicts[emps[i]] = [];
+          conflicts[emps[i]].push({hour:h, role, type:'over', msg:h+'시 '+role+' 초과('+emps.length+'/'+lim.max+')'});
+        }
+      }
+      // min 부족 체크 (전체 해당 역할 인원 부족 시)
+      if(lim.min > 0 && emps.length < lim.min){
+        // 부족은 empId가 아닌 시간대 전체 경고 → hourConflicts에 저장
+        if(!conflicts['_hour_'+h]) conflicts['_hour_'+h] = [];
+        conflicts['_hour_'+h].push({hour:h, role, type:'under', msg:h+'시 '+role+' 부족('+emps.length+'/'+lim.min+')'});
+      }
+    }
+  }
+  return conflicts;
+}
 
 function getFixedSchedule(empName){
   return FIXED_SCHEDULES[empName] || null;
@@ -1002,6 +1078,11 @@ let sseSchedule = null;
 let sseGeneration = 0;
 let monthViewYear, monthViewMonth;
 let dataLoaded = false;
+let confirmedDays = {}; // { 'yyyy-MM-dd': true } — 확정된 날짜
+
+const LS_CONFIRMED = 'ws_confirmed';
+function lsLoadConfirmed(){ try{ return JSON.parse(localStorage.getItem(LS_CONFIRMED)) || {}; }catch(e){ return {}; } }
+function lsSaveConfirmed(data){ localStorage.setItem(LS_CONFIRMED, JSON.stringify(data)); }
 
 // ============================================================
 // DOM refs
@@ -1254,6 +1335,7 @@ async function loadData(){
   const dk = dateKey(currentDate);
 
   // 1) localStorage 즉시 로드 (데이터 유실 방지)
+  confirmedDays = lsLoadConfirmed();
   const localEmp = lsLoadEmployees();
   const localSched = lsLoadSchedule(dk);
   if(localEmp && Object.keys(localEmp).length > 0){
@@ -1379,6 +1461,7 @@ async function onDateChange(){
     }
   }catch(e){}
   loadWeekSchedules();
+  updateConfirmBtn();
 }
 
 // ============================================================
@@ -1568,6 +1651,9 @@ function renderTimeline(){
   });
   body.appendChild(timeCol);
 
+  // 충돌 감지
+  const conflictsMap = detectConflicts(empKeys, dk);
+
   // Employee columns with drag support
   empKeys.forEach(empId => {
     const emp = employees[empId];
@@ -1576,6 +1662,7 @@ function renderTimeline(){
     const col = document.createElement('div');
     col.className = 'vt-emp-col';
     col.dataset.empid = empId;
+    const hasConflict = !!conflictsMap[empId];
 
     // Grid lines at each hour
     TL_HOURS.forEach((h, idx) => {
@@ -1607,28 +1694,48 @@ function renderTimeline(){
 
       block.style.top = topPct + '%';
       block.style.height = Math.min(heightPct, 100 - topPct) + '%';
-      block.style.background = (emp.color||'#9090A8') + '55';
-      block.style.borderLeft = '3px solid '+(emp.color||'#9090A8');
-      block.style.borderTop = '1px solid '+(emp.color||'#9090A8')+'88';
+
+      // 충돌 시 빨간 음영
+      if(hasConflict){
+        block.style.background = '#E74C3C44';
+        block.style.borderLeft = '3px solid #E74C3C';
+        block.style.borderTop = '1px solid #E74C3Caa';
+        block.style.boxShadow = 'inset 0 0 8px #E74C3C33';
+      } else {
+        block.style.background = (emp.color||'#9090A8') + '55';
+        block.style.borderLeft = '3px solid '+(emp.color||'#9090A8');
+        block.style.borderTop = '1px solid '+(emp.color||'#9090A8')+'88';
+      }
 
       const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
-      const roleIcons = roles.map(r => r==='주방'?'🍳':r==='배달'?'🛵':r).join('');
+      const roleHtml = roles.map(r => '<span style="color:'+(ROLE_COLORS[r]||'#9090A8')+';font-weight:700;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
       const timeText = shift.start.replace(/^0/,'')+'-'+shift.end.replace(/^0/,'');
       const hours = calcHours(shift.start, shift.end);
 
-      // 모니터링 모드: 글씨 크게, 사진에서 명확히 보이게
       const nameLbl = emp.name;
+      let conflictBadge = '';
+      if(hasConflict){
+        const reasons = conflictsMap[empId].map(c=>c.msg);
+        const uniqueReasons = [...new Set(reasons)];
+        conflictBadge = '<span style="font-size:.55rem;color:#FF6B6B;font-weight:700;background:#E74C3C33;padding:1px 3px;border-radius:3px;">'+uniqueReasons[0]+'</span>';
+      }
       block.innerHTML =
         '<span style="font-size:.75rem;font-weight:700;color:#FFFFFF;text-shadow:0 1px 2px #000;">'+nameLbl+'</span>'+
         '<span style="font-size:.7rem;font-weight:600;color:#FFFFFF;">'+timeText+'</span>'+
-        (roleIcons ? '<span style="font-size:.6rem;">'+roleIcons+'</span>' : '')+
-        '<span style="font-size:.6rem;color:#FFD700;font-weight:600;">'+hours+'h</span>';
+        (roleHtml ? '<span style="font-size:.6rem;">'+roleHtml+'</span>' : '')+
+        '<span style="font-size:.6rem;color:#FFD700;font-weight:600;">'+hours+'h</span>'+
+        conflictBadge;
 
       block.addEventListener('click', (e)=>{
         e.stopPropagation();
         openShiftModal(empId);
       });
       col.appendChild(block);
+    }
+
+    // 충돌 컬럼 배경 (헤더와 연동)
+    if(hasConflict && !off){
+      col.style.background = '#E74C3C0A';
     }
 
     col.addEventListener('touchstart', onDragStart, {passive:false});
@@ -1676,31 +1783,41 @@ function renderTimeline(){
   const DA_START = timeToMinutesFrom6('10:00');
   const DA_END = timeToMinutesFrom6('01:00');
 
-  let html = '<div style="font-size:.7rem;color:#FFD700;font-weight:600;margin-bottom:4px;">시간대별 인원 (주방/배달)</div>';
+  let html = '<div style="font-size:.7rem;color:#FFD700;font-weight:600;margin-bottom:4px;">시간대별 인원 (주방/차/바이크)</div>';
   html += '<div style="display:flex;flex-wrap:wrap;gap:3px;">';
-  const checkHours = [10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1];
+  const checkHours = [10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
   for(const h of checkHours){
     const hStr = pad(h)+':00';
-    const s = staffing[hStr] || {kitchen:0, delivery:0, total:0, daAvail:false};
-    const needKitchen = 1;
-    const needDelivery = 1;
-    const kitchenOk = s.kitchen >= needKitchen;
-    const deliveryOk = s.delivery >= needDelivery || s.daAvail;
-    const allOk = kitchenOk && deliveryOk;
-    const bgColor = allOk ? '#2ECC7120' : '#E74C3C20';
-    const borderColor = allOk ? '#2ECC71' : '#E74C3C';
+    const s = staffing[hStr] || {kitchen:0, carDel:0, bikeDel:0, delivery:0, total:0, daAvail:false, carOver:false, bikeOver:false, kitchenOver:false, kitchenUnder:false};
+    const limits = getRoleLimits(h);
+    const kitchenOk = !s.kitchenOver && !s.kitchenUnder;
+    const deliveryOk = s.delivery >= 1 || s.daAvail;
+    const noConflict = kitchenOk && deliveryOk && !s.carOver && !s.bikeOver;
+    const bgColor = noConflict ? '#2ECC7120' : '#E74C3C20';
+    const borderColor = noConflict ? '#2ECC71' : '#E74C3C';
 
-    html += '<div style="flex:1;min-width:38px;background:'+bgColor+';border:1px solid '+borderColor+'44;border-radius:4px;padding:2px 3px;text-align:center;">';
+    html += '<div style="flex:1;min-width:42px;background:'+bgColor+';border:1px solid '+borderColor+'44;border-radius:4px;padding:2px 3px;text-align:center;">';
     html += '<div style="font-size:.6rem;color:#9090A8;">'+h+'시</div>';
-    html += '<div style="font-size:.6rem;">';
-    html += '<span style="color:'+(kitchenOk?'#2ECC71':'#E74C3C')+';">🍳'+s.kitchen.toFixed(1).replace('.0','')+'</span> ';
-    html += '<span style="color:'+(deliveryOk?'#2ECC71':'#E74C3C')+';">🛵'+(s.daAvail && s.delivery<needDelivery?'대행':s.delivery.toFixed(1).replace('.0',''))+'</span>';
+    html += '<div style="font-size:.55rem;line-height:1.3;">';
+    // 주방 (주황텍스트)
+    const kColor = s.kitchenOver ? '#E74C3C' : s.kitchenUnder ? '#E67E22' : '#2ECC71';
+    html += '<span style="color:'+kColor+';font-weight:600;">주'+s.kitchen.toFixed(1).replace('.0','')+'</span> ';
+    // 차배달 (파랑)
+    const cColor = s.carOver ? '#E74C3C' : s.carDel > 0 ? '#4ECDC4' : '#707088';
+    html += '<span style="color:'+cColor+';font-weight:600;">차'+s.carDel.toFixed(1).replace('.0','')+'</span> ';
+    // 오토바이 (노랑)
+    const bColor = s.bikeOver ? '#E74C3C' : s.bikeDel > 0 ? '#FFD700' : '#707088';
+    html += '<span style="color:'+bColor+';font-weight:600;">바'+s.bikeDel.toFixed(1).replace('.0','')+'</span>';
+    // 배달대행 표시
+    if(s.daAvail && s.delivery < 1){
+      html += ' <span style="color:#E67E22;font-size:.5rem;">대행</span>';
+    }
     html += '</div></div>';
   }
   html += '</div>';
 
-  // 배달대행 안내
-  html += '<div style="font-size:.6rem;color:#707088;margin-top:4px;">🛵대행 = 배달대행 (10시~01시, 배달인원 공백 시 충족)</div>';
+  // 범례
+  html += '<div style="font-size:.55rem;color:#707088;margin-top:4px;">주=주방 차=차배달 바=오토바이 | <span style="color:#E74C3C">빨강=초과</span> <span style="color:#E67E22">주황=부족</span> | 대행=배달대행(10~01시)</div>';
 
   staffDiv.innerHTML = html;
   container.appendChild(staffDiv);
@@ -1709,12 +1826,12 @@ function renderTimeline(){
 // Staffing calculation
 function calcStaffing(empKeys, dk){
   const result = {};
-  const checkHours = [10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1];
+  const checkHours = [10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
 
   for(const h of checkHours){
     const hStr = pad(h)+':00';
     const hMin = timeToMinutesFrom6(hStr);
-    let kitchen = 0, delivery = 0, total = 0;
+    let kitchen = 0, carDel = 0, bikeDel = 0, total = 0;
 
     empKeys.forEach(empId => {
       if(isDayOff(empId, dk)) return;
@@ -1730,18 +1847,27 @@ function calcStaffing(empKeys, dk){
         const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
         const weight = roles.length > 1 ? 0.5 : 1;
         if(roles.includes('주방')) kitchen += weight;
-        if(roles.includes('배달')) delivery += weight;
+        if(roles.includes('차배달')) carDel += weight;
+        if(roles.includes('오토바이')) bikeDel += weight;
         // 역할 미지정 → 주방으로 카운트
         if(roles.length === 0) kitchen += 1;
       }
     });
 
+    const delivery = carDel + bikeDel;
     // 배달대행 가용 여부 (10:00~01:00)
     const DA_START = timeToMinutesFrom6('10:00');
     const DA_END = timeToMinutesFrom6('01:00');
     const daAvail = hMin >= DA_START && hMin < DA_END;
 
-    result[hStr] = {kitchen, delivery, total, daAvail};
+    // 충돌 체크
+    const limits = getRoleLimits(h);
+    const carOver = carDel > limits['차배달'].max;
+    const bikeOver = bikeDel > limits['오토바이'].max;
+    const kitchenOver = kitchen > limits['주방'].max;
+    const kitchenUnder = kitchen < limits['주방'].min;
+
+    result[hStr] = {kitchen, carDel, bikeDel, delivery, total, daAvail, carOver, bikeOver, kitchenOver, kitchenUnder};
   }
   return result;
 }
@@ -1841,7 +1967,11 @@ function onDragEnd(e){
   if(startTime === endTime) return;
 
   const dk = dateKey(currentDate);
-  const data = {start: startTime, end: endTime, role: ''};
+  // 드래그 생성 시 능력 기반 기본 역할 지정
+  const empName = employees[ds.empId]?.name || '';
+  const caps = EMP_CAPABILITIES[empName] || ['주방'];
+  const defaultRole = caps.join(',');
+  const data = {start: startTime, end: endTime, role: defaultRole};
   daySchedule[ds.empId] = data;
   lsSaveSchedule(dk, daySchedule);
   renderTimeline();
@@ -1981,7 +2111,7 @@ function renderWeek(){
 // Shift Modal
 // ============================================================
 let shiftSelectedEmpId = null;
-let shiftSelectedRoles = []; // ['주방'], ['배달'], or ['주방','배달']
+let shiftSelectedRoles = []; // ['주방'], ['차배달'], ['오토바이'], etc
 let shiftSelectedStart = null;
 let shiftSelectedEnd = null;
 let shiftEditMode = false; // editing existing shift
@@ -2124,9 +2254,15 @@ function buildEmpChips(){
 }
 
 function updateRolePills(){
+  const empName = shiftSelectedEmpId ? (employees[shiftSelectedEmpId]?.name || '') : '';
+  const caps = EMP_CAPABILITIES[empName] || ['주방'];
   document.querySelectorAll('#shiftRolePills .role-pill').forEach(pill => {
-    pill.classList.toggle('selected', shiftSelectedRoles.includes(pill.dataset.role));
+    const r = pill.dataset.role;
+    pill.classList.toggle('selected', shiftSelectedRoles.includes(r));
+    pill.classList.toggle('disabled', !caps.includes(r));
   });
+  // 능력 안내 표시
+  $('shiftRoleNote').textContent = empName ? '('+empName+': '+caps.map(c=>ROLE_LABELS[c]||c).join('+')+' 가능)' : '';
 }
 
 function openShiftModal(empId){
@@ -2166,6 +2302,7 @@ function openShiftModal(empId){
 // Role pill clicks (multi-select toggle)
 document.querySelectorAll('#shiftRolePills .role-pill').forEach(pill => {
   pill.addEventListener('click', ()=>{
+    if(pill.classList.contains('disabled')) return;
     const r = pill.dataset.role;
     const idx = shiftSelectedRoles.indexOf(r);
     if(idx >= 0) shiftSelectedRoles.splice(idx, 1);
@@ -2724,6 +2861,38 @@ $('nextDay').addEventListener('click', ()=>{
   currentDate.setDate(currentDate.getDate()+1);
   onDateChange();
 });
+
+// 확정/작업중 토글
+$('confirmDayBtn').addEventListener('click', ()=>{
+  const dk = dateKey(currentDate);
+  confirmedDays = lsLoadConfirmed();
+  if(confirmedDays[dk]){
+    delete confirmedDays[dk];
+    showToast(dk+' 작업중으로 변경');
+  } else {
+    confirmedDays[dk] = true;
+    showToast(dk+' 확정 완료');
+  }
+  lsSaveConfirmed(confirmedDays);
+  fbPut('/workschedule/confirmed/'+dk, confirmedDays[dk]||null);
+  updateConfirmBtn();
+});
+
+function updateConfirmBtn(){
+  const dk = dateKey(currentDate);
+  const btn = $('confirmDayBtn');
+  if(confirmedDays[dk]){
+    btn.textContent = '확정';
+    btn.style.color = '#2ECC71';
+    btn.style.borderColor = '#2ECC71';
+    btn.style.background = '#2ECC7120';
+  } else {
+    btn.textContent = '작업중';
+    btn.style.color = '#E67E22';
+    btn.style.borderColor = '#E67E2255';
+    btn.style.background = 'transparent';
+  }
+}
 
 // ============================================================
 // Layout Tab Switching
