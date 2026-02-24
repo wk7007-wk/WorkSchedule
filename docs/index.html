@@ -1103,24 +1103,28 @@ function connectScheduleSSE(gen){
 async function loadData(){
   $loading.style.display = 'flex';
   $timelineScroll.style.display = 'none';
-  const dk = dateKey(currentDate);
-  const [empData, schedData] = await Promise.all([
-    fbGet(FB_EMPLOYEES),
-    fbGet(FB_SCHEDULES+'/'+dk)
-  ]);
+  try {
+    const dk = dateKey(currentDate);
+    const [empData, schedData] = await Promise.all([
+      fbGet(FB_EMPLOYEES),
+      fbGet(FB_SCHEDULES+'/'+dk)
+    ]);
 
-  // If no employees in Firebase, seed with defaults
-  if(!empData || Object.keys(empData).length === 0){
-    employees = JSON.parse(JSON.stringify(DEFAULT_EMPLOYEES));
-    fbPut(FB_EMPLOYEES, employees);
-  } else {
-    employees = empData;
+    // If no employees in Firebase, seed with defaults
+    if(!empData || Object.keys(empData).length === 0){
+      employees = JSON.parse(JSON.stringify(DEFAULT_EMPLOYEES));
+      fbPut(FB_EMPLOYEES, employees);
+    } else {
+      employees = empData;
+    }
+    daySchedule = schedData || {};
+  } catch(err){
+    console.error('loadData error:', err);
   }
-  daySchedule = schedData || {};
   dataLoaded = true;
 
   $loading.style.display = 'none';
-  $timelineScroll.style.display = 'block';
+  $timelineScroll.style.display = 'flex';
 
   renderAll();
   loadWeekSchedules();
