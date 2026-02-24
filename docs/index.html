@@ -603,6 +603,7 @@ select.form-input{
   <div class="header-left">
     <h1>근무표</h1>
     <button class="btn emp-mgr-btn" id="empMgrBtn">직원</button>
+    <button class="btn emp-mgr-btn" id="dayoffMgrBtn" style="color:#E74C3C;border-color:#E74C3C55;">휴무</button>
   </div>
   <div class="header-center">
     <button class="btn nav-btn" id="prevDay" aria-label="이전 날">◀</button>
@@ -810,6 +811,27 @@ select.form-input{
       <button class="btn" id="empEditCancel">취소</button>
       <button class="btn btn-accent" id="empEditSave">저장</button>
     </div>
+  </div>
+</div>
+
+<!-- Day-off Management Modal -->
+<div class="modal-overlay" id="dayoffModal">
+  <div class="modal-content">
+    <button class="modal-close" id="dayoffModalClose">&times;</button>
+    <div class="modal-title">휴무 관리</div>
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <select class="form-input" id="dayoffEmpSelect" style="flex:1;"></select>
+        <input class="form-input" id="dayoffDate" type="date" style="flex:1;">
+        <button class="btn btn-accent btn-sm" id="dayoffAddBtn">추가</button>
+      </div>
+      <div style="margin-bottom:8px;">
+        <textarea class="form-input" id="dayoffBulkInput" placeholder="여러 형태로 입력 가능:&#10;이원규 2/25, 2/26&#10;권연옥 3/1~3/3&#10;리 2025-03-05&#10;히오 화,목 (이번주)" rows="4" style="font-size:.8rem;"></textarea>
+        <button class="btn btn-sm" id="dayoffBulkBtn" style="width:100%;margin-top:4px;color:#FFD700;border-color:#FFD700;">일괄 등록</button>
+      </div>
+    </div>
+    <div style="font-size:.85rem;color:#FFD700;font-weight:600;margin-bottom:6px;" id="dayoffListTitle">등록된 휴무</div>
+    <div id="dayoffList" style="max-height:300px;overflow-y:auto;"></div>
   </div>
 </div>
 
@@ -1193,9 +1215,21 @@ async function onDateChange(){
   if(sseSchedule){ try{sseSchedule.close();}catch(e){} sseSchedule = null; }
   connectScheduleSSE(sseGeneration);
   const dk = dateKey(currentDate);
-  const schedData = await fbGet(FB_SCHEDULES+'/'+dk);
-  daySchedule = schedData || {};
+  // localStorage 먼저
+  const localSched = lsLoadSchedule(dk);
+  if(localSched) daySchedule = localSched;
+  else daySchedule = {};
   renderTimeline();
+  // Firebase 동기화
+  try{
+    const schedData = await fbGet(FB_SCHEDULES+'/'+dk);
+    if(schedData){
+      const merged = Object.assign({}, schedData, localSched || {});
+      daySchedule = merged;
+      lsSaveSchedule(dk, merged);
+      renderTimeline();
+    }
+  }catch(e){}
   loadWeekSchedules();
 }
 
@@ -1246,11 +1280,14 @@ function renderTimeline(){
   timeHdr.textContent = '';
   header.appendChild(timeHdr);
 
+  const dk = dateKey(currentDate);
   empKeys.forEach(empId => {
     const emp = employees[empId];
+    const off = isDayOff(empId, dk);
     const hdr = document.createElement('div');
     hdr.className = 'vt-emp-hdr';
-    hdr.innerHTML = '<div class="vt-dot" style="background:'+(emp.color||'#9090A8')+'"></div><div class="vt-name">'+emp.name+'</div>';
+    hdr.innerHTML = '<div class="vt-dot" style="background:'+(off?'#E74C3C':(emp.color||'#9090A8'))+'"></div><div class="vt-name">'+(off?'<span style="color:#E74C3C;">휴</span> ':'')+emp.name+'</div>';
+    if(off) hdr.style.opacity = '.5';
     header.appendChild(hdr);
   });
   container.appendChild(header);
@@ -1287,6 +1324,7 @@ function renderTimeline(){
   empKeys.forEach(empId => {
     const emp = employees[empId];
     const shift = daySchedule[empId];
+    const off = isDayOff(empId, dk);
     const col = document.createElement('div');
     col.className = 'vt-emp-col';
     col.dataset.empid = empId;
@@ -1301,8 +1339,17 @@ function renderTimeline(){
       col.appendChild(line);
     });
 
+    // Day-off overlay
+    if(off){
+      const offBlock = document.createElement('div');
+      offBlock.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:#E74C3C10;z-index:1;';
+      offBlock.innerHTML = '<span style="color:#E74C3C;font-size:.75rem;font-weight:700;writing-mode:vertical-rl;opacity:.6;">휴 무</span>';
+      col.appendChild(offBlock);
+      col.style.opacity = '.4';
+    }
+
     // Shift block
-    if(shift && shift.start && shift.end){
+    if(!off && shift && shift.start && shift.end){
       const block = document.createElement('div');
       block.className = 'vt-shift';
       const topPct = timeToPercent(shift.start);
@@ -1350,9 +1397,14 @@ function renderTimeline(){
 
   empKeys.forEach(empId => {
     const shift = daySchedule[empId];
+    const off = isDayOff(empId, dk);
     const cell = document.createElement('div');
     cell.className = 'vt-summary-cell';
-    if(shift && shift.start && shift.end){
+    if(off){
+      cell.textContent = '휴';
+      cell.style.color = '#E74C3C';
+      cell.style.fontSize = '.6rem';
+    } else if(shift && shift.start && shift.end){
       cell.textContent = calcHours(shift.start, shift.end) + 'h';
     } else {
       cell.textContent = '-';
@@ -2035,6 +2087,256 @@ $('empEditSave').addEventListener('click', async()=>{
   const ok = await fbPut(FB_EMPLOYEES+'/'+id, data);
   if(ok) showToast('저장됨');
   else showToast('로컬 저장됨');
+});
+
+// ============================================================
+// Day-off (휴무) Management
+// ============================================================
+const LS_DAYOFFS = 'ws_dayoffs';
+const FB_DAYOFFS = FB_WS + '/dayoffs';
+let dayoffs = {}; // {empId: {yyyy-MM-dd: true, ...}, ...}
+
+function lsSaveDayoffs(){ try{ localStorage.setItem(LS_DAYOFFS, JSON.stringify(dayoffs)); }catch(e){} }
+function lsLoadDayoffs(){ try{ const s = localStorage.getItem(LS_DAYOFFS); return s ? JSON.parse(s) : null; }catch(e){ return null; } }
+
+function isDayOff(empId, dk){
+  return dayoffs[empId] && dayoffs[empId][dk];
+}
+
+function getDayOffEmployees(dk){
+  const result = [];
+  for(const empId in dayoffs){
+    if(dayoffs[empId][dk]) result.push(empId);
+  }
+  return result;
+}
+
+async function loadDayoffs(){
+  const local = lsLoadDayoffs();
+  if(local) dayoffs = local;
+  try{
+    const fb = await fbGet(FB_DAYOFFS);
+    if(fb){
+      // 병합: 로컬 우선
+      for(const empId in fb){
+        if(!dayoffs[empId]) dayoffs[empId] = {};
+        for(const dk in fb[empId]){
+          if(dayoffs[empId][dk] === undefined) dayoffs[empId][dk] = fb[empId][dk];
+        }
+      }
+      lsSaveDayoffs();
+    }
+  }catch(e){ console.error('loadDayoffs error', e); }
+}
+
+async function addDayOff(empId, dk){
+  if(!dayoffs[empId]) dayoffs[empId] = {};
+  dayoffs[empId][dk] = true;
+  lsSaveDayoffs();
+  // 해당 날짜 스케줄에 휴무 마킹
+  const schedKey = dateKey(currentDate);
+  if(dk === schedKey){
+    daySchedule[empId] = {start:'', end:'', role:'휴무', dayoff:true};
+    lsSaveSchedule(schedKey, daySchedule);
+    renderTimeline();
+  }
+  fbPut(FB_DAYOFFS+'/'+empId+'/'+dk, true);
+}
+
+async function removeDayOff(empId, dk){
+  if(dayoffs[empId]) delete dayoffs[empId][dk];
+  lsSaveDayoffs();
+  const schedKey = dateKey(currentDate);
+  if(dk === schedKey && daySchedule[empId] && daySchedule[empId].dayoff){
+    delete daySchedule[empId];
+    lsSaveSchedule(schedKey, daySchedule);
+    renderTimeline();
+  }
+  fbDelete(FB_DAYOFFS+'/'+empId+'/'+dk);
+}
+
+// Parse bulk dayoff input (여러 형태 지원)
+function parseBulkDayoffs(text){
+  const results = [];
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  const now = new Date();
+  const thisYear = now.getFullYear();
+  const thisMonth = now.getMonth() + 1;
+
+  for(const line of lines){
+    // 직원이름 찾기
+    let matchedEmpId = null;
+    let matchedName = '';
+    let restText = line;
+    for(const empId in employees){
+      const name = employees[empId].name;
+      if(line.startsWith(name)){
+        matchedEmpId = empId;
+        matchedName = name;
+        restText = line.slice(name.length).trim();
+        break;
+      }
+    }
+    if(!matchedEmpId) continue;
+
+    // 요일 처리 (화,목 → 이번주 해당 요일)
+    const dowMap = {'일':0,'월':1,'화':2,'수':3,'목':4,'금':5,'토':6};
+    const dowPattern = restText.match(/^([일월화수목금토])([,\s]+[일월화수목금토])*/);
+    if(dowPattern){
+      const dows = restText.match(/[일월화수목금토]/g);
+      if(dows){
+        const mon = getMonday(now);
+        dows.forEach(d => {
+          const target = dowMap[d];
+          if(target !== undefined){
+            const dt = new Date(mon);
+            dt.setDate(dt.getDate() + (target === 0 ? 6 : target - 1));
+            results.push({empId: matchedEmpId, date: dateKey(dt)});
+          }
+        });
+      }
+      continue;
+    }
+
+    // 범위 처리 (M/D~M/D 또는 M/D-M/D)
+    const rangeMatch = restText.match(/(\d{1,2})[\/\-](\d{1,2})\s*[~\-]\s*(\d{1,2})[\/\-](\d{1,2})/);
+    if(rangeMatch){
+      let [,m1,d1,m2,d2] = rangeMatch.map(Number);
+      const start = new Date(thisYear, m1-1, d1);
+      const end = new Date(thisYear, m2-1, d2);
+      for(let d = new Date(start); d <= end; d.setDate(d.getDate()+1)){
+        results.push({empId: matchedEmpId, date: dateKey(d)});
+      }
+      continue;
+    }
+
+    // yyyy-MM-dd 형태
+    const isoMatch = restText.match(/(\d{4})-(\d{1,2})-(\d{1,2})/g);
+    if(isoMatch){
+      isoMatch.forEach(ds => {
+        const [y,m,d] = ds.split('-').map(Number);
+        results.push({empId: matchedEmpId, date: y+'-'+pad(m)+'-'+pad(d)});
+      });
+      continue;
+    }
+
+    // M/D, M/D 콤마 구분
+    const slashDates = restText.match(/(\d{1,2})[\/](\d{1,2})/g);
+    if(slashDates && slashDates.length > 0){
+      slashDates.forEach(ds => {
+        const [m,d] = ds.split('/').map(Number);
+        results.push({empId: matchedEmpId, date: thisYear+'-'+pad(m)+'-'+pad(d)});
+      });
+      continue;
+    }
+
+    // M-D 콤마 구분
+    const dashDates = restText.match(/(\d{1,2})-(\d{1,2})/g);
+    if(dashDates && dashDates.length > 0){
+      dashDates.forEach(ds => {
+        const [m,d] = ds.split('-').map(Number);
+        results.push({empId: matchedEmpId, date: thisYear+'-'+pad(m)+'-'+pad(d)});
+      });
+    }
+  }
+  return results;
+}
+
+// Render dayoff modal
+const $dayoffModal = $('dayoffModal');
+
+function renderDayoffList(){
+  const list = $('dayoffList');
+  const select = $('dayoffEmpSelect');
+
+  // populate employee select
+  select.innerHTML = '';
+  for(const empId in employees){
+    const opt = document.createElement('option');
+    opt.value = empId;
+    opt.textContent = employees[empId].name;
+    select.appendChild(opt);
+  }
+
+  // Set default date
+  $('dayoffDate').value = dateKey(currentDate);
+
+  // Render list grouped by date (upcoming first)
+  const allEntries = [];
+  for(const empId in dayoffs){
+    for(const dk in dayoffs[empId]){
+      if(dayoffs[empId][dk]) allEntries.push({empId, date:dk});
+    }
+  }
+  allEntries.sort((a,b) => a.date.localeCompare(b.date));
+
+  if(allEntries.length === 0){
+    list.innerHTML = '<div style="color:#707088;font-size:.8rem;padding:8px;">등록된 휴무가 없습니다</div>';
+    return;
+  }
+
+  let html = '';
+  let lastDate = '';
+  for(const entry of allEntries){
+    if(entry.date !== lastDate){
+      const d = new Date(entry.date);
+      const dow = DOW_KR[d.getDay()];
+      html += '<div style="font-size:.75rem;color:#9090A8;margin-top:8px;margin-bottom:2px;">'+entry.date+' ('+dow+')</div>';
+      lastDate = entry.date;
+    }
+    const emp = employees[entry.empId];
+    const name = emp ? emp.name : entry.empId;
+    const color = emp ? emp.color : '#9090A8';
+    html += '<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#1A1A30;border-radius:6px;margin-bottom:3px;">';
+    html += '<span style="width:8px;height:8px;border-radius:50%;background:'+color+';flex-shrink:0;"></span>';
+    html += '<span style="flex:1;font-size:.85rem;">'+name+'</span>';
+    html += '<button class="btn btn-sm" style="min-width:30px;min-height:26px;padding:2px 6px;font-size:.7rem;color:#E74C3C;border-color:#E74C3C55;" data-dayoff-del="'+entry.empId+'|'+entry.date+'">✕</button>';
+    html += '</div>';
+  }
+  list.innerHTML = html;
+
+  // Delete buttons
+  list.querySelectorAll('[data-dayoff-del]').forEach(btn => {
+    btn.addEventListener('click', async ()=>{
+      const [empId, dk] = btn.dataset.dayoffDel.split('|');
+      await removeDayOff(empId, dk);
+      renderDayoffList();
+    });
+  });
+}
+
+$('dayoffMgrBtn').addEventListener('click', ()=>{
+  renderDayoffList();
+  openModal($dayoffModal);
+});
+$('dayoffModalClose').addEventListener('click', ()=> closeModal($dayoffModal));
+$dayoffModal.addEventListener('click', (e)=>{ if(e.target === $dayoffModal) closeModal($dayoffModal); });
+
+// Single add
+$('dayoffAddBtn').addEventListener('click', async ()=>{
+  const empId = $('dayoffEmpSelect').value;
+  const dk = $('dayoffDate').value;
+  if(!empId || !dk) return;
+  await addDayOff(empId, dk);
+  showToast((employees[empId]?.name||'')+' '+dk+' 휴무 등록');
+  renderDayoffList();
+});
+
+// Bulk add
+$('dayoffBulkBtn').addEventListener('click', async ()=>{
+  const text = $('dayoffBulkInput').value.trim();
+  if(!text) return;
+  const entries = parseBulkDayoffs(text);
+  if(entries.length === 0){
+    showToast('인식된 휴무가 없습니다');
+    return;
+  }
+  for(const e of entries){
+    await addDayOff(e.empId, e.date);
+  }
+  $('dayoffBulkInput').value = '';
+  showToast(entries.length+'건 휴무 등록 완료');
+  renderDayoffList();
 });
 
 // ============================================================
@@ -2731,6 +3033,7 @@ function init(){
   updateDateDisplay();
   buildTimeGrids();
   loadAiKey();
+  loadDayoffs();
   loadData().then(()=>{
     // Load weather after data + key ready
     setTimeout(()=>{
