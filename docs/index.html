@@ -616,6 +616,9 @@ select.form-input{
   </div>
 </div>
 
+<!-- 당일 브리핑 패널 -->
+<div id="briefingPanel" style="background:#1e1e3a;border-bottom:1px solid #2E2E52;padding:6px 10px;font-size:.75rem;"></div>
+
 <!-- Timeline Gauge View -->
 <div class="timeline-section" id="timelineSection">
   <div class="loading" id="loadingIndicator" style="flex-shrink:0;"><div class="spinner"></div>불러오는 중...</div>
@@ -870,6 +873,31 @@ const DEFAULT_EMPLOYEES = {
   emp6: {name:'전묘정', color:'#DDA0DD', phone:'', role:'', hourlyRate:0, maxHours:40},
   emp7: {name:'대유', color:'#F0A500', phone:'', role:'', hourlyRate:0, maxHours:40}
 };
+
+// ============================================================
+// 고정 스케줄 (자동 입력)
+// ============================================================
+// 직원이름 → {start, end, role, type}
+// type: 'fixed'=매일 고정, 'variable'=변칙(수동)
+const FIXED_SCHEDULES = {
+  '이원규': {start:'10:00', end:'20:00', role:'주방,배달', type:'fixed'},
+  '히오':   {start:'18:00', end:'03:00', role:'주방,배달', type:'fixed'},
+  '리':     {start:'18:00', end:'03:00', role:'주방,배달', type:'fixed'},
+  '박준모': {start:'17:00', end:'03:00', role:'주방,배달', type:'fixed'},
+  '전묘정': {start:'17:00', end:'03:00', role:'주방,배달', type:'fixed'},
+  '대유':   {start:null, end:null, role:'', type:'variable'}, // 변칙 — 수동 입력
+};
+
+function getFixedSchedule(empName){
+  return FIXED_SCHEDULES[empName] || null;
+}
+
+function findEmpIdByName(name){
+  for(const id in employees){
+    if(employees[id].name === name) return id;
+  }
+  return null;
+}
 
 // ============================================================
 // State
@@ -1183,6 +1211,9 @@ async function loadData(){
   }
   dataLoaded = true;
 
+  // 고정 스케줄 자동 적용
+  autoApplyFixed(dk);
+
   $loading.style.display = 'none';
   $timelineScroll.style.display = '';
   renderAll();
@@ -1208,6 +1239,32 @@ async function loadWeekSchedules(){
   renderWeek();
 }
 
+// 고정 스케줄 + 휴무자 자동 적용 (빈 날짜에만)
+function autoApplyFixed(dk){
+  let changed = false;
+  for(const empName in FIXED_SCHEDULES){
+    const fix = FIXED_SCHEDULES[empName];
+    if(fix.type === 'variable' || !fix.start) continue;
+    const empId = findEmpIdByName(empName);
+    if(!empId) continue;
+    // 이미 입력된 경우 건드리지 않음
+    if(daySchedule[empId]) continue;
+    // 휴무인 경우 건드리지 않음
+    if(isDayOff(empId, dk)) continue;
+    daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role};
+    changed = true;
+  }
+  if(changed){
+    lsSaveSchedule(dk, daySchedule);
+    // Firebase에도 저장
+    for(const empId in daySchedule){
+      const s = daySchedule[empId];
+      if(s && s.start) fbPut(FB_SCHEDULES+'/'+dk+'/'+empId, s);
+    }
+  }
+  return changed;
+}
+
 async function onDateChange(){
   updateDateDisplay();
   // Reconnect schedule SSE for new date
@@ -1218,6 +1275,8 @@ async function onDateChange(){
   const localSched = lsLoadSchedule(dk);
   if(localSched) daySchedule = localSched;
   else daySchedule = {};
+  // 고정 스케줄 자동 적용
+  autoApplyFixed(dk);
   renderTimeline();
   // Firebase 동기화
   try{
@@ -1247,10 +1306,110 @@ function updateDateDisplay(){
 // ============================================================
 function renderAll(){
   updateDateDisplay();
+  renderBriefing();
   renderTimeline();
   renderWeek();
   checkLogistics();
   buildCalButtons();
+}
+
+// ============================================================
+// 당일 브리핑 패널 — 한눈에 염두사항 모아보기
+// ============================================================
+function renderBriefing(){
+  const panel = $('briefingPanel');
+  if(!panel) return;
+  const dk = dateKey(currentDate);
+  const empKeys = Object.keys(employees);
+
+  let html = '';
+
+  // 1) 당일 휴무예정자
+  const offToday = [];
+  empKeys.forEach(id => {
+    if(isDayOff(id, dk)) offToday.push(employees[id]?.name || id);
+  });
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;">';
+  html += '<span style="color:#E74C3C;font-weight:600;">휴무 '+offToday.length+'명</span>';
+  if(offToday.length > 0){
+    html += '<span style="color:#E74C3C;">'+offToday.join(', ')+'</span>';
+  } else {
+    html += '<span style="color:#707088;">없음</span>';
+  }
+
+  // 2) 이번주 휴무 누적 (인당)
+  const mon = getMonday(currentDate);
+  const weekOffCounts = {};
+  empKeys.forEach(id => { weekOffCounts[id] = 0; });
+  for(let i=0; i<7; i++){
+    const d = new Date(mon);
+    d.setDate(d.getDate()+i);
+    const wdk = dateKey(d);
+    empKeys.forEach(id => {
+      if(isDayOff(id, wdk)) weekOffCounts[id]++;
+    });
+  }
+  html += '<span style="color:#707088;margin-left:6px;">|</span>';
+  html += '<span style="color:#FFD700;font-weight:600;">주간휴무</span>';
+  const offChips = [];
+  empKeys.forEach(id => {
+    if(weekOffCounts[id] > 0){
+      offChips.push((employees[id]?.name||id)+weekOffCounts[id]+'일');
+    }
+  });
+  html += '<span style="color:#9090A8;">'+(offChips.length>0 ? offChips.join(' ') : '없음')+'</span>';
+  html += '</div>';
+
+  // 3) 날씨 + 매출변동요인 (한줄)
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;">';
+  // 날씨 요약
+  const wxNow = hourlyWeather[new Date().getHours()];
+  if(wxNow){
+    html += '<span style="color:#9090A8;">날씨 '+wxNow.i+' '+wxNow.t+'°</span>';
+  } else {
+    const wxKeys = Object.keys(hourlyWeather);
+    if(wxKeys.length > 0){
+      const temps = wxKeys.map(h => hourlyWeather[h].t).filter(t=>t!==undefined);
+      const icons = [...new Set(wxKeys.map(h => hourlyWeather[h].i))];
+      if(temps.length > 0){
+        html += '<span style="color:#9090A8;">날씨 '+icons.join('')+' '+Math.min(...temps)+'~'+Math.max(...temps)+'°</span>';
+      }
+    }
+  }
+  // 스포츠/매출변동
+  const sportsEl = $('sportsInfo');
+  if(sportsEl && sportsEl.textContent && !sportsEl.textContent.includes('로딩')){
+    html += '<span style="color:#2AC1BC;">'+sportsEl.textContent.substring(0,30)+'</span>';
+  }
+  html += '</div>';
+
+  // 4) 근무 현황 요약 (고정/변칙/미입력)
+  let fixedCount=0, variableCount=0, emptyCount=0, offCount=offToday.length;
+  empKeys.forEach(id => {
+    if(isDayOff(id, dk)) return;
+    const s = daySchedule[id];
+    if(s && s.start){
+      const fix = getFixedSchedule(employees[id]?.name);
+      if(fix && fix.type==='fixed' && s.start===fix.start && s.end===fix.end) fixedCount++;
+      else variableCount++;
+    } else {
+      emptyCount++;
+    }
+  });
+  html += '<div style="display:flex;gap:8px;">';
+  html += '<span style="color:#2ECC71;">고정 '+fixedCount+'</span>';
+  html += '<span style="color:#E67E22;">수동 '+variableCount+'</span>';
+  if(emptyCount > 0) html += '<span style="color:#E74C3C;font-weight:600;">미입력 '+emptyCount+'</span>';
+  html += '<span style="color:#707088;">휴무 '+offCount+'</span>';
+
+  // 대유 (변칙) 알림
+  const daeyuId = findEmpIdByName('대유');
+  if(daeyuId && !isDayOff(daeyuId, dk) && (!daySchedule[daeyuId] || !daySchedule[daeyuId].start)){
+    html += '<span style="color:#F0A500;font-weight:600;">⚠ 대유 미입력</span>';
+  }
+  html += '</div>';
+
+  panel.innerHTML = html;
 }
 
 // ============================================================
