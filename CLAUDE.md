@@ -3,6 +3,23 @@
 ## 앱 개요
 매장 직원(5~10명) 근무표 작성/공유 앱. 타임라인 게이지 + AI 스케줄링. WebView + GitHub Pages 구조.
 
+## 데이터 저장 (최우선 규칙)
+- **localStorage = Single Source of Truth** (Firebase = 백업/동기화)
+- **모든 저장**: localStorage 먼저 → Firebase 백그라운드 동기화
+- **모든 로드**: localStorage 즉시 렌더 → Firebase 나중에 병합
+- **새로고침/오프라인 시 데이터 유실 절대 금지**
+- **Firebase 실패해도 로컬 데이터 유지** → "로컬 저장됨" 토스트
+- **Firebase → localStorage 덮어쓰기 금지**: 병합 시 로컬 우선
+- **localStorage 키**: 직원=`ws_employees`, 스케줄=`ws_sched_{yyyy-MM-dd}`
+- **clearCache 금지**: WebView clearCache(true) 사용 시 localStorage 전부 삭제됨
+
+## UI/레이아웃 규칙
+- **기능 축소/숨김 금지**: display:none으로 섹션 숨기지 말 것. 모든 기능 유지
+- **타임라인**: 75vh 높이, 스크롤 내리면 나머지 섹션 접근 가능
+- **헤더**: sticky top (스크롤해도 상단 고정)
+- **시간 가독성**: 폰트 .7rem 이상, 색상 #9090A8 이상 밝기
+- **body**: 자연스러운 스크롤 (overflow:hidden 금지)
+
 ## Firebase 구조
 - **DB**: `poskds-4ba60-default-rtdb.asia-southeast1.firebasedatabase.app`
 - 직원: `/workschedule/employees.json`
