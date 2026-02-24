@@ -86,8 +86,8 @@ body{
   min-height:36px;
 }
 .vt-emp-hdr:last-child{border-right:none;}
-.vt-emp-hdr .vt-dot{width:8px;height:8px;border-radius:50%;margin-bottom:1px;}
-.vt-emp-hdr .vt-name{font-size:.6rem;color:#E0E0EC;font-weight:600;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+.vt-emp-hdr .vt-dot{width:10px;height:10px;border-radius:50%;margin-bottom:2px;}
+.vt-emp-hdr .vt-name{font-size:.75rem;color:#FFFFFF;font-weight:700;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
 
 .vt-wrapper{
   position:relative;
@@ -136,9 +136,8 @@ body{
   overflow:hidden;
   transition:opacity .15s;
 }
-.vt-shift:active{opacity:.7;}
-.vt-shift .vt-role{font-size:.6rem;font-weight:700;}
-.vt-shift .vt-time-label{font-size:.55rem;opacity:.8;}
+.vt-shift .vt-role{font-size:.65rem;font-weight:700;}
+.vt-shift .vt-time-label{font-size:.6rem;opacity:.9;}
 
 /* Drag preview */
 .vt-drag{
@@ -586,13 +585,12 @@ select.form-input{
 @media(max-width:400px){
   .header h1{font-size:1rem;}
   .date-display{font-size:.9rem;min-width:90px;}
-  .vt-time-hdr,.vt-time-col,.vt-summary-time{min-width:38px;max-width:38px;}
-  .vt-emp-hdr .vt-name{font-size:.55rem;}
-  .vt-emp-hdr{min-height:30px;padding:3px 1px;}
-  .vt-shift .vt-role{font-size:.5rem;}
-  .vt-shift .vt-time-label{font-size:.45rem;}
+  .vt-time-hdr,.vt-time-col,.vt-summary-time{min-width:36px;max-width:36px;}
+  .vt-emp-hdr .vt-name{font-size:.65rem;}
+  .vt-emp-hdr{min-height:28px;padding:3px 1px;}
+  .vt-shift .vt-role{font-size:.55rem;}
+  .vt-shift .vt-time-label{font-size:.5rem;}
   .vt-hour-tick{font-size:.6rem;}
-  .vt-emp-hdr{min-height:26px;}
 }
 </style>
 </head>
@@ -611,6 +609,7 @@ select.form-input{
     <button class="btn nav-btn" id="nextDay" aria-label="다음 날">▶</button>
   </div>
   <div class="header-right">
+    <button class="btn btn-sm" id="editToggleBtn" style="font-size:.75rem;padding:4px 10px;min-width:auto;color:#9090A8;border-color:#2E2E52;">🔒</button>
     <button class="btn btn-sm" id="refreshBtn" aria-label="새로고침" style="font-size:1rem;padding:6px 8px;color:#9090A8;">↻</button>
     <button class="btn btn-sm btn-gold" id="monthViewBtn" aria-label="월간 보기" style="font-size:1rem;padding:6px 8px;">📅</button>
   </div>
@@ -902,6 +901,7 @@ function findEmpIdByName(name){
 // ============================================================
 // State
 // ============================================================
+let editMode = false; // false = 모니터링(잠금), true = 편집모드
 let currentDate = new Date();
 let employees = {};
 let daySchedule = {}; // schedule for currentDate
@@ -1453,6 +1453,10 @@ function renderTimeline(){
   // --- Body (fills remaining screen) ---
   const wrapper = document.createElement('div');
   wrapper.className = 'vt-wrapper';
+  if(editMode){
+    wrapper.style.border = '2px solid #2ECC71';
+    wrapper.style.borderRadius = '4px';
+  }
 
   const body = document.createElement('div');
   body.className = 'vt-body';
@@ -1517,27 +1521,36 @@ function renderTimeline(){
 
       block.style.top = topPct + '%';
       block.style.height = Math.min(heightPct, 100 - topPct) + '%';
-      block.style.background = (emp.color||'#9090A8') + '38';
-      block.style.borderTop = '2px solid '+(emp.color||'#9090A8');
+      block.style.background = (emp.color||'#9090A8') + '55';
+      block.style.borderLeft = '3px solid '+(emp.color||'#9090A8');
+      block.style.borderTop = '1px solid '+(emp.color||'#9090A8')+'88';
 
       const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
       const roleIcons = roles.map(r => r==='주방'?'🍳':r==='배달'?'🛵':r).join('');
       const timeText = shift.start.replace(/^0/,'')+'-'+shift.end.replace(/^0/,'');
       const hours = calcHours(shift.start, shift.end);
+
+      // 모니터링 모드: 글씨 크게, 사진에서 명확히 보이게
+      const nameLbl = emp.name;
       block.innerHTML =
-        (roleIcons ? '<span class="vt-role" style="color:'+(emp.color||'#E0E0EC')+'">'+roleIcons+(roles.length>1?' ×0.5':'')+'</span>' : '')+
-        '<span class="vt-time-label" style="color:'+(emp.color||'#E0E0EC')+'">'+timeText+'</span>'+
-        '<span class="vt-time-label" style="color:#FFFFFF">'+hours+'h</span>';
+        '<span style="font-size:.75rem;font-weight:700;color:#FFFFFF;text-shadow:0 1px 2px #000;">'+nameLbl+'</span>'+
+        '<span style="font-size:.7rem;font-weight:600;color:#FFFFFF;">'+timeText+'</span>'+
+        (roleIcons ? '<span style="font-size:.6rem;">'+roleIcons+'</span>' : '')+
+        '<span style="font-size:.6rem;color:#FFD700;font-weight:600;">'+hours+'h</span>';
 
       block.addEventListener('click', (e)=>{
         e.stopPropagation();
+        if(!editMode) return;
         openShiftModal(empId);
       });
       col.appendChild(block);
     }
 
-    // Drag: touchstart on column, move/end on document (during drag)
-    col.addEventListener('touchstart', onDragStart, {passive:false});
+    // Drag: 편집모드에서만 동작
+    col.addEventListener('touchstart', (e)=>{
+      if(!editMode) return;
+      onDragStart(e);
+    }, {passive:false});
 
     body.appendChild(col);
   });
@@ -2588,6 +2601,45 @@ $('nextDay').addEventListener('click', ()=>{
 });
 
 // ============================================================
+// Edit Mode Toggle (잠금/편집)
+// ============================================================
+function updateEditBtn(){
+  const btn = $('editToggleBtn');
+  if(editMode){
+    btn.textContent = '✏️ 편집중';
+    btn.style.color = '#2ECC71';
+    btn.style.borderColor = '#2ECC71';
+    btn.style.background = '#2ECC7118';
+  } else {
+    btn.textContent = '🔒';
+    btn.style.color = '#9090A8';
+    btn.style.borderColor = '#2E2E52';
+    btn.style.background = '';
+  }
+}
+$('editToggleBtn').addEventListener('click', ()=>{
+  editMode = !editMode;
+  updateEditBtn();
+  showToast(editMode ? '편집모드 — 터치/드래그로 수정 가능' : '모니터링 모드 — 잠금');
+  renderTimeline();
+});
+
+// 10분 무조작 시 자동 잠금
+let editTimeout = null;
+function resetEditTimeout(){
+  if(editTimeout) clearTimeout(editTimeout);
+  if(editMode){
+    editTimeout = setTimeout(()=>{
+      editMode = false;
+      updateEditBtn();
+      renderTimeline();
+      showToast('자동 잠금됨');
+    }, 10*60*1000);
+  }
+}
+document.addEventListener('touchstart', resetEditTimeout, {passive:true});
+
+// ============================================================
 // Refresh Button
 // ============================================================
 $('refreshBtn').addEventListener('click', ()=>{
@@ -3266,6 +3318,7 @@ document.addEventListener('visibilitychange', ()=>{
 // ============================================================
 function init(){
   currentDate = new Date();
+  updateEditBtn();
   updateDateDisplay();
   buildTimeGrids();
   loadAiKey();
