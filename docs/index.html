@@ -61,18 +61,9 @@ body{
 /* ===== Timeline Container ===== */
 .timeline-section{
   background:#242444;
-  min-height:calc(100vh - 52px);
 }
-#timelineScroll{
-  display:flex;
-  flex-direction:column;
-  height:100%;
-}
-#timelineContent{
-  display:flex;
-  flex-direction:column;
-  flex:1;
-}
+#timelineScroll{}
+#timelineContent{}
 
 /* Vertical Timeline — Fit to screen */
 .vt-header{
@@ -81,9 +72,9 @@ body{
   border-bottom:2px solid #2E2E52;
 }
 .vt-time-hdr{
-  min-width:40px;max-width:40px;
+  min-width:44px;max-width:44px;
   display:flex;align-items:center;justify-content:center;
-  font-size:.55rem;color:#707088;
+  font-size:.7rem;color:#9090A8;
   border-right:1px solid #2E2E52;
   padding:4px 0;
 }
@@ -100,7 +91,7 @@ body{
 
 .vt-wrapper{
   position:relative;
-  height:calc(100vh - 90px);
+  height:75vh;
   overflow:hidden;
 }
 .vt-body{
@@ -109,7 +100,7 @@ body{
   height:100%;
 }
 .vt-time-col{
-  min-width:40px;max-width:40px;
+  min-width:44px;max-width:44px;
   border-right:1px solid #2E2E52;
   flex-shrink:0;
   position:relative;
@@ -117,11 +108,11 @@ body{
 .vt-hour-tick{
   position:absolute;left:0;right:0;
   display:flex;align-items:flex-start;justify-content:center;
-  font-size:.55rem;color:#707088;
+  font-size:.7rem;color:#9090A8;
   pointer-events:none;
 }
 .vt-hour-tick .vt-wx{
-  font-size:.45rem;color:#9090A8;
+  font-size:.55rem;color:#9090A8;
   display:block;text-align:center;line-height:1.1;
 }
 .vt-emp-col{
@@ -146,8 +137,8 @@ body{
   transition:opacity .15s;
 }
 .vt-shift:active{opacity:.7;}
-.vt-shift .vt-role{font-size:.5rem;font-weight:700;}
-.vt-shift .vt-time-label{font-size:.45rem;opacity:.8;}
+.vt-shift .vt-role{font-size:.6rem;font-weight:700;}
+.vt-shift .vt-time-label{font-size:.55rem;opacity:.8;}
 
 /* Drag preview */
 .vt-drag{
@@ -158,7 +149,7 @@ body{
   z-index:3;
   pointer-events:none;
   display:flex;align-items:center;justify-content:center;
-  font-size:.55rem;color:#2ECC71;font-weight:600;
+  font-size:.65rem;color:#2ECC71;font-weight:600;
 }
 
 /* Summary row */
@@ -168,9 +159,9 @@ body{
   background:#1e1e3a;
 }
 .vt-summary-time{
-  min-width:40px;max-width:40px;
+  min-width:44px;max-width:44px;
   display:flex;align-items:center;justify-content:center;
-  font-size:.55rem;color:#FFD700;font-weight:700;
+  font-size:.65rem;color:#FFD700;font-weight:700;
   border-right:1px solid #2E2E52;
   min-height:26px;
 }
@@ -595,12 +586,12 @@ select.form-input{
 @media(max-width:400px){
   .header h1{font-size:1rem;}
   .date-display{font-size:.9rem;min-width:90px;}
-  .vt-time-hdr,.vt-time-col,.vt-summary-time{min-width:34px;max-width:34px;}
-  .vt-emp-hdr .vt-name{font-size:.52rem;}
+  .vt-time-hdr,.vt-time-col,.vt-summary-time{min-width:38px;max-width:38px;}
+  .vt-emp-hdr .vt-name{font-size:.55rem;}
   .vt-emp-hdr{min-height:30px;padding:3px 1px;}
-  .vt-shift .vt-role{font-size:.45rem;}
-  .vt-shift .vt-time-label{font-size:.4rem;}
-  .vt-hour-tick{font-size:.5rem;}
+  .vt-shift .vt-role{font-size:.5rem;}
+  .vt-shift .vt-time-label{font-size:.45rem;}
+  .vt-hour-tick{font-size:.6rem;}
   .vt-emp-hdr{min-height:26px;}
 }
 </style>
@@ -986,6 +977,36 @@ async function fbDelete(url){
 }
 
 // ============================================================
+// localStorage — single source of truth (Firebase = backup)
+// ============================================================
+const LS_EMPLOYEES = 'ws_employees';
+const LS_SCHEDULE_PREFIX = 'ws_sched_';
+
+function lsSaveEmployees(data){
+  try{ localStorage.setItem(LS_EMPLOYEES, JSON.stringify(data)); }catch(e){}
+}
+function lsLoadEmployees(){
+  try{
+    const s = localStorage.getItem(LS_EMPLOYEES);
+    return s ? JSON.parse(s) : null;
+  }catch(e){ return null; }
+}
+function lsSaveSchedule(dateKey, data){
+  try{ localStorage.setItem(LS_SCHEDULE_PREFIX + dateKey, JSON.stringify(data)); }catch(e){}
+}
+function lsLoadSchedule(dateKey){
+  try{
+    const s = localStorage.getItem(LS_SCHEDULE_PREFIX + dateKey);
+    return s ? JSON.parse(s) : null;
+  }catch(e){ return null; }
+}
+function lsDeleteShift(dateKey, empId){
+  const sched = lsLoadSchedule(dateKey) || {};
+  delete sched[empId];
+  lsSaveSchedule(dateKey, sched);
+}
+
+// ============================================================
 // SSE with generation counter
 // ============================================================
 function connectSSE(){
@@ -1007,6 +1028,7 @@ function connectSSE(){
           if(d.data === null) delete employees[key];
           else employees[key] = d.data;
         }
+        lsSaveEmployees(employees);
         renderAll();
       }catch(err){ console.error('SSE emp parse',err); }
     });
@@ -1017,6 +1039,7 @@ function connectSSE(){
         const key = d.path.replace(/^\//,'');
         if(key && d.data) employees[key] = Object.assign(employees[key]||{}, d.data);
         else if(!key && d.data) Object.assign(employees, d.data);
+        lsSaveEmployees(employees);
         renderAll();
       }catch(err){ console.error('SSE emp patch parse',err); }
     });
@@ -1057,6 +1080,7 @@ function connectScheduleSSE(gen){
             }
           }
         }
+        lsSaveSchedule(dateKey(currentDate), daySchedule);
         renderTimeline();
       }catch(err){ console.error('SSE sched parse',err); }
     });
@@ -1088,31 +1112,58 @@ function connectScheduleSSE(gen){
 // Data loading
 // ============================================================
 async function loadData(){
-  $loading.style.display = 'flex';
-  $timelineScroll.style.display = 'none';
+  const dk = dateKey(currentDate);
+
+  // 1) localStorage 즉시 로드 (데이터 유실 방지)
+  const localEmp = lsLoadEmployees();
+  const localSched = lsLoadSchedule(dk);
+  if(localEmp && Object.keys(localEmp).length > 0){
+    employees = localEmp;
+  }
+  if(localSched){
+    daySchedule = localSched;
+  }
+
+  // 이미 로컬 데이터 있으면 즉시 렌더 (로딩 없이)
+  if(localEmp || localSched){
+    dataLoaded = true;
+    $loading.style.display = 'none';
+    $timelineScroll.style.display = '';
+    renderAll();
+  } else {
+    $loading.style.display = 'flex';
+    $timelineScroll.style.display = 'none';
+  }
+
+  // 2) Firebase 백그라운드 동기화
   try {
-    const dk = dateKey(currentDate);
     const [empData, schedData] = await Promise.all([
       fbGet(FB_EMPLOYEES),
       fbGet(FB_SCHEDULES+'/'+dk)
     ]);
 
-    // If no employees in Firebase, seed with defaults
-    if(!empData || Object.keys(empData).length === 0){
-      employees = JSON.parse(JSON.stringify(DEFAULT_EMPLOYEES));
-      fbPut(FB_EMPLOYEES, employees);
-    } else {
+    if(empData && Object.keys(empData).length > 0){
       employees = empData;
+      lsSaveEmployees(empData);
+    } else if(!localEmp || Object.keys(employees).length === 0){
+      employees = JSON.parse(JSON.stringify(DEFAULT_EMPLOYEES));
+      lsSaveEmployees(employees);
+      fbPut(FB_EMPLOYEES, employees);
     }
-    daySchedule = schedData || {};
+
+    if(schedData){
+      // Firebase 데이터와 로컬 병합 (로컬 우선)
+      const merged = Object.assign({}, schedData, localSched || {});
+      daySchedule = merged;
+      lsSaveSchedule(dk, merged);
+    }
   } catch(err){
-    console.error('loadData error:', err);
+    console.error('loadData Firebase sync error:', err);
   }
   dataLoaded = true;
 
   $loading.style.display = 'none';
   $timelineScroll.style.display = '';
-
   renderAll();
   loadWeekSchedules();
 }
@@ -1409,6 +1460,7 @@ function onDragEnd(e){
   const dk = dateKey(currentDate);
   const data = {start: startTime, end: endTime, role: ''};
   daySchedule[ds.empId] = data;
+  lsSaveSchedule(dk, daySchedule);
   renderTimeline();
   fbPut(FB_SCHEDULES+'/'+dk+'/'+ds.empId, data).then(ok => {
     if(ok){
@@ -1723,14 +1775,17 @@ $('shiftSave').addEventListener('click', async()=>{
 
   closeModal($shiftModal);
 
-  // Optimistic update
+  // Optimistic update — localStorage first
   daySchedule[shiftSelectedEmpId] = data;
+  lsSaveSchedule(dk, daySchedule);
   renderTimeline();
 
   const ok = await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId, data);
   if(ok){
     showToast('저장됨');
     loadWeekSchedules();
+  } else {
+    showToast('로컬 저장됨 (서버 동기화 대기)');
   }
 });
 
@@ -1741,8 +1796,9 @@ $('shiftDelete').addEventListener('click', async()=>{
 
   closeModal($shiftModal);
 
-  // Optimistic
+  // Optimistic — localStorage first
   delete daySchedule[shiftSelectedEmpId];
+  lsSaveSchedule(dk, daySchedule);
   renderTimeline();
 
   const ok = await fbDelete(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId);
@@ -1973,10 +2029,12 @@ $('empEditSave').addEventListener('click', async()=>{
   if(!id) id = 'emp' + Date.now();
   closeModal($empEditModal);
   employees[id] = data;
+  lsSaveEmployees(employees);
   renderEmpList();
   renderAll();
   const ok = await fbPut(FB_EMPLOYEES+'/'+id, data);
   if(ok) showToast('저장됨');
+  else showToast('로컬 저장됨');
 });
 
 // ============================================================
@@ -2083,6 +2141,7 @@ function openContactPicker(contacts){
       };
       const id = 'emp' + Date.now();
       employees[id] = data;
+      lsSaveEmployees(employees);
       const ok = await fbPut(FB_EMPLOYEES+'/'+id, data);
       if(ok){
         btn.textContent = '완료';
@@ -2516,14 +2575,15 @@ window.applyAiSchedule = async function(data){
   for(const s of data){
     if(!s.date || !s.empId || !s.start || !s.end) continue;
     const shiftData = {start:s.start, end:s.end, role:s.role||''};
-    const ok = await fbPut(FB_SCHEDULES+'/'+s.date+'/'+s.empId, shiftData);
-    if(ok){
-      applied++;
-      // Update local state if it's current date
-      if(s.date === dateKey(currentDate)){
-        daySchedule[s.empId] = shiftData;
-      }
+    // localStorage first
+    const lsData = lsLoadSchedule(s.date) || {};
+    lsData[s.empId] = shiftData;
+    lsSaveSchedule(s.date, lsData);
+    if(s.date === dateKey(currentDate)){
+      daySchedule[s.empId] = shiftData;
     }
+    const ok = await fbPut(FB_SCHEDULES+'/'+s.date+'/'+s.empId, shiftData);
+    if(ok) applied++;
   }
   renderTimeline();
   loadWeekSchedules();
