@@ -107,12 +107,12 @@ body{
 .cal-hdr{text-align:center;color:#707088;font-weight:600;padding:4px 0;font-size:.65rem;}
 .cal-cell{
   background:#242444;border:1px solid #2E2E5230;border-radius:4px;
-  min-height:60px;padding:2px 3px;cursor:pointer;position:relative;
+  min-height:68px;padding:3px 4px;cursor:pointer;position:relative;
 }
-.cal-cell.today{border-color:#FFD700;background:#FFD70008;}
-.cal-cell.other{opacity:.3;}
-.cal-cell .cal-date{font-size:.65rem;color:#9090A8;font-weight:600;}
-.cal-cell .cal-emp{font-size:.55rem;line-height:1.3;overflow:hidden;}
+.cal-cell.today{border-color:#FFD700;border-width:2px;background:#FFD70010;}
+.cal-cell.other{opacity:.2;pointer-events:none;}
+.cal-cell .cal-date{font-size:.7rem;color:#E0E0EC;font-weight:700;}
+.cal-cell .cal-emp{font-size:.55rem;line-height:1.4;overflow:hidden;margin-top:1px;}
 
 /* ===== Horizontal Timeline ===== */
 .ht-row{display:flex;align-items:center;border-bottom:1px solid #2E2E5220;min-height:36px;}
@@ -129,7 +129,7 @@ body{
   border-bottom:2px solid #2E2E52;
 }
 .vt-time-hdr{
-  min-width:44px;max-width:44px;
+  min-width:32px;max-width:32px;
   display:flex;align-items:center;justify-content:center;
   font-size:.7rem;color:#9090A8;
   border-right:1px solid #2E2E52;
@@ -148,8 +148,9 @@ body{
 
 .vt-wrapper{
   position:relative;
-  height:75vh;
-  overflow:hidden;
+  height:70vh;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
 }
 .vt-body{
   display:flex;
@@ -157,7 +158,7 @@ body{
   height:100%;
 }
 .vt-time-col{
-  min-width:44px;max-width:44px;
+  min-width:32px;max-width:32px;
   border-right:1px solid #2E2E52;
   flex-shrink:0;
   position:relative;
@@ -215,7 +216,7 @@ body{
   background:#1e1e3a;
 }
 .vt-summary-time{
-  min-width:44px;max-width:44px;
+  min-width:32px;max-width:32px;
   display:flex;align-items:center;justify-content:center;
   font-size:.65rem;color:#FFD700;font-weight:700;
   border-right:1px solid #2E2E52;
@@ -669,8 +670,7 @@ select.form-input{
   <div class="header-right">
     <button class="btn btn-sm" id="resetFixedBtn" style="font-size:.65rem;padding:3px 6px;min-width:auto;min-height:28px;color:#9090A8;border-color:#2E2E52;">재배치</button>
     <button class="btn btn-sm" id="confirmDayBtn" style="font-size:.7rem;padding:4px 8px;min-width:auto;min-height:30px;color:#707088;border-color:#2E2E52;">작업중</button>
-    <button class="btn btn-sm" id="refreshBtn" aria-label="새로고침" style="font-size:1rem;padding:6px 8px;color:#9090A8;">↻</button>
-    <button class="btn btn-sm btn-gold" id="monthViewBtn" aria-label="월간 보기" style="font-size:1rem;padding:6px 8px;">📅</button>
+    <button class="btn btn-sm" id="refreshBtn" aria-label="새로고침" style="font-size:.8rem;padding:3px 6px;min-width:auto;min-height:28px;color:#707088;border-color:#2E2E52;">↻</button>
   </div>
 </div>
 
@@ -682,6 +682,7 @@ select.form-input{
   <button class="layout-tab active" data-tab="vertical">세로</button>
   <button class="layout-tab" data-tab="calendar">달력</button>
   <button class="layout-tab" data-tab="horizontal">가로</button>
+  <button class="layout-tab" data-tab="list">리스트</button>
 </div>
 
 <!-- 탭 컨텐츠 -->
@@ -697,6 +698,9 @@ select.form-input{
   </div>
   <div class="tab-panel" id="panelHorizontal">
     <div id="horizontalContent"></div>
+  </div>
+  <div class="tab-panel" id="panelList">
+    <div id="listContent"></div>
   </div>
 </div>
 
@@ -973,7 +977,7 @@ const DEFAULT_EMPLOYEES = {
 // 직원이름 → {start, end, role, type}
 // type: 'fixed'=매일 고정, 'variable'=변칙(수동)
 const FIXED_SCHEDULES = {
-  '이원규': {start:'10:00', end:'20:00', role:'주방,오토바이', type:'fixed'},
+  '이원규': {start:'06:00', end:'20:00', role:'주방,오토바이', type:'fixed'},
   '히오':   {start:'18:00', end:'03:00', role:'주방', type:'fixed'},
   '리':     {start:'18:00', end:'03:00', role:'주방', type:'fixed'},
   '박준모': {start:'17:00', end:'03:00', role:'주방,차배달', type:'fixed'},
@@ -1384,13 +1388,31 @@ async function loadData(){
   }
   dataLoaded = true;
 
-  // 고정 스케줄 자동 적용
+  // 자동 휴무 생성 + 고정 스케줄 적용
+  generateAutoDayoffs();
   autoApplyFixed(dk);
+
+  // 첫 실행 시 전 데이터 삭제 후 고정값 초기화
+  const initVer = localStorage.getItem('ws_init_ver');
+  if(initVer !== 'v3'){
+    // 기존 스케줄 전부 클리어
+    for(let i=0; i<localStorage.length; i++){
+      const key = localStorage.key(i);
+      if(key && key.startsWith('ws_sched_')){
+        localStorage.removeItem(key);
+        i--; // 키 삭제 후 인덱스 조정
+      }
+    }
+    daySchedule = {};
+    autoApplyFixed(dk);
+    localStorage.setItem('ws_init_ver', 'v3');
+  }
 
   $loading.style.display = 'none';
   $tabContent.style.display = '';
   renderAll();
   loadWeekSchedules();
+  updateConfirmBtn();
 }
 
 async function loadWeekSchedules(){
@@ -1474,9 +1496,10 @@ async function onDateChange(){
   const localSched = lsLoadSchedule(dk);
   if(localSched) daySchedule = localSched;
   else daySchedule = {};
-  // 고정 스케줄 자동 적용
+  // 자동 휴무 생성 + 고정 스케줄 적용
+  generateAutoDayoffs();
   autoApplyFixed(dk);
-  renderTimeline();
+  renderCurrentTab();
   // Firebase 동기화
   try{
     const schedData = await fbGet(FB_SCHEDULES+'/'+dk);
@@ -1484,7 +1507,7 @@ async function onDateChange(){
       const merged = Object.assign({}, schedData, localSched || {});
       daySchedule = merged;
       lsSaveSchedule(dk, merged);
-      renderTimeline();
+      renderCurrentTab();
     }
   }catch(e){}
   loadWeekSchedules();
@@ -1576,9 +1599,9 @@ function renderBriefing(){
       }
     }
   }
-  // 스포츠/매출변동
+  // 스포츠 (이슈 없으면 표기X)
   const sportsEl = $('sportsInfo');
-  if(sportsEl && sportsEl.textContent && !sportsEl.textContent.includes('로딩')){
+  if(sportsEl && sportsEl.textContent && !sportsEl.textContent.includes('로딩') && !sportsEl.textContent.includes('경기없음') && !sportsEl.textContent.includes('없음')){
     html += '<span style="color:#2AC1BC;">'+sportsEl.textContent.substring(0,30)+'</span>';
   }
   html += '</div>';
@@ -1669,10 +1692,7 @@ function renderTimeline(){
     tick.style.height = (100 / TL_HOURS.length) + '%';
     let html = SHOW_HOURS.has(h) ? '<span>'+pad(h)+'</span>' : '';
     // Weather at this hour
-    const wx = hourlyWeather[h];
-    if(wx){
-      html += '<span class="vt-wx">'+wx.i+(wx.t!==undefined?wx.t+'°':'')+'</span>';
-    }
+    // 온도 표기 삭제 (가시성 저해)
     tick.innerHTML = html;
     timeCol.appendChild(tick);
   });
@@ -1765,7 +1785,8 @@ function renderTimeline(){
       col.style.background = '#E74C3C0A';
     }
 
-    col.addEventListener('touchstart', onDragStart, {passive:false});
+    // 터치 시 팝업 열기 (드래그 입력 제거 — 수정창에서만 입력)
+    col.addEventListener('click', ()=> openShiftModal(empId));
 
     body.appendChild(col);
   });
@@ -2064,6 +2085,9 @@ function renderWeek(){
 
   empKeys.forEach(id => { daysOff[id] = 0; });
 
+  const todayMidnight = new Date(today);
+  todayMidnight.setHours(0,0,0,0);
+
   for(let i=0; i<7; i++){
     const d = new Date(monday);
     d.setDate(d.getDate()+i);
@@ -2072,11 +2096,13 @@ function renderWeek(){
     const dow = d.getDay();
     const isCurrentDay = isSameDay(d, currentDate);
     const isTodayDay = isSameDay(d, today);
+    const isPast = d < todayMidnight;
 
     const cell = document.createElement('div');
     cell.className = 'week-day';
     if(isTodayDay) cell.classList.add('today');
     if(isCurrentDay) cell.style.background = '#2A2A45';
+    if(isPast) cell.style.opacity = '.3';
 
     const label = document.createElement('div');
     label.className = 'day-label';
@@ -2667,6 +2693,79 @@ async function loadDayoffs(){
   }catch(e){ console.error('loadDayoffs error', e); }
 }
 
+// 매주 반복 휴무 (요일 기반) + 특정 기간 휴무 자동 생성
+// 월=1, 화=2, ..., 일=0
+const WEEKLY_DAYOFFS = {
+  '리': [1],     // 매주 월요일
+  '히오': [2],   // 매주 화요일
+};
+
+// 특정 기간 휴무
+const PERIOD_DAYOFFS = [
+  {name:'권연옥', from:'2026-02-24', to:'2026-03-08'},
+];
+
+// 특정 날짜 휴무
+const SPECIFIC_DAYOFFS = [
+  {name:'박준모', date:'2026-02-26'}, // 이번주 수요일
+  {name:'전묘정', date:'2026-02-26'}, // 이번주 수요일
+];
+
+function generateAutoDayoffs(){
+  let changed = false;
+  const today = new Date();
+  // 8주 앞까지 자동 생성
+  for(let i=0; i<56; i++){
+    const d = new Date(today);
+    d.setDate(d.getDate()+i);
+    const dk = dateKey(d);
+    const dow = d.getDay();
+
+    // 매주 반복 휴무
+    for(const empName in WEEKLY_DAYOFFS){
+      if(WEEKLY_DAYOFFS[empName].includes(dow)){
+        const empId = findEmpIdByName(empName);
+        if(empId){
+          if(!dayoffs[empId]) dayoffs[empId] = {};
+          if(!dayoffs[empId][dk]){
+            dayoffs[empId][dk] = true;
+            changed = true;
+          }
+        }
+      }
+    }
+  }
+
+  // 기간 휴무
+  PERIOD_DAYOFFS.forEach(pd => {
+    const empId = findEmpIdByName(pd.name);
+    if(!empId) return;
+    if(!dayoffs[empId]) dayoffs[empId] = {};
+    const from = new Date(pd.from), to = new Date(pd.to);
+    for(let d = new Date(from); d <= to; d.setDate(d.getDate()+1)){
+      const dk = dateKey(d);
+      if(!dayoffs[empId][dk]){
+        dayoffs[empId][dk] = true;
+        changed = true;
+      }
+    }
+  });
+
+  // 특정 날짜 휴무
+  SPECIFIC_DAYOFFS.forEach(sd => {
+    const empId = findEmpIdByName(sd.name);
+    if(!empId) return;
+    if(!dayoffs[empId]) dayoffs[empId] = {};
+    if(!dayoffs[empId][sd.date]){
+      dayoffs[empId][sd.date] = true;
+      changed = true;
+    }
+  });
+
+  if(changed) lsSaveDayoffs();
+  return changed;
+}
+
 async function addDayOff(empId, dk){
   if(!dayoffs[empId]) dayoffs[empId] = {};
   dayoffs[empId][dk] = true;
@@ -2946,13 +3045,16 @@ function renderCurrentTab(){
   if(currentTab==='vertical') renderTimeline();
   else if(currentTab==='calendar') renderCalendarView();
   else if(currentTab==='horizontal') renderHorizontalView();
+  else if(currentTab==='list') renderListView();
 }
 
-// Calendar view renderer
+// Calendar view renderer (미래 날짜만 표시)
 function renderCalendarView(){
   const con = $('calendarContent');
   if(!con) return;
   const dk = dateKey(currentDate);
+  const today = new Date();
+  today.setHours(0,0,0,0);
   const y = currentDate.getFullYear(), m = currentDate.getMonth();
   const days = daysInMonth(y, m+1);
   const firstDow = new Date(y,m,1).getDay();
@@ -2961,41 +3063,126 @@ function renderCalendarView(){
   let html = '<div class="cal-grid">';
   ['일','월','화','수','목','금','토'].forEach(d => html+='<div class="cal-hdr">'+d+'</div>');
 
-  // blank cells before 1st
   for(let i=0;i<firstDow;i++) html+='<div class="cal-cell other"></div>';
 
   for(let d=1;d<=days;d++){
     const cellDate = new Date(y,m,d);
     const cdk = dateKey(cellDate);
     const isToday = cdk===dk;
+    const isPast = cellDate < today;
+    if(isPast){
+      html+='<div class="cal-cell other" style="pointer-events:none;"><div class="cal-date" style="color:#707088;">'+d+'</div></div>';
+      continue;
+    }
     html+='<div class="cal-cell'+(isToday?' today':'')+'" data-date="'+cdk+'">';
-    html+='<div class="cal-date"'+(cellDate.getDay()===0?' style="color:#E74C3C;"':cellDate.getDay()===6?' style="color:#45B7D1;"':'')+'>'+d+'</div>';
+    html+='<div class="cal-date" style="font-size:.7rem;font-weight:700;'+(cellDate.getDay()===0?'color:#E74C3C;':cellDate.getDay()===6?'color:#45B7D1;':'color:#E0E0EC;')+'">'+d+'<span style="font-size:.55rem;color:#707088;margin-left:2px;">'+DOW_KR[cellDate.getDay()]+'</span></div>';
 
-    // show employees with shifts or dayoff
+    // 근무자 요약 (색상 도트 + 이름)
     html+='<div class="cal-emp">';
+    let empCount = 0, offCount = 0;
     empKeys.forEach(id => {
       const off = isDayOff(id, cdk);
       const sched = weekSchedules[cdk]?.[id] || (cdk===dk ? daySchedule[id] : null);
       if(off){
-        html+='<div style="color:#E74C3C;font-size:.5rem;">'+employees[id].name+' 휴</div>';
+        offCount++;
+        html+='<div style="color:#E74C3C;font-size:.55rem;font-weight:600;">'+employees[id].name.substring(0,2)+' 휴</div>';
       } else if(sched && sched.start){
-        html+='<div style="color:'+(employees[id].color||'#9090A8')+';font-size:.5rem;">'+employees[id].name+' '+sched.start.replace(/^0/,'')+'-'+sched.end.replace(/^0/,'')+'</div>';
+        empCount++;
+        html+='<div style="color:'+(employees[id].color||'#E0E0EC')+';font-size:.55rem;font-weight:600;">'+employees[id].name.substring(0,2)+' '+sched.start.replace(/^0/,'').replace(':00','')+'</div>';
       }
     });
+    if(empCount===0 && offCount===0){
+      html+='<div style="color:#707088;font-size:.5rem;">미입력</div>';
+    }
     html+='</div></div>';
   }
   html+='</div>';
   con.innerHTML = html;
 
-  // tap cell to navigate
   con.querySelectorAll('.cal-cell[data-date]').forEach(cell => {
     cell.addEventListener('click', ()=>{
       const parts = cell.dataset.date.split('-');
       currentDate = new Date(+parts[0], +parts[1]-1, +parts[2]);
       onDateChange();
-      // switch to vertical for detail
       document.querySelector('.layout-tab[data-tab="vertical"]').click();
     });
+  });
+}
+
+// List view renderer (리스트 형식: 이름/시간/역할)
+function renderListView(){
+  const con = $('listContent');
+  if(!con) return;
+  const dk = dateKey(currentDate);
+  const empKeys = Object.keys(employees);
+  const m = currentDate.getMonth()+1, d = currentDate.getDate();
+  const dow = DOW_KR[currentDate.getDay()];
+
+  let html = '<div style="padding:8px 12px;">';
+  html += '<div style="font-size:.85rem;font-weight:700;color:#FFD700;margin-bottom:8px;">'+m+'/'+d+' ('+dow+') 근무표</div>';
+
+  // 근무자 목록
+  const working = [], offList = [], empty = [];
+  empKeys.forEach(id => {
+    const emp = employees[id];
+    const off = isDayOff(id, dk);
+    const shift = daySchedule[id];
+    if(off) offList.push({id, emp});
+    else if(shift && shift.start) working.push({id, emp, shift});
+    else empty.push({id, emp});
+  });
+
+  // 시간순 정렬
+  working.sort((a,b) => {
+    const am = timeToMinutesFrom6(a.shift.start);
+    const bm = timeToMinutesFrom6(b.shift.start);
+    return am - bm;
+  });
+
+  if(working.length > 0){
+    html += '<div style="font-size:.7rem;color:#2ECC71;font-weight:600;margin-bottom:4px;">근무 ('+working.length+'명)</div>';
+    working.forEach(w => {
+      const roles = w.shift.role ? w.shift.role.split(',').filter(Boolean) : [];
+      const roleHtml = roles.map(r => '<span style="color:'+(ROLE_COLORS[r]||'#9090A8')+';font-weight:600;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
+      const hours = calcHours(w.shift.start, w.shift.end);
+      const fix = getFixedSchedule(w.emp.name);
+      const isFixed = fix && fix.type==='fixed' && w.shift.start===fix.start && w.shift.end===fix.end;
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:2px;background:#242444;border-radius:6px;border-left:3px solid '+(w.emp.color||'#9090A8')+';cursor:pointer;" data-empid="'+w.id+'">';
+      html += '<span style="font-size:.8rem;font-weight:700;color:#FFFFFF;min-width:50px;">'+w.emp.name+'</span>';
+      html += '<span style="font-size:.8rem;font-weight:600;color:#E0E0EC;">'+w.shift.start+' ~ '+w.shift.end+'</span>';
+      html += '<span style="font-size:.7rem;">'+roleHtml+'</span>';
+      html += '<span style="font-size:.7rem;color:#FFD700;font-weight:600;">'+hours+'h</span>';
+      if(isFixed) html += '<span style="font-size:.55rem;color:#707088;">고정</span>';
+      html += '</div>';
+    });
+  }
+
+  if(offList.length > 0){
+    html += '<div style="font-size:.7rem;color:#E74C3C;font-weight:600;margin:8px 0 4px;">휴무 ('+offList.length+'명)</div>';
+    offList.forEach(o => {
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:2px;background:#E74C3C10;border-radius:6px;border-left:3px solid #E74C3C;">';
+      html += '<span style="font-size:.8rem;font-weight:700;color:#E74C3C;">'+o.emp.name+'</span>';
+      html += '<span style="font-size:.7rem;color:#E74C3C;">휴무</span>';
+      html += '</div>';
+    });
+  }
+
+  if(empty.length > 0){
+    html += '<div style="font-size:.7rem;color:#E67E22;font-weight:600;margin:8px 0 4px;">미입력 ('+empty.length+'명)</div>';
+    empty.forEach(e => {
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:2px;background:#1A1A30;border-radius:6px;border-left:3px solid #707088;cursor:pointer;" data-empid="'+e.id+'">';
+      html += '<span style="font-size:.8rem;font-weight:700;color:#707088;">'+e.emp.name+'</span>';
+      html += '<span style="font-size:.7rem;color:#707088;">미입력</span>';
+      html += '</div>';
+    });
+  }
+
+  html += '</div>';
+  con.innerHTML = html;
+
+  // 터치 → 수정창
+  con.querySelectorAll('[data-empid]').forEach(row => {
+    row.addEventListener('click', ()=> openShiftModal(row.dataset.empid));
   });
 }
 
@@ -3344,9 +3531,15 @@ async function loadWeatherAndSports(){
     }
   }
 
-  // Sports
+  // Sports (경기 없는 날엔 표기 X)
+  const $sportsRow = $sports.closest('.info-row');
   if(sportsCache.date === todayStr && sportsCache.data){
-    $sports.innerHTML = sportsCache.data;
+    if(sportsCache.data.includes('경기없음') || sportsCache.data.includes('없음')){
+      if($sportsRow) $sportsRow.style.display = 'none';
+    } else {
+      if($sportsRow) $sportsRow.style.display = '';
+      $sports.innerHTML = sportsCache.data;
+    }
   } else {
     try{
       const sPrompt = '오늘 날짜: '+todayStr+'. 오늘/내일 중 한국 스포츠 경기 일정 알려줘. KBO(프로야구), 한국 국가대표 축구, 챔피언스리그만. 경기 없으면 "경기없음". 각 경기 팀+시간만 한줄씩. 80자 이내. 순수 텍스트만 (마크다운 금지).';
@@ -3354,17 +3547,14 @@ async function loadWeatherAndSports(){
       const sClean = sResult.replace(/\*/g,'').replace(/\n/g,' | ').trim().substring(0,120);
       sportsCache = {date:todayStr, data:sClean};
       localStorage.setItem('ws_sports_cache', JSON.stringify(sportsCache));
-      $sports.innerHTML = sClean;
-    }catch(e){
-      const cached = localStorage.getItem('ws_sports_cache');
-      if(cached){
-        try{
-          const c = JSON.parse(cached);
-          $sports.innerHTML = c.data || '<span class="info-placeholder">경기 로딩 실패</span>';
-        }catch(x){ $sports.innerHTML = '<span class="info-placeholder">경기 로딩 실패</span>'; }
+      if(sClean.includes('경기없음') || sClean.includes('없음')){
+        if($sportsRow) $sportsRow.style.display = 'none';
       } else {
-        $sports.innerHTML = '<span class="info-placeholder">경기 로딩 실패</span>';
+        if($sportsRow) $sportsRow.style.display = '';
+        $sports.innerHTML = sClean;
       }
+    }catch(e){
+      if($sportsRow) $sportsRow.style.display = 'none';
     }
   }
 }
