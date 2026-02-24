@@ -962,13 +962,13 @@ const TL_TOTAL_HOURS = 22; // 06:00 ~ 03:00(+1) = 21h span, but 22 columns (incl
 // Default employees
 // ============================================================
 const DEFAULT_EMPLOYEES = {
-  emp1: {name:'이원규', color:'#FF6B6B', phone:'', role:'', hourlyRate:0, maxHours:40},
-  emp2: {name:'권연옥', color:'#4ECDC4', phone:'', role:'', hourlyRate:0, maxHours:40},
-  emp3: {name:'리', color:'#45B7D1', phone:'', role:'', hourlyRate:0, maxHours:40},
-  emp4: {name:'히오', color:'#96CEB4', phone:'', role:'', hourlyRate:0, maxHours:40},
-  emp5: {name:'박준모', color:'#FFEAA7', phone:'', role:'', hourlyRate:0, maxHours:40},
-  emp6: {name:'전묘정', color:'#DDA0DD', phone:'', role:'', hourlyRate:0, maxHours:40},
-  emp7: {name:'대유', color:'#F0A500', phone:'', role:'', hourlyRate:0, maxHours:40}
+  emp1: {name:'이원규', color:'#FF6B6B', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp2: {name:'권연옥', color:'#4ECDC4', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp3: {name:'리', color:'#45B7D1', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp4: {name:'히오', color:'#96CEB4', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp5: {name:'박준모', color:'#FFEAA7', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp6: {name:'전묘정', color:'#DDA0DD', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp7: {name:'대유', color:'#F0A500', phone:'', role:'', hourlyRate:9860, maxHours:40}
 };
 
 // ============================================================
@@ -1088,6 +1088,7 @@ let confirmedDays = {}; // { 'yyyy-MM-dd': true } — 확정된 날짜
 const LS_CONFIRMED = 'ws_confirmed';
 function lsLoadConfirmed(){ try{ return JSON.parse(localStorage.getItem(LS_CONFIRMED)) || {}; }catch(e){ return {}; } }
 function lsSaveConfirmed(data){ localStorage.setItem(LS_CONFIRMED, JSON.stringify(data)); }
+function isConfirmed(dk){ return !!confirmedDays[dk]; }
 
 // ============================================================
 // DOM refs
@@ -1345,6 +1346,10 @@ async function loadData(){
   const localSched = lsLoadSchedule(dk);
   if(localEmp && Object.keys(localEmp).length > 0){
     employees = localEmp;
+    // hourlyRate 마이그레이션 (기존 데이터에 없으면 최저시급 적용)
+    Object.keys(employees).forEach(id => {
+      if(!employees[id].hourlyRate) employees[id].hourlyRate = 9860;
+    });
   }
   if(localSched){
     daySchedule = localSched;
@@ -1547,71 +1552,18 @@ function renderBriefing(){
 
   let html = '';
 
-  // 1) 당일 휴무예정자
+  // ===== KPI 요약 카드 =====
   const offToday = [];
+  let workingCount = 0, totalHours = 0, totalCost = 0;
+  let fixedCount=0, variableCount=0, emptyCount=0;
   empKeys.forEach(id => {
-    if(isDayOff(id, dk)) offToday.push(employees[id]?.name || id);
-  });
-  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;">';
-  html += '<span style="color:#E74C3C;font-weight:600;">휴무 '+offToday.length+'명</span>';
-  if(offToday.length > 0){
-    html += '<span style="color:#E74C3C;">'+offToday.join(', ')+'</span>';
-  } else {
-    html += '<span style="color:#707088;">없음</span>';
-  }
-
-  // 2) 이번주 휴무 누적 (인당)
-  const mon = getMonday(currentDate);
-  const weekOffCounts = {};
-  empKeys.forEach(id => { weekOffCounts[id] = 0; });
-  for(let i=0; i<7; i++){
-    const d = new Date(mon);
-    d.setDate(d.getDate()+i);
-    const wdk = dateKey(d);
-    empKeys.forEach(id => {
-      if(isDayOff(id, wdk)) weekOffCounts[id]++;
-    });
-  }
-  html += '<span style="color:#707088;margin-left:6px;">|</span>';
-  html += '<span style="color:#FFD700;font-weight:600;">주간휴무</span>';
-  const offChips = [];
-  empKeys.forEach(id => {
-    if(weekOffCounts[id] > 0){
-      offChips.push((employees[id]?.name||id)+weekOffCounts[id]+'일');
-    }
-  });
-  html += '<span style="color:#9090A8;">'+(offChips.length>0 ? offChips.join(' ') : '없음')+'</span>';
-  html += '</div>';
-
-  // 3) 날씨 + 매출변동요인 (한줄)
-  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:4px;">';
-  // 날씨 요약
-  const wxNow = hourlyWeather[new Date().getHours()];
-  if(wxNow){
-    html += '<span style="color:#9090A8;">날씨 '+wxNow.i+' '+wxNow.t+'°</span>';
-  } else {
-    const wxKeys = Object.keys(hourlyWeather);
-    if(wxKeys.length > 0){
-      const temps = wxKeys.map(h => hourlyWeather[h].t).filter(t=>t!==undefined);
-      const icons = [...new Set(wxKeys.map(h => hourlyWeather[h].i))];
-      if(temps.length > 0){
-        html += '<span style="color:#9090A8;">날씨 '+icons.join('')+' '+Math.min(...temps)+'~'+Math.max(...temps)+'°</span>';
-      }
-    }
-  }
-  // 스포츠 (이슈 없으면 표기X)
-  const sportsEl = $('sportsInfo');
-  if(sportsEl && sportsEl.textContent && !sportsEl.textContent.includes('로딩') && !sportsEl.textContent.includes('경기없음') && !sportsEl.textContent.includes('없음')){
-    html += '<span style="color:#2AC1BC;">'+sportsEl.textContent.substring(0,30)+'</span>';
-  }
-  html += '</div>';
-
-  // 4) 근무 현황 요약 (고정/변칙/미입력)
-  let fixedCount=0, variableCount=0, emptyCount=0, offCount=offToday.length;
-  empKeys.forEach(id => {
-    if(isDayOff(id, dk)) return;
+    if(isDayOff(id, dk)){ offToday.push(employees[id]?.name || id); return; }
     const s = daySchedule[id];
     if(s && s.start){
+      workingCount++;
+      const h = calcHours(s.start, s.end);
+      totalHours += h;
+      totalCost += h * (employees[id]?.hourlyRate || 0);
       const fix = getFixedSchedule(employees[id]?.name);
       if(fix && fix.type==='fixed' && s.start===fix.start && s.end===fix.end) fixedCount++;
       else variableCount++;
@@ -1619,17 +1571,89 @@ function renderBriefing(){
       emptyCount++;
     }
   });
-  html += '<div style="display:flex;gap:8px;">';
-  html += '<span style="color:#2ECC71;">고정 '+fixedCount+'</span>';
-  html += '<span style="color:#E67E22;">수동 '+variableCount+'</span>';
-  if(emptyCount > 0) html += '<span style="color:#E74C3C;font-weight:600;">미입력 '+emptyCount+'</span>';
-  html += '<span style="color:#707088;">휴무 '+offCount+'</span>';
 
-  // 대유 (변칙) 알림
+  // 충족률 계산
+  const staffing = calcStaffing(empKeys, dk);
+  let okHours = 0, totalCheckHours = 0;
+  for(const hStr in staffing){
+    const s = staffing[hStr];
+    totalCheckHours++;
+    const kitchenOk = !s.kitchenOver && !s.kitchenUnder;
+    const deliveryOk = s.delivery >= 1 || s.daAvail;
+    if(kitchenOk && deliveryOk && !s.carOver && !s.bikeOver) okHours++;
+  }
+  const complianceRate = totalCheckHours > 0 ? Math.round((okHours/totalCheckHours)*100) : 0;
+
+  html += '<div style="display:flex;gap:6px;margin-bottom:6px;">';
+  // 카드1: 출근 인원
+  html += '<div style="flex:1;background:#242444;border-radius:8px;padding:6px 8px;text-align:center;">';
+  html += '<div style="font-size:1.1rem;font-weight:800;color:#FFFFFF;">'+workingCount+'<span style="font-size:.6rem;color:#707088;">/'+empKeys.length+'</span></div>';
+  html += '<div style="font-size:.55rem;color:#9090A8;">출근</div></div>';
+  // 카드2: 총 시간
+  html += '<div style="flex:1;background:#242444;border-radius:8px;padding:6px 8px;text-align:center;">';
+  html += '<div style="font-size:1.1rem;font-weight:800;color:#FFD700;">'+totalHours.toFixed(1).replace('.0','')+'<span style="font-size:.6rem;color:#707088;">h</span></div>';
+  html += '<div style="font-size:.55rem;color:#9090A8;">총시간</div></div>';
+  // 카드3: 충족률
+  const compColor = complianceRate >= 80 ? '#2ECC71' : complianceRate >= 50 ? '#E67E22' : '#E74C3C';
+  html += '<div style="flex:1;background:#242444;border-radius:8px;padding:6px 8px;text-align:center;">';
+  html += '<div style="font-size:1.1rem;font-weight:800;color:'+compColor+';">'+complianceRate+'<span style="font-size:.6rem;color:#707088;">%</span></div>';
+  html += '<div style="font-size:.55rem;color:#9090A8;">충족률</div></div>';
+  // 카드4: 인건비
+  html += '<div style="flex:1;background:#242444;border-radius:8px;padding:6px 8px;text-align:center;">';
+  html += '<div style="font-size:.85rem;font-weight:800;color:#E0E0EC;">'+(totalCost > 0 ? (totalCost/10000).toFixed(1)+'만' : '-')+'</div>';
+  html += '<div style="font-size:.55rem;color:#9090A8;">인건비</div></div>';
+  // 카드5: 휴무
+  html += '<div style="flex:1;background:#242444;border-radius:8px;padding:6px 8px;text-align:center;">';
+  html += '<div style="font-size:1.1rem;font-weight:800;color:#E74C3C;">'+offToday.length+'</div>';
+  html += '<div style="font-size:.55rem;color:#9090A8;">휴무</div></div>';
+  html += '</div>';
+
+  // ===== 상태 한줄 요약 =====
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:.65rem;margin-bottom:4px;">';
+  html += '<span style="color:#2ECC71;">고정'+fixedCount+'</span>';
+  if(variableCount > 0) html += '<span style="color:#E67E22;">수동'+variableCount+'</span>';
+  if(emptyCount > 0) html += '<span style="color:#E74C3C;font-weight:700;">미입력'+emptyCount+'</span>';
+  if(offToday.length > 0) html += '<span style="color:#E74C3C;">휴:'+offToday.join(',')+'</span>';
+  // 대유 경고
   const daeyuId = findEmpIdByName('대유');
   if(daeyuId && !isDayOff(daeyuId, dk) && (!daySchedule[daeyuId] || !daySchedule[daeyuId].start)){
-    html += '<span style="color:#F0A500;font-weight:600;">⚠ 대유 미입력</span>';
+    html += '<span style="color:#F0A500;font-weight:700;">대유미입력</span>';
   }
+  // 날씨
+  const wxNow = hourlyWeather[new Date().getHours()];
+  if(wxNow){
+    html += '<span style="color:#9090A8;">'+wxNow.i+wxNow.t+'°</span>';
+  }
+  // 스포츠 (이슈 없으면 표기X)
+  const sportsEl = $('sportsInfo');
+  if(sportsEl && sportsEl.textContent && !sportsEl.textContent.includes('로딩') && !sportsEl.textContent.includes('경기없음') && !sportsEl.textContent.includes('없음')){
+    html += '<span style="color:#2AC1BC;">'+sportsEl.textContent.substring(0,25)+'</span>';
+  }
+  html += '</div>';
+
+  // ===== 커버리지 히트맵 (시간대별 인원 밀도) =====
+  html += '<div style="display:flex;gap:1px;border-radius:4px;overflow:hidden;">';
+  const hmHours = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
+  hmHours.forEach(h => {
+    const hStr = pad(h)+':00';
+    const s = staffing[hStr];
+    let count = s ? s.total : 0;
+    // 색상: 0=어두운, 1-2=주황, 3+=녹색, 충돌=빨강
+    let bg = '#1A1A30';
+    if(s){
+      const hasConflict = s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver;
+      if(hasConflict) bg = '#E74C3C55';
+      else if(count >= 3) bg = '#2ECC7140';
+      else if(count >= 1) bg = '#E67E2240';
+    }
+    const isPeak = h >= 17 && h <= 19;
+    html += '<div style="flex:1;height:18px;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.5rem;color:#E0E0EC;font-weight:600;'+(isPeak?'border-bottom:2px solid #FFD700;':'')+'">';
+    html += count > 0 ? count : '';
+    html += '</div>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;justify-content:space-between;font-size:.45rem;color:#707088;margin-top:1px;">';
+  html += '<span>6</span><span>10</span><span>14</span><span>18</span><span>22</span><span>02</span>';
   html += '</div>';
 
   panel.innerHTML = html;
@@ -1822,50 +1846,101 @@ function renderTimeline(){
   });
   container.appendChild(summary);
 
-  // --- Staffing Check (시간대별 주방/배달 인원 체크) ---
+  // --- Role-Based Coverage View (역할별 커버리지) ---
   const staffing = calcStaffing(empKeys, dk);
   const staffDiv = document.createElement('div');
   staffDiv.style.cssText = 'padding:6px 8px;background:#1A1A30;border-top:1px solid #2E2E52;';
 
-  // 배달대행 영업시간: 10:00~01:00
-  const DA_START = timeToMinutesFrom6('10:00');
-  const DA_END = timeToMinutesFrom6('01:00');
+  const checkHours = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
+  const totalSlots = checkHours.length;
 
-  let html = '<div style="font-size:.7rem;color:#FFD700;font-weight:600;margin-bottom:4px;">시간대별 인원 (주방/차/바이크)</div>';
-  html += '<div style="display:flex;flex-wrap:wrap;gap:3px;">';
-  const checkHours = [10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
-  for(const h of checkHours){
+  let html = '<div style="font-size:.7rem;color:#FFD700;font-weight:600;margin-bottom:6px;">역할별 커버리지</div>';
+
+  // === 역할별 수평 바 ===
+  const roles = [
+    {key:'kitchen', label:'주방', color:'#E67E22', getVal:(s)=>s.kitchen, getMax:(h)=>getRoleLimits(h)['주방'].max, getMin:(h)=>getRoleLimits(h)['주방'].min},
+    {key:'carDel', label:'차배달', color:'#4ECDC4', getVal:(s)=>s.carDel, getMax:(h)=>getRoleLimits(h)['차배달'].max, getMin:(h)=>0},
+    {key:'bikeDel', label:'바이크', color:'#FFD700', getVal:(s)=>s.bikeDel, getMax:(h)=>getRoleLimits(h)['오토바이'].max, getMin:(h)=>0},
+  ];
+
+  roles.forEach(role => {
+    html += '<div style="margin-bottom:4px;">';
+    html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:1px;">';
+    html += '<span style="font-size:.6rem;font-weight:700;color:'+role.color+';min-width:38px;">'+role.label+'</span>';
+    // 각 시간대 셀
+    html += '<div style="flex:1;display:flex;gap:1px;height:16px;">';
+    checkHours.forEach(h => {
+      const hStr = pad(h)+':00';
+      const s = staffing[hStr];
+      const val = s ? role.getVal(s) : 0;
+      const max = role.getMax(h);
+      const min = role.getMin(h);
+      // 색상 결정
+      let bg = '#1A1A30';
+      let textColor = '#707088';
+      if(val > 0){
+        if(val > max){ bg = '#E74C3C55'; textColor = '#E74C3C'; }
+        else if(val < min){ bg = '#E67E2244'; textColor = '#E67E22'; }
+        else { bg = role.color+'33'; textColor = role.color; }
+      } else if(min > 0){
+        bg = '#E67E2218'; textColor = '#E67E22';
+      }
+      html += '<div style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+textColor+';font-weight:700;border-radius:1px;">';
+      html += val > 0 ? (val % 1 === 0 ? val : val.toFixed(1)) : (min > 0 ? '!' : '');
+      html += '</div>';
+    });
+    html += '</div></div></div>';
+  });
+
+  // === 배달대행 행 ===
+  html += '<div style="margin-bottom:4px;">';
+  html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:1px;">';
+  html += '<span style="font-size:.6rem;font-weight:700;color:#E67E22;min-width:38px;">대행</span>';
+  html += '<div style="flex:1;display:flex;gap:1px;height:12px;">';
+  checkHours.forEach(h => {
     const hStr = pad(h)+':00';
-    const s = staffing[hStr] || {kitchen:0, carDel:0, bikeDel:0, delivery:0, total:0, daAvail:false, carOver:false, bikeOver:false, kitchenOver:false, kitchenUnder:false};
-    const limits = getRoleLimits(h);
-    const kitchenOk = !s.kitchenOver && !s.kitchenUnder;
-    const deliveryOk = s.delivery >= 1 || s.daAvail;
-    const noConflict = kitchenOk && deliveryOk && !s.carOver && !s.bikeOver;
-    const bgColor = noConflict ? '#2ECC7120' : '#E74C3C20';
-    const borderColor = noConflict ? '#2ECC71' : '#E74C3C';
+    const s = staffing[hStr];
+    const delivery = s ? s.delivery : 0;
+    const daAvail = s ? s.daAvail : false;
+    const needDA = daAvail && delivery < 1;
+    html += '<div style="flex:1;background:'+(needDA?'#E67E2233':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.4rem;color:'+(needDA?'#E67E22':'#707088')+';font-weight:600;border-radius:1px;">';
+    html += needDA ? '대' : '';
+    html += '</div>';
+  });
+  html += '</div></div></div>';
 
-    html += '<div style="flex:1;min-width:42px;background:'+bgColor+';border:1px solid '+borderColor+'44;border-radius:4px;padding:2px 3px;text-align:center;">';
-    html += '<div style="font-size:.6rem;color:#9090A8;">'+h+'시</div>';
-    html += '<div style="font-size:.55rem;line-height:1.3;">';
-    // 주방 (주황텍스트)
-    const kColor = s.kitchenOver ? '#E74C3C' : s.kitchenUnder ? '#E67E22' : '#2ECC71';
-    html += '<span style="color:'+kColor+';font-weight:600;">주'+s.kitchen.toFixed(1).replace('.0','')+'</span> ';
-    // 차배달 (파랑)
-    const cColor = s.carOver ? '#E74C3C' : s.carDel > 0 ? '#4ECDC4' : '#707088';
-    html += '<span style="color:'+cColor+';font-weight:600;">차'+s.carDel.toFixed(1).replace('.0','')+'</span> ';
-    // 오토바이 (노랑)
-    const bColor = s.bikeOver ? '#E74C3C' : s.bikeDel > 0 ? '#FFD700' : '#707088';
-    html += '<span style="color:'+bColor+';font-weight:600;">바'+s.bikeDel.toFixed(1).replace('.0','')+'</span>';
-    // 배달대행 표시
-    if(s.daAvail && s.delivery < 1){
-      html += ' <span style="color:#E67E22;font-size:.5rem;">대행</span>';
-    }
-    html += '</div></div>';
-  }
-  html += '</div>';
+  // === 시간 레이블 ===
+  html += '<div style="display:flex;align-items:center;gap:4px;">';
+  html += '<span style="min-width:38px;"></span>';
+  html += '<div style="flex:1;display:flex;gap:1px;">';
+  checkHours.forEach(h => {
+    html += '<div style="flex:1;text-align:center;font-size:.4rem;color:#707088;">'+h+'</div>';
+  });
+  html += '</div></div>';
+
+  // === 합계 인원 행 ===
+  html += '<div style="display:flex;align-items:center;gap:4px;margin-top:2px;">';
+  html += '<span style="font-size:.55rem;color:#9090A8;min-width:38px;">합계</span>';
+  html += '<div style="flex:1;display:flex;gap:1px;height:14px;">';
+  checkHours.forEach(h => {
+    const hStr = pad(h)+':00';
+    const s = staffing[hStr];
+    const total = s ? s.total : 0;
+    const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver);
+    html += '<div style="flex:1;background:'+(anyConflict?'#E74C3C22':'#2ECC7115')+';display:flex;align-items:center;justify-content:center;font-size:.5rem;color:'+(anyConflict?'#E74C3C':'#2ECC71')+';font-weight:700;border-radius:1px;">';
+    html += total > 0 ? total : '';
+    html += '</div>';
+  });
+  html += '</div></div>';
 
   // 범례
-  html += '<div style="font-size:.55rem;color:#707088;margin-top:4px;">주=주방 차=차배달 바=오토바이 | <span style="color:#E74C3C">빨강=초과</span> <span style="color:#E67E22">주황=부족</span> | 대행=배달대행(10~01시)</div>';
+  html += '<div style="font-size:.5rem;color:#707088;margin-top:4px;display:flex;gap:8px;flex-wrap:wrap;">';
+  html += '<span><span style="color:#2ECC71;">■</span> 충족</span>';
+  html += '<span><span style="color:#E74C3C;">■</span> 초과</span>';
+  html += '<span><span style="color:#E67E22;">■</span> 부족</span>';
+  html += '<span><span style="color:#E67E22;">!</span> 최소미달</span>';
+  html += '<span>대행=배달대행(10~01시)</span>';
+  html += '</div>';
 
   staffDiv.innerHTML = html;
   container.appendChild(staffDiv);
@@ -3117,11 +3192,19 @@ function renderListView(){
   const empKeys = Object.keys(employees);
   const m = currentDate.getMonth()+1, d = currentDate.getDate();
   const dow = DOW_KR[currentDate.getDay()];
+  const confirmed = isConfirmed(dk);
 
   let html = '<div style="padding:8px 12px;">';
-  html += '<div style="font-size:.85rem;font-weight:700;color:#FFD700;margin-bottom:8px;">'+m+'/'+d+' ('+dow+') 근무표</div>';
+  // 보고서 헤더
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #2E2E52;">';
+  html += '<div>';
+  html += '<div style="font-size:.95rem;font-weight:800;color:#FFFFFF;">'+m+'월 '+d+'일 ('+dow+')</div>';
+  html += '<div style="font-size:.6rem;color:#9090A8;">근무표</div>';
+  html += '</div>';
+  html += '<div style="padding:3px 8px;border-radius:10px;font-size:.6rem;font-weight:700;background:'+(confirmed?'#2ECC7122':'#E67E2222')+';color:'+(confirmed?'#2ECC71':'#E67E22')+';">'+(confirmed?'확정':'작업중')+'</div>';
+  html += '</div>';
 
-  // 근무자 목록
+  // 근무자/휴무/미입력 분류
   const working = [], offList = [], empty = [];
   empKeys.forEach(id => {
     const emp = employees[id];
@@ -3139,42 +3222,84 @@ function renderListView(){
     return am - bm;
   });
 
-  if(working.length > 0){
-    html += '<div style="font-size:.7rem;color:#2ECC71;font-weight:600;margin-bottom:4px;">근무 ('+working.length+'명)</div>';
-    working.forEach(w => {
+  // 시간대 그룹핑
+  function getTimeGroup(startTime){
+    const h = parseInt(startTime.split(':')[0]);
+    if(h >= 5 && h < 10) return {label:'조조', color:'#45B7D1', order:0};
+    if(h >= 10 && h < 15) return {label:'주간', color:'#2ECC71', order:1};
+    if(h >= 15 && h < 20) return {label:'저녁', color:'#E67E22', order:2};
+    return {label:'야간', color:'#9B59B6', order:3};
+  }
+
+  // 그룹별 분류
+  const timeGroups = {};
+  working.forEach(w => {
+    const g = getTimeGroup(w.shift.start);
+    if(!timeGroups[g.label]) timeGroups[g.label] = {info:g, members:[]};
+    timeGroups[g.label].members.push(w);
+  });
+
+  // 요약 수치
+  let totalHours = 0;
+  working.forEach(w => totalHours += calcHours(w.shift.start, w.shift.end));
+  html += '<div style="display:flex;gap:10px;margin-bottom:8px;font-size:.65rem;">';
+  html += '<span style="color:#2ECC71;font-weight:700;">출근 '+working.length+'명</span>';
+  html += '<span style="color:#FFD700;font-weight:700;">총 '+totalHours.toFixed(1).replace('.0','')+'시간</span>';
+  if(offList.length > 0) html += '<span style="color:#E74C3C;font-weight:700;">휴무 '+offList.length+'명</span>';
+  if(empty.length > 0) html += '<span style="color:#E67E22;font-weight:700;">미입력 '+empty.length+'명</span>';
+  html += '</div>';
+
+  // 시간대 그룹별 렌더
+  const groupOrder = ['조조','주간','저녁','야간'];
+  groupOrder.forEach(gName => {
+    const group = timeGroups[gName];
+    if(!group) return;
+    html += '<div style="margin-bottom:6px;">';
+    html += '<div style="font-size:.6rem;color:'+group.info.color+';font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid '+group.info.color+';">'+gName+' ('+group.members.length+'명)</div>';
+    group.members.forEach(w => {
       const roles = w.shift.role ? w.shift.role.split(',').filter(Boolean) : [];
-      const roleHtml = roles.map(r => '<span style="color:'+(ROLE_COLORS[r]||'#9090A8')+';font-weight:600;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
+      const roleHtml = roles.map(r => '<span style="display:inline-block;padding:1px 5px;border-radius:8px;font-size:.55rem;font-weight:700;color:#fff;background:'+(ROLE_COLORS[r]||'#9090A8')+'88;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
       const hours = calcHours(w.shift.start, w.shift.end);
       const fix = getFixedSchedule(w.emp.name);
       const isFixed = fix && fix.type==='fixed' && w.shift.start===fix.start && w.shift.end===fix.end;
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:2px;background:#242444;border-radius:6px;border-left:3px solid '+(w.emp.color||'#9090A8')+';cursor:pointer;" data-empid="'+w.id+'">';
-      html += '<span style="font-size:.8rem;font-weight:700;color:#FFFFFF;min-width:50px;">'+w.emp.name+'</span>';
-      html += '<span style="font-size:.8rem;font-weight:600;color:#E0E0EC;">'+w.shift.start+' ~ '+w.shift.end+'</span>';
-      html += '<span style="font-size:.7rem;">'+roleHtml+'</span>';
-      html += '<span style="font-size:.7rem;color:#FFD700;font-weight:600;">'+hours+'h</span>';
-      if(isFixed) html += '<span style="font-size:.55rem;color:#707088;">고정</span>';
+      const hasConflict = !!detectConflicts(empKeys, dk)[w.id];
+
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:7px 8px;margin-bottom:2px;background:'+(hasConflict?'#E74C3C15':'#242444')+';border-radius:6px;border-left:3px solid '+(hasConflict?'#E74C3C':(w.emp.color||'#9090A8'))+';cursor:pointer;" data-empid="'+w.id+'">';
+      html += '<span style="font-size:.85rem;font-weight:800;color:#FFFFFF;min-width:48px;">'+w.emp.name+'</span>';
+      html += '<span style="font-size:.75rem;font-weight:600;color:#E0E0EC;min-width:90px;">'+w.shift.start+' ~ '+w.shift.end+'</span>';
+      html += '<span>'+roleHtml+'</span>';
+      html += '<span style="font-size:.7rem;color:#FFD700;font-weight:700;margin-left:auto;">'+hours+'h</span>';
+      if(isFixed) html += '<span style="font-size:.5rem;color:#707088;margin-left:2px;">고정</span>';
+      if(hasConflict) html += '<span style="font-size:.5rem;color:#E74C3C;margin-left:2px;">충돌</span>';
       html += '</div>';
     });
-  }
+    html += '</div>';
+  });
 
+  // 휴무
   if(offList.length > 0){
-    html += '<div style="font-size:.7rem;color:#E74C3C;font-weight:600;margin:8px 0 4px;">휴무 ('+offList.length+'명)</div>';
+    html += '<div style="margin-bottom:6px;">';
+    html += '<div style="font-size:.6rem;color:#E74C3C;font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid #E74C3C;">휴무 ('+offList.length+'명)</div>';
     offList.forEach(o => {
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:2px;background:#E74C3C10;border-radius:6px;border-left:3px solid #E74C3C;">';
-      html += '<span style="font-size:.8rem;font-weight:700;color:#E74C3C;">'+o.emp.name+'</span>';
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin-bottom:2px;background:#E74C3C10;border-radius:6px;border-left:3px solid #E74C3C;">';
+      html += '<span style="font-size:.85rem;font-weight:800;color:#E74C3C;">'+o.emp.name+'</span>';
       html += '<span style="font-size:.7rem;color:#E74C3C;">휴무</span>';
       html += '</div>';
     });
+    html += '</div>';
   }
 
+  // 미입력
   if(empty.length > 0){
-    html += '<div style="font-size:.7rem;color:#E67E22;font-weight:600;margin:8px 0 4px;">미입력 ('+empty.length+'명)</div>';
+    html += '<div style="margin-bottom:6px;">';
+    html += '<div style="font-size:.6rem;color:#E67E22;font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid #E67E22;">미입력 ('+empty.length+'명)</div>';
     empty.forEach(e => {
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:2px;background:#1A1A30;border-radius:6px;border-left:3px solid #707088;cursor:pointer;" data-empid="'+e.id+'">';
-      html += '<span style="font-size:.8rem;font-weight:700;color:#707088;">'+e.emp.name+'</span>';
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin-bottom:2px;background:#1A1A30;border-radius:6px;border-left:3px solid #707088;cursor:pointer;" data-empid="'+e.id+'">';
+      html += '<span style="font-size:.85rem;font-weight:800;color:#707088;">'+e.emp.name+'</span>';
       html += '<span style="font-size:.7rem;color:#707088;">미입력</span>';
       html += '</div>';
     });
+    html += '</div>';
   }
 
   html += '</div>';
@@ -3193,6 +3318,23 @@ function renderHorizontalView(){
   const dk = dateKey(currentDate);
   const empKeys = Object.keys(employees);
 
+  // 역할별 그룹화
+  const groups = {'주방':[], '차배달':[], '오토바이':[], '미지정':[]};
+  const offList = [];
+  empKeys.forEach(id => {
+    const emp = employees[id];
+    const off = isDayOff(id, dk);
+    const shift = daySchedule[id];
+    if(off){ offList.push({id, emp}); return; }
+    const roles = shift && shift.role ? shift.role.split(',').filter(Boolean) : [];
+    let placed = false;
+    // 주 역할 기준으로 분류 (첫번째 역할)
+    if(roles.includes('차배달')){ groups['차배달'].push({id, emp, shift}); placed = true; }
+    else if(roles.includes('오토바이')){ groups['오토바이'].push({id, emp, shift}); placed = true; }
+    if(roles.includes('주방') || !placed){ groups['주방'].push({id, emp, shift}); if(!placed) placed = true; }
+    if(!placed) groups['미지정'].push({id, emp, shift});
+  });
+
   let html = '';
   // hour labels row
   html += '<div class="ht-row" style="border-bottom:2px solid #2E2E52;">';
@@ -3205,28 +3347,69 @@ function renderHorizontalView(){
   }
   html += '</div></div>';
 
-  empKeys.forEach(id => {
-    const emp = employees[id];
-    const off = isDayOff(id, dk);
-    const shift = daySchedule[id];
-    html += '<div class="ht-row" data-empid="'+id+'"'+(off?' style="opacity:.4;"':'')+'>';
-    html += '<div class="ht-name" style="color:'+(emp.color||'#FFFFFF')+';">'+emp.name+'</div>';
-    html += '<div class="ht-bar">';
-    html += '<div class="ht-hours">';
-    for(let h=6;h<=27;h++) html+='<span></span>';
+  // 역할별 섹션 렌더
+  const roleEntries = [
+    {key:'주방', label:'주방', color:'#E67E22'},
+    {key:'차배달', label:'차배달', color:'#4ECDC4'},
+    {key:'오토바이', label:'바이크', color:'#FFD700'},
+  ];
+
+  roleEntries.forEach(role => {
+    const members = groups[role.key];
+    if(members.length === 0) return;
+    // 역할 헤더
+    html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 8px;background:#242444;border-left:3px solid '+role.color+';">';
+    html += '<span style="font-size:.6rem;font-weight:700;color:'+role.color+';">'+role.label+'</span>';
+    html += '<span style="font-size:.5rem;color:#9090A8;">'+members.length+'명</span>';
     html += '</div>';
 
-    if(off){
-      html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#E74C3C;font-size:.65rem;font-weight:600;">휴무</div>';
-    } else if(shift && shift.start && shift.end){
-      const left = timeToPercent(shift.start);
-      const right = timeToPercent(shift.end);
-      let width = right - left;
-      if(width<=0) width+=100;
-      html += '<div class="ht-fill" style="left:'+left+'%;width:'+Math.min(width,100-left)+'%;background:'+(emp.color||'#9090A8')+'88;">'+shift.start.replace(/^0/,'')+'-'+shift.end.replace(/^0/,'')+'</div>';
-    }
-    html += '</div></div>';
+    members.forEach(m => {
+      const shift = m.shift;
+      const hasConflict = shift && shift.start ? !!detectConflicts(empKeys, dk)[m.id] : false;
+      html += '<div class="ht-row" data-empid="'+m.id+'">';
+      html += '<div class="ht-name" style="color:'+(m.emp.color||'#FFFFFF')+';">'+m.emp.name+'</div>';
+      html += '<div class="ht-bar">';
+      html += '<div class="ht-hours">';
+      for(let h=6;h<=27;h++) html+='<span></span>';
+      html += '</div>';
+      if(shift && shift.start && shift.end){
+        const left = timeToPercent(shift.start);
+        const right = timeToPercent(shift.end);
+        let width = right - left;
+        if(width<=0) width+=100;
+        const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
+        const roleHtml = roles.map(r => '<span style="color:'+(ROLE_COLORS[r]||'#fff')+';">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
+        const barBg = hasConflict ? '#E74C3C66' : (m.emp.color||'#9090A8')+'88';
+        const barBorder = hasConflict ? 'border:1px solid #E74C3C;' : '';
+        html += '<div class="ht-fill" style="left:'+left+'%;width:'+Math.min(width,100-left)+'%;background:'+barBg+';'+barBorder+'">';
+        html += '<span style="font-size:.55rem;">'+shift.start.replace(/^0/,'')+'-'+shift.end.replace(/^0/,'')+'</span>';
+        html += ' <span style="font-size:.5rem;">'+roleHtml+'</span>';
+        html += '</div>';
+      } else {
+        html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#707088;font-size:.6rem;">미입력</div>';
+      }
+      html += '</div></div>';
+    });
   });
+
+  // 휴무자 섹션
+  if(offList.length > 0){
+    html += '<div style="display:flex;align-items:center;gap:6px;padding:2px 8px;background:#242444;border-left:3px solid #E74C3C;">';
+    html += '<span style="font-size:.6rem;font-weight:700;color:#E74C3C;">휴무</span>';
+    html += '<span style="font-size:.5rem;color:#9090A8;">'+offList.length+'명</span>';
+    html += '</div>';
+    offList.forEach(o => {
+      html += '<div class="ht-row" style="opacity:.4;">';
+      html += '<div class="ht-name" style="color:'+(o.emp.color||'#FFFFFF')+';">'+o.emp.name+'</div>';
+      html += '<div class="ht-bar">';
+      html += '<div class="ht-hours">';
+      for(let h=6;h<=27;h++) html+='<span></span>';
+      html += '</div>';
+      html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#E74C3C;font-size:.65rem;font-weight:600;">휴무</div>';
+      html += '</div></div>';
+    });
+  }
+
   con.innerHTML = html;
 
   // tap row to edit
