@@ -9,11 +9,12 @@
 html{font-size:14px;-webkit-tap-highlight-color:transparent;}
 body{
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Noto Sans KR',sans-serif;
-  background:linear-gradient(180deg,#1A1A30 0%,#121225 100%);
+  background:#1A1A30;
   color:#E0E0EC;
-  min-height:100vh;
-  overflow-x:hidden;
-  padding-bottom:16px;
+  height:100vh;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
 }
 ::-webkit-scrollbar{height:6px;width:6px;}
 ::-webkit-scrollbar-track{background:#1A1A30;}
@@ -21,12 +22,13 @@ body{
 
 /* ===== Header ===== */
 .header{
-  position:sticky;top:0;z-index:100;
-  background:linear-gradient(180deg,#1A1A30,#1e1e38);
+  z-index:100;
+  background:#1A1A30;
   border-bottom:1px solid #2E2E52;
-  padding:10px 16px;
+  padding:8px 12px;
   display:flex;align-items:center;justify-content:space-between;
-  gap:8px;
+  gap:6px;
+  flex-shrink:0;
 }
 .header-left{display:flex;align-items:center;gap:6px;}
 .header h1{font-size:1.2rem;font-weight:700;color:#E0E0EC;white-space:nowrap;}
@@ -61,20 +63,27 @@ body{
 
 /* ===== Timeline Container ===== */
 .timeline-section{
-  margin:8px;
-  border:1px solid #2E2E52;
-  border-radius:10px;
+  flex:1;
+  display:flex;
+  flex-direction:column;
   overflow:hidden;
   background:#242444;
+  min-height:0;
 }
-.timeline-title{
-  padding:10px 14px;
-  font-size:.9rem;font-weight:600;color:#9090A8;
-  background:#1e1e3a;
-  border-bottom:1px solid #2E2E52;
-  display:flex;align-items:center;justify-content:space-between;
+#timelineScroll{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  min-height:0;
 }
-.timeline-title .today-info{font-size:.8rem;color:#FFD700;}
+#timelineContent{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  min-height:0;
+}
 
 /* Vertical Timeline — Fit to screen */
 .vt-header{
@@ -102,8 +111,9 @@ body{
 
 .vt-wrapper{
   position:relative;
-  height:calc(100vh - 190px);
+  flex:1;
   overflow:hidden;
+  min-height:0;
 }
 .vt-body{
   display:flex;
@@ -251,8 +261,11 @@ body{
 .week-offs .off-chip .odot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 .week-offs .off-chip .off-text{color:#E0E0EC;}
 
+/* Hidden sections — accessible via menu */
+.week-section,.info-section,.ai-section,.share-section{display:none;}
+
 /* ===== Info Bar ===== */
-.info-section{
+.info-section-inner{
   margin:8px;
   border:1px solid #2E2E52;
   border-radius:10px;
@@ -601,7 +614,7 @@ select.form-input{
   .vt-shift .vt-role{font-size:.45rem;}
   .vt-shift .vt-time-label{font-size:.4rem;}
   .vt-hour-tick{font-size:.5rem;}
-  .vt-wrapper{height:calc(100vh - 170px);}
+  .vt-emp-hdr{min-height:26px;}
 }
 </style>
 </head>
@@ -626,11 +639,7 @@ select.form-input{
 
 <!-- Timeline Gauge View -->
 <div class="timeline-section" id="timelineSection">
-  <div class="timeline-title">
-    <span>일간 타임라인</span>
-    <span class="today-info" id="todayInfo"></span>
-  </div>
-  <div class="loading" id="loadingIndicator"><div class="spinner"></div>불러오는 중...</div>
+  <div class="loading" id="loadingIndicator" style="flex-shrink:0;"><div class="spinner"></div>불러오는 중...</div>
   <div id="timelineScroll" style="display:none;">
     <div id="timelineContent"></div>
   </div>
@@ -882,7 +891,6 @@ let dataLoaded = false;
 // ============================================================
 const $ = id => document.getElementById(id);
 const $dateDisplay = $('dateDisplay');
-const $todayInfo = $('todayInfo');
 const $loading = $('loadingIndicator');
 const $timelineScroll = $('timelineScroll');
 const $timelineContent = $('timelineContent');
@@ -1156,14 +1164,7 @@ function updateDateDisplay(){
   const m = currentDate.getMonth()+1;
   const d = currentDate.getDate();
   const dow = DOW_KR[currentDate.getDay()];
-  $dateDisplay.textContent = m+'월 '+d+'일 '+dow;
-
-  const now = new Date();
-  if(isSameDay(currentDate, now)){
-    $todayInfo.textContent = '오늘 · '+pad(now.getHours())+':'+pad(now.getMinutes());
-  } else {
-    $todayInfo.textContent = '';
-  }
+  $dateDisplay.textContent = m+'/'+d+' '+dow;
 }
 
 // ============================================================
@@ -1287,10 +1288,8 @@ function renderTimeline(){
       col.appendChild(block);
     }
 
-    // Drag events
+    // Drag: touchstart on column, move/end on document (during drag)
     col.addEventListener('touchstart', onDragStart, {passive:false});
-    col.addEventListener('touchmove', onDragMove, {passive:false});
-    col.addEventListener('touchend', onDragEnd);
 
     body.appendChild(col);
   });
@@ -1332,7 +1331,6 @@ function yToTime(y, totalH){
   const totalMin = pct * TL_TOTAL_MINUTES;
   let h = Math.floor(totalMin / 60) + 6;
   if(h >= 24) h -= 24;
-  // Snap to 30min
   let m = Math.round((totalMin % 60) / 30) * 30;
   if(m >= 60){ m = 0; h = (h+1) >= 24 ? h+1-24 : h+1; }
   return pad(h)+':'+pad(m);
@@ -1341,8 +1339,10 @@ function yToTime(y, totalH){
 function onDragStart(e){
   const col = e.currentTarget;
   const empId = col.dataset.empid;
-  // Don't start drag on existing shift block
-  if(e.target.closest('.vt-shift')) return;
+  if(!empId) return;
+  // Tap on existing shift → open modal
+  if(e.target.closest && e.target.closest('.vt-shift')) return;
+
   const rect = col.getBoundingClientRect();
   const y = e.touches[0].clientY - rect.top;
   dragState = {
@@ -1354,21 +1354,27 @@ function onDragStart(e){
     moved: false,
     preview: null
   };
+  // Attach move/end to document for reliable tracking
+  document.addEventListener('touchmove', onDragMove, {passive:false});
+  document.addEventListener('touchend', onDragEnd, {passive:false});
 }
 
 function onDragMove(e){
   if(!dragState) return;
-  const y = e.touches[0].clientY - dragState.rect.top;
-  if(Math.abs(y - dragState.startY) > 8) dragState.moved = true;
+  const touch = e.touches[0];
+  if(!touch) return;
+  const y = touch.clientY - dragState.rect.top;
+  if(Math.abs(y - dragState.startY) > 10) dragState.moved = true;
   if(!dragState.moved) return;
   e.preventDefault();
+  e.stopPropagation();
   dragState.endY = y;
 
   const totalH = dragState.rect.height;
   const topY = Math.max(0, Math.min(dragState.startY, dragState.endY));
   const botY = Math.min(totalH, Math.max(dragState.startY, dragState.endY));
   const topPct = (topY / totalH) * 100;
-  const heightPct = ((botY - topY) / totalH) * 100;
+  const heightPct = Math.max(2, ((botY - topY) / totalH) * 100);
 
   if(!dragState.preview){
     dragState.preview = document.createElement('div');
@@ -1383,6 +1389,10 @@ function onDragMove(e){
 }
 
 function onDragEnd(e){
+  // Always remove document listeners
+  document.removeEventListener('touchmove', onDragMove);
+  document.removeEventListener('touchend', onDragEnd);
+
   if(!dragState) return;
   const ds = dragState;
   dragState = null;
@@ -1390,7 +1400,7 @@ function onDragEnd(e){
   if(ds.preview) ds.preview.remove();
 
   if(!ds.moved){
-    // Simple tap — open modal
+    // Tap → open modal for this employee
     openShiftModal(ds.empId);
     return;
   }
@@ -1399,18 +1409,21 @@ function onDragEnd(e){
   const topY = Math.max(0, Math.min(ds.startY, ds.endY));
   const botY = Math.min(totalH, Math.max(ds.startY, ds.endY));
 
-  if(botY - topY < 15) return; // too small
+  if(botY - topY < 12) return;
 
   const startTime = yToTime(topY, totalH);
   const endTime = yToTime(botY, totalH);
+  if(startTime === endTime) return;
 
-  // Save shift directly
   const dk = dateKey(currentDate);
   const data = {start: startTime, end: endTime, role: ''};
   daySchedule[ds.empId] = data;
   renderTimeline();
   fbPut(FB_SCHEDULES+'/'+dk+'/'+ds.empId, data).then(ok => {
-    if(ok){ showToast(employees[ds.empId].name+' '+startTime+'~'+endTime); loadWeekSchedules(); }
+    if(ok){
+      showToast(employees[ds.empId].name+' '+startTime+'~'+endTime);
+      loadWeekSchedules();
+    }
   });
 }
 
