@@ -13,7 +13,7 @@ body{
   color:#E0E0EC;
   min-height:100vh;
   overflow-x:hidden;
-  padding-bottom:80px;
+  padding-bottom:16px;
 }
 ::-webkit-scrollbar{height:6px;width:6px;}
 ::-webkit-scrollbar-track{background:#1A1A30;}
@@ -76,59 +76,61 @@ body{
 }
 .timeline-title .today-info{font-size:.8rem;color:#FFD700;}
 
-/* Vertical Timeline */
+/* Vertical Timeline — Fit to screen */
 .vt-header{
   display:flex;
-  position:sticky;top:0;z-index:10;
   background:#1e1e3a;
   border-bottom:2px solid #2E2E52;
 }
 .vt-time-hdr{
-  min-width:32px;max-width:32px;
+  min-width:40px;max-width:40px;
   display:flex;align-items:center;justify-content:center;
-  font-size:.6rem;color:#707088;
+  font-size:.55rem;color:#707088;
   border-right:1px solid #2E2E52;
-  padding:6px 0;
+  padding:4px 0;
 }
 .vt-emp-hdr{
   flex:1;
   display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:6px 2px;
+  padding:4px 1px;
   border-right:1px solid #2E2E5230;
-  min-height:44px;
+  min-height:36px;
 }
 .vt-emp-hdr:last-child{border-right:none;}
-.vt-emp-hdr .vt-dot{width:8px;height:8px;border-radius:50%;margin-bottom:2px;}
-.vt-emp-hdr .vt-name{font-size:.62rem;color:#E0E0EC;font-weight:600;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
+.vt-emp-hdr .vt-dot{width:8px;height:8px;border-radius:50%;margin-bottom:1px;}
+.vt-emp-hdr .vt-name{font-size:.6rem;color:#E0E0EC;font-weight:600;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;}
 
 .vt-wrapper{
   position:relative;
-  max-height:65vh;
-  overflow-y:auto;
-  overflow-x:hidden;
-  -webkit-overflow-scrolling:touch;
+  height:calc(100vh - 190px);
+  overflow:hidden;
 }
 .vt-body{
   display:flex;
   position:relative;
+  height:100%;
 }
 .vt-time-col{
-  min-width:32px;max-width:32px;
+  min-width:40px;max-width:40px;
   border-right:1px solid #2E2E52;
   flex-shrink:0;
+  position:relative;
 }
-.vt-hour-label{
+.vt-hour-tick{
+  position:absolute;left:0;right:0;
   display:flex;align-items:flex-start;justify-content:center;
-  font-size:.6rem;color:#707088;
-  border-bottom:1px solid #2E2E5230;
-  padding-top:2px;
+  font-size:.55rem;color:#707088;
+  pointer-events:none;
 }
-.vt-hour-label.current-hour{color:#FFD700;font-weight:700;}
+.vt-hour-tick .vt-wx{
+  font-size:.45rem;color:#9090A8;
+  display:block;text-align:center;line-height:1.1;
+}
 .vt-emp-col{
   flex:1;
   position:relative;
   border-right:1px solid #2E2E5215;
-  cursor:pointer;
+  touch-action:none;
 }
 .vt-emp-col:last-child{border-right:none;}
 .vt-grid-line{
@@ -137,34 +139,28 @@ body{
   pointer-events:none;
 }
 .vt-shift{
-  position:absolute;left:2px;right:2px;
-  border-radius:4px;
-  cursor:pointer;
+  position:absolute;left:1px;right:1px;
+  border-radius:3px;
   z-index:2;
   display:flex;align-items:center;justify-content:center;
   flex-direction:column;
   overflow:hidden;
   transition:opacity .15s;
-  min-height:12px;
 }
 .vt-shift:active{opacity:.7;}
-.vt-shift .vt-role{font-size:.58rem;font-weight:700;}
-.vt-shift .vt-time-label{font-size:.5rem;opacity:.8;}
+.vt-shift .vt-role{font-size:.5rem;font-weight:700;}
+.vt-shift .vt-time-label{font-size:.45rem;opacity:.8;}
 
-/* Current time line (horizontal gold) */
-.vt-now{
-  position:absolute;left:0;right:0;
-  height:2px;background:#FFD700;
-  z-index:5;pointer-events:none;
-}
-.vt-now-dot{
-  position:absolute;left:30px;top:-3px;
-  width:8px;height:8px;border-radius:50%;background:#FFD700;
-}
-.vt-now-label{
-  position:absolute;left:2px;top:-10px;
-  font-size:.5rem;color:#FFD700;font-weight:700;
-  background:#1A1A30cc;padding:0 3px;border-radius:2px;
+/* Drag preview */
+.vt-drag{
+  position:absolute;left:1px;right:1px;
+  background:#2ECC7140;
+  border:1px dashed #2ECC71;
+  border-radius:3px;
+  z-index:3;
+  pointer-events:none;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.55rem;color:#2ECC71;font-weight:600;
 }
 
 /* Summary row */
@@ -174,17 +170,17 @@ body{
   background:#1e1e3a;
 }
 .vt-summary-time{
-  min-width:32px;max-width:32px;
+  min-width:40px;max-width:40px;
   display:flex;align-items:center;justify-content:center;
-  font-size:.6rem;color:#FFD700;font-weight:700;
+  font-size:.55rem;color:#FFD700;font-weight:700;
   border-right:1px solid #2E2E52;
-  min-height:30px;
+  min-height:26px;
 }
 .vt-summary-cell{
   flex:1;
   display:flex;align-items:center;justify-content:center;
-  font-size:.65rem;font-weight:700;color:#FFFFFF;
-  min-height:30px;
+  font-size:.6rem;font-weight:700;color:#FFFFFF;
+  min-height:26px;
   border-right:1px solid #2E2E5215;
 }
 .vt-summary-cell:last-child{border-right:none;}
@@ -317,21 +313,6 @@ body{
 }
 .share-body.open{max-height:200px;padding:12px 14px;}
 .share-btns{display:flex;gap:10px;flex-wrap:wrap;}
-
-/* ===== FAB ===== */
-.fab{
-  position:fixed;bottom:20px;right:20px;
-  width:56px;height:56px;
-  background:#FFD700;color:#121225;
-  border:none;border-radius:50%;
-  font-size:1.5rem;font-weight:700;
-  display:flex;align-items:center;justify-content:center;
-  cursor:pointer;
-  box-shadow:0 4px 16px rgba(255,215,0,.3);
-  z-index:90;
-  transition:transform .15s,box-shadow .15s;
-}
-.fab:active{transform:scale(.92);box-shadow:0 2px 8px rgba(255,215,0,.2);}
 
 /* ===== Modals ===== */
 .modal-overlay{
@@ -614,11 +595,13 @@ select.form-input{
 @media(max-width:400px){
   .header h1{font-size:1rem;}
   .date-display{font-size:.9rem;min-width:90px;}
-  .vt-time-hdr,.vt-time-col,.vt-summary-time{min-width:28px;max-width:28px;}
-  .vt-emp-hdr .vt-name{font-size:.55rem;}
-  .vt-hour-label{font-size:.55rem;}
-  .vt-shift .vt-role{font-size:.5rem;}
-  .vt-shift .vt-time-label{font-size:.45rem;}
+  .vt-time-hdr,.vt-time-col,.vt-summary-time{min-width:34px;max-width:34px;}
+  .vt-emp-hdr .vt-name{font-size:.52rem;}
+  .vt-emp-hdr{min-height:30px;padding:3px 1px;}
+  .vt-shift .vt-role{font-size:.45rem;}
+  .vt-shift .vt-time-label{font-size:.4rem;}
+  .vt-hour-tick{font-size:.5rem;}
+  .vt-wrapper{height:calc(100vh - 170px);}
 }
 </style>
 </head>
@@ -734,9 +717,6 @@ select.form-input{
     </div>
   </div>
 </div>
-
-<!-- FAB -->
-<button class="fab" id="fabAdd" aria-label="근무 추가">+</button>
 
 <!-- Shift Input Modal -->
 <div class="modal-overlay" id="shiftModal">
@@ -1198,10 +1178,9 @@ function renderAll(){
 }
 
 // ============================================================
-// Timeline Rendering — VERTICAL LAYOUT
+// Timeline Rendering — VERTICAL, FIT TO SCREEN
 // ============================================================
-const HOUR_HEIGHT = 32; // px per hour row
-const VT_TOTAL_HEIGHT = TL_HOURS.length * HOUR_HEIGHT; // 22 * 32 = 704px
+let hourlyWeather = {}; // {hour: {t:temp, i:icon}}
 
 function renderTimeline(){
   if(!dataLoaded) return;
@@ -1209,21 +1188,19 @@ function renderTimeline(){
   container.innerHTML = '';
 
   const empKeys = Object.keys(employees);
-  const now = new Date();
-  const isToday = isSameDay(currentDate, now);
 
   if(empKeys.length === 0){
     container.innerHTML = '<div style="padding:30px;text-align:center;color:#9090A8;font-size:.9rem;">직원을 먼저 추가해주세요</div>';
     return;
   }
 
-  // --- Header (employee names, sticky) ---
+  // --- Header (employee names) ---
   const header = document.createElement('div');
   header.className = 'vt-header';
 
   const timeHdr = document.createElement('div');
   timeHdr.className = 'vt-time-hdr';
-  timeHdr.textContent = '시간';
+  timeHdr.textContent = '';
   header.appendChild(timeHdr);
 
   empKeys.forEach(empId => {
@@ -1235,41 +1212,49 @@ function renderTimeline(){
   });
   container.appendChild(header);
 
-  // --- Scrollable body ---
+  // --- Body (fills remaining screen) ---
   const wrapper = document.createElement('div');
   wrapper.className = 'vt-wrapper';
 
   const body = document.createElement('div');
   body.className = 'vt-body';
-  body.style.height = VT_TOTAL_HEIGHT + 'px';
 
-  // Time column (left)
+  // Time column with weather
   const timeCol = document.createElement('div');
   timeCol.className = 'vt-time-col';
-  const SHOW_HOURS = new Set([6,8,10,12,14,16,18,20,22,0,2]);
+  const SHOW_HOURS = new Set([6,9,12,15,18,21,0,3]);
   TL_HOURS.forEach((h, idx) => {
-    const label = document.createElement('div');
-    label.className = 'vt-hour-label';
-    label.style.height = HOUR_HEIGHT + 'px';
-    if(isToday && h === now.getHours()) label.classList.add('current-hour');
-    label.textContent = SHOW_HOURS.has(h) ? pad(h) : '';
-    timeCol.appendChild(label);
+    const pct = (idx / TL_HOURS.length) * 100;
+    const tick = document.createElement('div');
+    tick.className = 'vt-hour-tick';
+    tick.style.top = pct + '%';
+    tick.style.height = (100 / TL_HOURS.length) + '%';
+    let html = SHOW_HOURS.has(h) ? '<span>'+pad(h)+'</span>' : '';
+    // Weather at this hour
+    const wx = hourlyWeather[h];
+    if(wx){
+      html += '<span class="vt-wx">'+wx.i+(wx.t!==undefined?wx.t+'°':'')+'</span>';
+    }
+    tick.innerHTML = html;
+    timeCol.appendChild(tick);
   });
   body.appendChild(timeCol);
 
-  // Employee columns
+  // Employee columns with drag support
   empKeys.forEach(empId => {
     const emp = employees[empId];
     const shift = daySchedule[empId];
     const col = document.createElement('div');
     col.className = 'vt-emp-col';
+    col.dataset.empid = empId;
 
-    // Hour grid lines
+    // Grid lines at each hour
     TL_HOURS.forEach((h, idx) => {
+      const pct = (idx / TL_HOURS.length) * 100;
       const line = document.createElement('div');
       line.className = 'vt-grid-line';
-      line.style.top = (idx * HOUR_HEIGHT) + 'px';
-      line.style.height = HOUR_HEIGHT + 'px';
+      line.style.top = pct + '%';
+      line.style.height = (100 / TL_HOURS.length) + '%';
       col.appendChild(line);
     });
 
@@ -1282,12 +1267,10 @@ function renderTimeline(){
       let heightPct = bottomPct - topPct;
       if(heightPct <= 0) heightPct += 100;
 
-      const topPx = topPct / 100 * VT_TOTAL_HEIGHT;
-      const heightPx = Math.min(heightPct / 100 * VT_TOTAL_HEIGHT, VT_TOTAL_HEIGHT - topPx);
-      block.style.top = topPx + 'px';
-      block.style.height = heightPx + 'px';
-      block.style.background = (emp.color||'#9090A8') + '35';
-      block.style.borderTop = '3px solid '+(emp.color||'#9090A8');
+      block.style.top = topPct + '%';
+      block.style.height = Math.min(heightPct, 100 - topPct) + '%';
+      block.style.background = (emp.color||'#9090A8') + '38';
+      block.style.borderTop = '2px solid '+(emp.color||'#9090A8');
 
       const roleText = shift.role || '';
       const timeText = shift.start.replace(/^0/,'')+'-'+shift.end.replace(/^0/,'');
@@ -1304,27 +1287,18 @@ function renderTimeline(){
       col.appendChild(block);
     }
 
-    col.addEventListener('click', ()=> openShiftModal(empId));
+    // Drag events
+    col.addEventListener('touchstart', onDragStart, {passive:false});
+    col.addEventListener('touchmove', onDragMove, {passive:false});
+    col.addEventListener('touchend', onDragEnd);
+
     body.appendChild(col);
   });
-
-  // Current time line (horizontal gold)
-  if(isToday){
-    const currentMin = timeToMinutesFrom6(pad(now.getHours())+':'+pad(now.getMinutes()));
-    if(currentMin >= 0 && currentMin <= TL_TOTAL_MINUTES){
-      const topPx = (currentMin / TL_TOTAL_MINUTES) * VT_TOTAL_HEIGHT;
-      const nowLine = document.createElement('div');
-      nowLine.className = 'vt-now';
-      nowLine.style.top = topPx + 'px';
-      nowLine.innerHTML = '<div class="vt-now-dot"></div><span class="vt-now-label">현재 '+pad(now.getHours())+':'+pad(now.getMinutes())+'</span>';
-      body.appendChild(nowLine);
-    }
-  }
 
   wrapper.appendChild(body);
   container.appendChild(wrapper);
 
-  // --- Summary row (hours per employee) ---
+  // --- Summary row ---
   const summary = document.createElement('div');
   summary.className = 'vt-summary';
 
@@ -1346,15 +1320,129 @@ function renderTimeline(){
     summary.appendChild(cell);
   });
   container.appendChild(summary);
+}
 
-  // Auto-scroll to current time area
-  if(isToday){
-    setTimeout(()=>{
-      const currentMin = timeToMinutesFrom6(pad(now.getHours())+':'+pad(now.getMinutes()));
-      const topPx = (currentMin / TL_TOTAL_MINUTES) * VT_TOTAL_HEIGHT;
-      wrapper.scrollTop = Math.max(0, topPx - wrapper.clientHeight / 3);
-    }, 100);
+// ============================================================
+// Touch Drag to Create/Edit Shifts
+// ============================================================
+let dragState = null;
+
+function yToTime(y, totalH){
+  const pct = Math.max(0, Math.min(1, y / totalH));
+  const totalMin = pct * TL_TOTAL_MINUTES;
+  let h = Math.floor(totalMin / 60) + 6;
+  if(h >= 24) h -= 24;
+  // Snap to 30min
+  let m = Math.round((totalMin % 60) / 30) * 30;
+  if(m >= 60){ m = 0; h = (h+1) >= 24 ? h+1-24 : h+1; }
+  return pad(h)+':'+pad(m);
+}
+
+function onDragStart(e){
+  const col = e.currentTarget;
+  const empId = col.dataset.empid;
+  // Don't start drag on existing shift block
+  if(e.target.closest('.vt-shift')) return;
+  const rect = col.getBoundingClientRect();
+  const y = e.touches[0].clientY - rect.top;
+  dragState = {
+    empId: empId,
+    col: col,
+    rect: rect,
+    startY: y,
+    endY: y,
+    moved: false,
+    preview: null
+  };
+}
+
+function onDragMove(e){
+  if(!dragState) return;
+  const y = e.touches[0].clientY - dragState.rect.top;
+  if(Math.abs(y - dragState.startY) > 8) dragState.moved = true;
+  if(!dragState.moved) return;
+  e.preventDefault();
+  dragState.endY = y;
+
+  const totalH = dragState.rect.height;
+  const topY = Math.max(0, Math.min(dragState.startY, dragState.endY));
+  const botY = Math.min(totalH, Math.max(dragState.startY, dragState.endY));
+  const topPct = (topY / totalH) * 100;
+  const heightPct = ((botY - topY) / totalH) * 100;
+
+  if(!dragState.preview){
+    dragState.preview = document.createElement('div');
+    dragState.preview.className = 'vt-drag';
+    dragState.col.appendChild(dragState.preview);
   }
+  const startTime = yToTime(topY, totalH);
+  const endTime = yToTime(botY, totalH);
+  dragState.preview.style.top = topPct + '%';
+  dragState.preview.style.height = heightPct + '%';
+  dragState.preview.textContent = startTime + '~' + endTime;
+}
+
+function onDragEnd(e){
+  if(!dragState) return;
+  const ds = dragState;
+  dragState = null;
+
+  if(ds.preview) ds.preview.remove();
+
+  if(!ds.moved){
+    // Simple tap — open modal
+    openShiftModal(ds.empId);
+    return;
+  }
+
+  const totalH = ds.rect.height;
+  const topY = Math.max(0, Math.min(ds.startY, ds.endY));
+  const botY = Math.min(totalH, Math.max(ds.startY, ds.endY));
+
+  if(botY - topY < 15) return; // too small
+
+  const startTime = yToTime(topY, totalH);
+  const endTime = yToTime(botY, totalH);
+
+  // Save shift directly
+  const dk = dateKey(currentDate);
+  const data = {start: startTime, end: endTime, role: ''};
+  daySchedule[ds.empId] = data;
+  renderTimeline();
+  fbPut(FB_SCHEDULES+'/'+dk+'/'+ds.empId, data).then(ok => {
+    if(ok){ showToast(employees[ds.empId].name+' '+startTime+'~'+endTime); loadWeekSchedules(); }
+  });
+}
+
+// ============================================================
+// Hourly Weather (Gemini → display in timeline)
+// ============================================================
+async function loadHourlyWeather(){
+  const todayStr = dateStr(new Date());
+  const cacheKey = 'ws_hourly_wx';
+  const cached = localStorage.getItem(cacheKey);
+  if(cached){
+    try{
+      const c = JSON.parse(cached);
+      if(c.date === todayStr && c.data){
+        hourlyWeather = {};
+        c.data.forEach(w => { hourlyWeather[w.h] = {t:w.t, i:w.i}; });
+        return;
+      }
+    }catch(e){}
+  }
+  if(!geminiKey) return;
+  try{
+    const prompt = '오늘 '+todayStr+' 경기도 이천시 시간별 날씨. JSON 배열만 응답: [{"h":10,"t":5,"i":"☀"},{"h":11,"t":6,"i":"☁"},...] h=시(10~3시, 정수), t=기온(정수), i=날씨이모지(☀☁🌧🌨❄🌫 중 1개). 10시~새벽3시만, 순수 JSON만(마크다운 금지).';
+    const result = await callGemini(prompt);
+    const clean = result.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+    const arr = JSON.parse(clean);
+    if(Array.isArray(arr)){
+      hourlyWeather = {};
+      arr.forEach(w => { hourlyWeather[w.h] = {t:w.t, i:w.i}; });
+      localStorage.setItem(cacheKey, JSON.stringify({date:todayStr, data:arr}));
+    }
+  }catch(e){ console.error('hourly wx error', e); }
 }
 
 function isHourInShift(hour, start, end){
@@ -1662,9 +1750,6 @@ $('shiftDelete').addEventListener('click', async()=>{
 
 $('shiftCancel').addEventListener('click',()=> closeModal($shiftModal));
 $('shiftModalClose').addEventListener('click',()=> closeModal($shiftModal));
-
-// FAB
-$('fabAdd').addEventListener('click', ()=> openShiftModal(null));
 
 // ============================================================
 // Month View Modal
@@ -2025,7 +2110,7 @@ function setupCollapsible(toggleId, arrowId, bodyId, storageKey, defaultOpen){
   });
 }
 
-setupCollapsible('weekToggle','weekArrow','weekBody','ws_week_open', true);
+setupCollapsible('weekToggle','weekArrow','weekBody','ws_week_open', false);
 setupCollapsible('infoToggle','infoArrow','infoBody','ws_info_open', false);
 setupCollapsible('aiToggle','aiArrow','aiBody','ws_ai_open', false);
 setupCollapsible('shareToggle','shareArrow','shareBody','ws_share_open', false);
@@ -2575,17 +2660,6 @@ document.addEventListener('visibilitychange', ()=>{
 });
 
 // ============================================================
-// Update current time indicator every minute
-// ============================================================
-setInterval(()=>{
-  const now = new Date();
-  if(isSameDay(currentDate, now)){
-    $todayInfo.textContent = '오늘 · '+pad(now.getHours())+':'+pad(now.getMinutes());
-    renderTimeline();
-  }
-}, 60000);
-
-// ============================================================
 // Init
 // ============================================================
 function init(){
@@ -2594,8 +2668,11 @@ function init(){
   buildTimeGrids();
   loadAiKey();
   loadData().then(()=>{
-    // Load weather/sports after data ready (needs geminiKey, allow 1s for key load)
-    setTimeout(loadWeatherAndSports, 1500);
+    // Load weather after data + key ready
+    setTimeout(()=>{
+      loadHourlyWeather().then(()=> renderTimeline());
+      loadWeatherAndSports();
+    }, 1500);
   });
   connectSSE();
 }
