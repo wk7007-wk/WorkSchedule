@@ -58,12 +58,69 @@ body{
 .nav-btn{font-size:1.1rem;padding:6px 10px;font-weight:700;}
 .emp-mgr-btn{font-size:.75rem;padding:4px 10px;min-height:32px;min-width:auto;border-radius:6px;color:#9090A8;border-color:#2E2E52;}
 
+/* ===== Layout Tabs ===== */
+.layout-tabs{
+  display:flex;
+  background:#121225;
+  border-bottom:2px solid #2E2E52;
+  position:sticky;top:46px;z-index:99;
+}
+.layout-tab{
+  flex:1;padding:8px 0;text-align:center;
+  font-size:.85rem;font-weight:600;color:#707088;
+  background:transparent;border:none;cursor:pointer;
+  border-bottom:2px solid transparent;
+  transition:color .15s,border-color .15s;
+}
+.layout-tab.active{color:#FFD700;border-bottom-color:#FFD700;}
+.layout-tab:active{background:#1A1A3088;}
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
 /* ===== Timeline Container ===== */
 .timeline-section{
   background:#242444;
 }
-#timelineScroll{}
 #timelineContent{}
+
+/* ===== Shift Gauge ===== */
+.shift-gauge-wrap{padding:4px 0;}
+.shift-gauge{
+  position:relative;height:32px;
+  background:#1A1A30;border:1px solid #2E2E52;border-radius:6px;
+  overflow:hidden;touch-action:none;cursor:pointer;
+}
+.shift-gauge-fill{
+  position:absolute;top:0;bottom:0;
+  background:#2ECC7140;border-left:2px solid #2ECC71;border-right:2px solid #E74C3C;
+  border-radius:4px;
+}
+.shift-gauge-labels{
+  position:absolute;top:0;left:0;right:0;bottom:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:.8rem;font-weight:700;color:#FFFFFF;
+  pointer-events:none;text-shadow:0 1px 2px #000;
+}
+
+/* ===== Calendar View ===== */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;font-size:.7rem;}
+.cal-hdr{text-align:center;color:#707088;font-weight:600;padding:4px 0;font-size:.65rem;}
+.cal-cell{
+  background:#242444;border:1px solid #2E2E5230;border-radius:4px;
+  min-height:60px;padding:2px 3px;cursor:pointer;position:relative;
+}
+.cal-cell.today{border-color:#FFD700;background:#FFD70008;}
+.cal-cell.other{opacity:.3;}
+.cal-cell .cal-date{font-size:.65rem;color:#9090A8;font-weight:600;}
+.cal-cell .cal-emp{font-size:.55rem;line-height:1.3;overflow:hidden;}
+
+/* ===== Horizontal Timeline ===== */
+.ht-row{display:flex;align-items:center;border-bottom:1px solid #2E2E5220;min-height:36px;}
+.ht-name{min-width:50px;max-width:50px;font-size:.7rem;font-weight:600;color:#FFFFFF;padding:4px;text-align:center;flex-shrink:0;}
+.ht-bar{flex:1;position:relative;height:28px;background:#1A1A30;border-radius:4px;margin:2px 4px;overflow:hidden;}
+.ht-fill{position:absolute;top:0;bottom:0;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:600;color:#fff;text-shadow:0 1px 1px #000;}
+.ht-hours{position:absolute;top:0;left:0;right:0;bottom:0;display:flex;pointer-events:none;}
+.ht-hours span{flex:1;border-right:1px solid #2E2E5220;}
 
 /* Vertical Timeline — Fit to screen */
 .vt-header{
@@ -609,7 +666,6 @@ select.form-input{
     <button class="btn nav-btn" id="nextDay" aria-label="다음 날">▶</button>
   </div>
   <div class="header-right">
-    <button class="btn btn-sm" id="editToggleBtn" style="font-size:.75rem;padding:4px 10px;min-width:auto;color:#9090A8;border-color:#2E2E52;">🔒</button>
     <button class="btn btn-sm" id="refreshBtn" aria-label="새로고침" style="font-size:1rem;padding:6px 8px;color:#9090A8;">↻</button>
     <button class="btn btn-sm btn-gold" id="monthViewBtn" aria-label="월간 보기" style="font-size:1rem;padding:6px 8px;">📅</button>
   </div>
@@ -618,11 +674,26 @@ select.form-input{
 <!-- 당일 브리핑 패널 -->
 <div id="briefingPanel" style="background:#1e1e3a;border-bottom:1px solid #2E2E52;padding:6px 10px;font-size:.75rem;"></div>
 
-<!-- Timeline Gauge View -->
-<div class="timeline-section" id="timelineSection">
-  <div class="loading" id="loadingIndicator" style="flex-shrink:0;"><div class="spinner"></div>불러오는 중...</div>
-  <div id="timelineScroll" style="display:none;">
-    <div id="timelineContent"></div>
+<!-- 레이아웃 탭 -->
+<div class="layout-tabs" id="layoutTabs">
+  <button class="layout-tab active" data-tab="vertical">세로</button>
+  <button class="layout-tab" data-tab="calendar">달력</button>
+  <button class="layout-tab" data-tab="horizontal">가로</button>
+</div>
+
+<!-- 탭 컨텐츠 -->
+<div class="loading" id="loadingIndicator"><div class="spinner"></div>불러오는 중...</div>
+<div id="tabContent" style="display:none;">
+  <div class="tab-panel active" id="panelVertical">
+    <div class="timeline-section" id="timelineSection">
+      <div id="timelineContent"></div>
+    </div>
+  </div>
+  <div class="tab-panel" id="panelCalendar">
+    <div id="calendarContent"></div>
+  </div>
+  <div class="tab-panel" id="panelHorizontal">
+    <div id="horizontalContent"></div>
   </div>
 </div>
 
@@ -708,38 +779,57 @@ select.form-input{
   </div>
 </div>
 
-<!-- Shift Input Modal -->
+<!-- Shift Edit Modal (텍스트+게이지 듀얼 수정) -->
 <div class="modal-overlay" id="shiftModal">
-  <div class="modal-content">
+  <div class="modal-content" style="max-width:420px;">
     <button class="modal-close" id="shiftModalClose">&times;</button>
-    <div class="modal-title" id="shiftTitle">근무 추가</div>
+    <div class="modal-title" id="shiftTitle">근무 수정</div>
     <div class="form-group">
-      <label>직원 선택</label>
+      <label>직원</label>
       <div class="emp-chips" id="shiftEmpChips"></div>
     </div>
     <div class="form-group">
-      <label>역할 (복수 선택 시 0.5명씩 계산)</label>
+      <label>역할 (복수=0.5명)</label>
       <div class="role-pills" id="shiftRolePills">
         <div class="role-pill" data-role="주방">🍳 주방</div>
         <div class="role-pill" data-role="배달">🛵 배달</div>
       </div>
     </div>
+    <!-- 게이지형 시간 선택 -->
     <div class="form-group">
-      <label>빠른 선택</label>
-      <div class="presets" id="shiftPresets">
-        <button class="preset-btn" data-start="10:00" data-end="18:00">오픈 10-18</button>
-        <button class="preset-btn" data-start="14:00" data-end="22:00">중간 14-22</button>
-        <button class="preset-btn" data-start="16:00" data-end="00:00">마감 16-24</button>
-        <button class="preset-btn" data-start="10:00" data-end="03:00">풀 10-03</button>
+      <label>시간 (게이지 드래그)</label>
+      <div class="shift-gauge-wrap">
+        <div class="shift-gauge" id="shiftGauge">
+          <div class="shift-gauge-fill" id="shiftGaugeFill"></div>
+          <div class="shift-gauge-labels" id="shiftGaugeLabels"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:.6rem;color:#707088;margin-top:2px;">
+          <span>06</span><span>10</span><span>14</span><span>18</span><span>22</span><span>02</span>
+        </div>
+      </div>
+    </div>
+    <!-- 텍스트 시간 선택 -->
+    <div class="form-group" style="display:flex;gap:8px;align-items:center;">
+      <div style="flex:1;">
+        <label style="font-size:.7rem;">시작</label>
+        <select class="form-input" id="shiftStartSel" style="font-size:.9rem;"></select>
+      </div>
+      <span style="color:#707088;margin-top:14px;">~</span>
+      <div style="flex:1;">
+        <label style="font-size:.7rem;">종료</label>
+        <select class="form-input" id="shiftEndSel" style="font-size:.9rem;"></select>
       </div>
     </div>
     <div class="form-group">
-      <label>시작 시간</label>
-      <div class="time-grid" id="startTimeGrid"></div>
-    </div>
-    <div class="form-group">
-      <label>종료 시간</label>
-      <div class="time-grid" id="endTimeGrid"></div>
+      <label>빠른선택</label>
+      <div class="presets" id="shiftPresets">
+        <button class="preset-btn" data-start="10:00" data-end="18:00">10-18</button>
+        <button class="preset-btn" data-start="10:00" data-end="20:00">10-20</button>
+        <button class="preset-btn" data-start="17:00" data-end="03:00">17-03</button>
+        <button class="preset-btn" data-start="18:00" data-end="03:00">18-03</button>
+        <button class="preset-btn" data-start="16:00" data-end="00:00">16-24</button>
+        <button class="preset-btn" data-start="10:00" data-end="03:00">풀</button>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-danger" id="shiftDelete" style="display:none;">삭제</button>
@@ -901,7 +991,7 @@ function findEmpIdByName(name){
 // ============================================================
 // State
 // ============================================================
-let editMode = false; // false = 모니터링(잠금), true = 편집모드
+let currentTab = 'vertical'; // 'vertical' | 'calendar' | 'horizontal'
 let currentDate = new Date();
 let employees = {};
 let daySchedule = {}; // schedule for currentDate
@@ -919,7 +1009,7 @@ let dataLoaded = false;
 const $ = id => document.getElementById(id);
 const $dateDisplay = $('dateDisplay');
 const $loading = $('loadingIndicator');
-const $timelineScroll = $('timelineScroll');
+const $tabContent = $('tabContent');
 const $timelineContent = $('timelineContent');
 const $weekGrid = $('weekGrid');
 const $weekOffs = $('weekOffs');
@@ -1177,11 +1267,11 @@ async function loadData(){
   if(localEmp || localSched){
     dataLoaded = true;
     $loading.style.display = 'none';
-    $timelineScroll.style.display = '';
+    $tabContent.style.display = '';
     renderAll();
   } else {
     $loading.style.display = 'flex';
-    $timelineScroll.style.display = 'none';
+    $tabContent.style.display = 'none';
   }
 
   // 2) Firebase 백그라운드 동기화
@@ -1215,7 +1305,7 @@ async function loadData(){
   autoApplyFixed(dk);
 
   $loading.style.display = 'none';
-  $timelineScroll.style.display = '';
+  $tabContent.style.display = '';
   renderAll();
   loadWeekSchedules();
 }
@@ -1307,7 +1397,7 @@ function updateDateDisplay(){
 function renderAll(){
   updateDateDisplay();
   renderBriefing();
-  renderTimeline();
+  renderCurrentTab();
   renderWeek();
   checkLogistics();
   buildCalButtons();
@@ -1453,10 +1543,6 @@ function renderTimeline(){
   // --- Body (fills remaining screen) ---
   const wrapper = document.createElement('div');
   wrapper.className = 'vt-wrapper';
-  if(editMode){
-    wrapper.style.border = '2px solid #2ECC71';
-    wrapper.style.borderRadius = '4px';
-  }
 
   const body = document.createElement('div');
   body.className = 'vt-body';
@@ -1540,17 +1626,12 @@ function renderTimeline(){
 
       block.addEventListener('click', (e)=>{
         e.stopPropagation();
-        if(!editMode) return;
         openShiftModal(empId);
       });
       col.appendChild(block);
     }
 
-    // Drag: 편집모드에서만 동작
-    col.addEventListener('touchstart', (e)=>{
-      if(!editMode) return;
-      onDragStart(e);
-    }, {passive:false});
+    col.addEventListener('touchstart', onDragStart, {passive:false});
 
     body.appendChild(col);
   });
@@ -1905,59 +1986,110 @@ let shiftSelectedStart = null;
 let shiftSelectedEnd = null;
 let shiftEditMode = false; // editing existing shift
 
-function buildTimeGrids(){
-  const $start = $('startTimeGrid');
-  const $end = $('endTimeGrid');
+function buildTimeSelects(){
+  const $start = $('shiftStartSel');
+  const $end = $('shiftEndSel');
   $start.innerHTML = '';
   $end.innerHTML = '';
 
-  // Start times: 06:00 ~ 02:30 (30min intervals)
+  // 06:00 ~ 02:30 (30min) for start
   for(let h=6; h<=26; h++){
-    const realH = h >= 24 ? h-24 : h;
-    if(h === 27) break; // stop at 03:00 for end only
+    const rh = h>=24?h-24:h;
     for(let m=0; m<60; m+=30){
-      if(h === 26 && m > 30) break;
-      const t = pad(realH)+':'+pad(m);
-      // Start: 06:00 ~ 02:30
-      if(h <= 26){
-        const optS = document.createElement('div');
-        optS.className = 'time-option';
-        optS.textContent = t;
-        optS.dataset.time = t;
-        optS.addEventListener('click',()=> selectStartTime(t));
-        $start.appendChild(optS);
-      }
+      if(h===26 && m>30) break;
+      const t = pad(rh)+':'+pad(m);
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t;
+      $start.appendChild(opt);
+    }
+  }
+  // 06:30 ~ 03:00 for end
+  for(let h=6; h<=27; h++){
+    const rh = h>=24?h-24:h;
+    for(let m=0; m<60; m+=30){
+      if(h===6&&m===0) continue;
+      if(h===27&&m>0) break;
+      const t = pad(rh)+':'+pad(m);
+      const opt = document.createElement('option');
+      opt.value = t; opt.textContent = t;
+      $end.appendChild(opt);
     }
   }
 
-  // End times: 06:30 ~ 03:00
-  for(let h=6; h<=27; h++){
-    const realH = h >= 24 ? h-24 : h;
-    for(let m=0; m<60; m+=30){
-      if(h === 6 && m === 0) continue; // skip 06:00 for end
-      if(h === 27 && m > 0) break;
-      const t = pad(realH)+':'+pad(m);
-      const optE = document.createElement('div');
-      optE.className = 'time-option';
-      optE.textContent = t;
-      optE.dataset.time = t;
-      optE.addEventListener('click',()=> selectEndTime(t));
-      $end.appendChild(optE);
-    }
-  }
+  // sync select ↔ gauge
+  $start.addEventListener('change', ()=>{
+    shiftSelectedStart = $start.value;
+    updateShiftGauge();
+  });
+  $end.addEventListener('change', ()=>{
+    shiftSelectedEnd = $end.value;
+    updateShiftGauge();
+  });
+
+  // Gauge drag
+  setupShiftGauge();
 }
 
 function selectStartTime(t){
   shiftSelectedStart = t;
-  document.querySelectorAll('#startTimeGrid .time-option').forEach(el=>{
-    el.classList.toggle('selected', el.dataset.time === t);
-  });
+  $('shiftStartSel').value = t;
+  updateShiftGauge();
 }
 function selectEndTime(t){
   shiftSelectedEnd = t;
-  document.querySelectorAll('#endTimeGrid .time-option').forEach(el=>{
-    el.classList.toggle('selected', el.dataset.time === t);
-  });
+  $('shiftEndSel').value = t;
+  updateShiftGauge();
+}
+
+function updateShiftGauge(){
+  const fill = $('shiftGaugeFill');
+  const labels = $('shiftGaugeLabels');
+  if(!shiftSelectedStart || !shiftSelectedEnd){ fill.style.display='none'; labels.textContent=''; return; }
+  fill.style.display='';
+  const left = timeToPercent(shiftSelectedStart);
+  const right = timeToPercent(shiftSelectedEnd);
+  let width = right - left;
+  if(width<=0) width+=100;
+  fill.style.left = left+'%';
+  fill.style.width = Math.min(width,100-left)+'%';
+  const hours = calcHours(shiftSelectedStart, shiftSelectedEnd);
+  labels.textContent = shiftSelectedStart+' ~ '+shiftSelectedEnd+' ('+hours+'h)';
+}
+
+function setupShiftGauge(){
+  const gauge = $('shiftGauge');
+  let dragging = null; // 'start' | 'end'
+  function xToTime(x){
+    const rect = gauge.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (x-rect.left)/rect.width));
+    const totalMin = pct * TL_TOTAL_MINUTES;
+    let h = Math.floor(totalMin/60)+6;
+    if(h>=24) h-=24;
+    let m = Math.round((totalMin%60)/30)*30;
+    if(m>=60){m=0;h=(h+1)>=24?h+1-24:h+1;}
+    return pad(h)+':'+pad(m);
+  }
+  gauge.addEventListener('touchstart', (e)=>{
+    const t = xToTime(e.touches[0].clientX);
+    // decide if adjusting start or end
+    if(!shiftSelectedStart) dragging='start';
+    else{
+      const tMin = timeToMinutesFrom6(t);
+      const sMin = shiftSelectedStart ? timeToMinutesFrom6(shiftSelectedStart) : 0;
+      const eMin = shiftSelectedEnd ? timeToMinutesFrom6(shiftSelectedEnd) : TL_TOTAL_MINUTES;
+      dragging = Math.abs(tMin-sMin) < Math.abs(tMin-eMin) ? 'start' : 'end';
+    }
+    const tv = xToTime(e.touches[0].clientX);
+    if(dragging==='start') selectStartTime(tv);
+    else selectEndTime(tv);
+  }, {passive:true});
+  gauge.addEventListener('touchmove', (e)=>{
+    if(!dragging) return;
+    const tv = xToTime(e.touches[0].clientX);
+    if(dragging==='start') selectStartTime(tv);
+    else selectEndTime(tv);
+  }, {passive:true});
+  gauge.addEventListener('touchend', ()=>{ dragging=null; });
 }
 
 function buildEmpChips(){
@@ -2004,22 +2136,20 @@ function openShiftModal(empId){
   shiftSelectedEnd = null;
   shiftEditMode = false;
 
-  // Clear time selections
-  document.querySelectorAll('#startTimeGrid .time-option, #endTimeGrid .time-option').forEach(el=> el.classList.remove('selected'));
-
   buildEmpChips();
 
   // If empId provided and has existing shift, load it
   if(empId && daySchedule[empId] && daySchedule[empId].start){
     const shift = daySchedule[empId];
-    shiftSelectedStart = shift.start;
-    shiftSelectedEnd = shift.end;
     shiftSelectedRoles = shift.role ? shift.role.split(',').filter(Boolean) : [];
     shiftEditMode = true;
     selectStartTime(shift.start);
     selectEndTime(shift.end);
     $('shiftDelete').style.display = '';
   } else {
+    $('shiftStartSel').selectedIndex = 0;
+    $('shiftEndSel').selectedIndex = 0;
+    updateShiftGauge();
     $('shiftDelete').style.display = 'none';
   }
 
@@ -2049,11 +2179,6 @@ document.querySelectorAll('#shiftPresets .preset-btn').forEach(btn => {
   btn.addEventListener('click', ()=>{
     selectStartTime(btn.dataset.start);
     selectEndTime(btn.dataset.end);
-    // Scroll to selection
-    const startSel = document.querySelector('#startTimeGrid .time-option.selected');
-    if(startSel) startSel.scrollIntoView({block:'center',behavior:'smooth'});
-    const endSel = document.querySelector('#endTimeGrid .time-option.selected');
-    if(endSel) setTimeout(()=> endSel.scrollIntoView({block:'center',behavior:'smooth'}), 200);
   });
 });
 
@@ -2601,43 +2726,124 @@ $('nextDay').addEventListener('click', ()=>{
 });
 
 // ============================================================
-// Edit Mode Toggle (잠금/편집)
+// Layout Tab Switching
 // ============================================================
-function updateEditBtn(){
-  const btn = $('editToggleBtn');
-  if(editMode){
-    btn.textContent = '✏️ 편집중';
-    btn.style.color = '#2ECC71';
-    btn.style.borderColor = '#2ECC71';
-    btn.style.background = '#2ECC7118';
-  } else {
-    btn.textContent = '🔒';
-    btn.style.color = '#9090A8';
-    btn.style.borderColor = '#2E2E52';
-    btn.style.background = '';
-  }
-}
-$('editToggleBtn').addEventListener('click', ()=>{
-  editMode = !editMode;
-  updateEditBtn();
-  showToast(editMode ? '편집모드 — 터치/드래그로 수정 가능' : '모니터링 모드 — 잠금');
-  renderTimeline();
+document.querySelectorAll('.layout-tab').forEach(tab => {
+  tab.addEventListener('click', ()=>{
+    currentTab = tab.dataset.tab;
+    document.querySelectorAll('.layout-tab').forEach(t => t.classList.toggle('active', t===tab));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panelId = currentTab==='vertical'?'panelVertical':currentTab==='calendar'?'panelCalendar':'panelHorizontal';
+    $(panelId).classList.add('active');
+    renderCurrentTab();
+  });
 });
 
-// 10분 무조작 시 자동 잠금
-let editTimeout = null;
-function resetEditTimeout(){
-  if(editTimeout) clearTimeout(editTimeout);
-  if(editMode){
-    editTimeout = setTimeout(()=>{
-      editMode = false;
-      updateEditBtn();
-      renderTimeline();
-      showToast('자동 잠금됨');
-    }, 10*60*1000);
-  }
+function renderCurrentTab(){
+  if(currentTab==='vertical') renderTimeline();
+  else if(currentTab==='calendar') renderCalendarView();
+  else if(currentTab==='horizontal') renderHorizontalView();
 }
-document.addEventListener('touchstart', resetEditTimeout, {passive:true});
+
+// Calendar view renderer
+function renderCalendarView(){
+  const con = $('calendarContent');
+  if(!con) return;
+  const dk = dateKey(currentDate);
+  const y = currentDate.getFullYear(), m = currentDate.getMonth();
+  const days = daysInMonth(y, m+1);
+  const firstDow = new Date(y,m,1).getDay();
+  const empKeys = Object.keys(employees);
+
+  let html = '<div class="cal-grid">';
+  ['일','월','화','수','목','금','토'].forEach(d => html+='<div class="cal-hdr">'+d+'</div>');
+
+  // blank cells before 1st
+  for(let i=0;i<firstDow;i++) html+='<div class="cal-cell other"></div>';
+
+  for(let d=1;d<=days;d++){
+    const cellDate = new Date(y,m,d);
+    const cdk = dateKey(cellDate);
+    const isToday = cdk===dk;
+    html+='<div class="cal-cell'+(isToday?' today':'')+'" data-date="'+cdk+'">';
+    html+='<div class="cal-date"'+(cellDate.getDay()===0?' style="color:#E74C3C;"':cellDate.getDay()===6?' style="color:#45B7D1;"':'')+'>'+d+'</div>';
+
+    // show employees with shifts or dayoff
+    html+='<div class="cal-emp">';
+    empKeys.forEach(id => {
+      const off = isDayOff(id, cdk);
+      const sched = weekSchedules[cdk]?.[id] || (cdk===dk ? daySchedule[id] : null);
+      if(off){
+        html+='<div style="color:#E74C3C;font-size:.5rem;">'+employees[id].name+' 휴</div>';
+      } else if(sched && sched.start){
+        html+='<div style="color:'+(employees[id].color||'#9090A8')+';font-size:.5rem;">'+employees[id].name+' '+sched.start.replace(/^0/,'')+'-'+sched.end.replace(/^0/,'')+'</div>';
+      }
+    });
+    html+='</div></div>';
+  }
+  html+='</div>';
+  con.innerHTML = html;
+
+  // tap cell to navigate
+  con.querySelectorAll('.cal-cell[data-date]').forEach(cell => {
+    cell.addEventListener('click', ()=>{
+      const parts = cell.dataset.date.split('-');
+      currentDate = new Date(+parts[0], +parts[1]-1, +parts[2]);
+      onDateChange();
+      // switch to vertical for detail
+      document.querySelector('.layout-tab[data-tab="vertical"]').click();
+    });
+  });
+}
+
+// Horizontal view renderer
+function renderHorizontalView(){
+  const con = $('horizontalContent');
+  if(!con) return;
+  const dk = dateKey(currentDate);
+  const empKeys = Object.keys(employees);
+
+  let html = '';
+  // hour labels row
+  html += '<div class="ht-row" style="border-bottom:2px solid #2E2E52;">';
+  html += '<div class="ht-name" style="font-size:.6rem;color:#707088;">이름</div>';
+  html += '<div class="ht-bar" style="background:transparent;display:flex;align-items:center;">';
+  for(let h=6;h<=27;h++){
+    const rh = h>=24?h-24:h;
+    if(h%2===0) html+='<span style="flex:1;font-size:.55rem;color:#707088;text-align:center;">'+pad(rh)+'</span>';
+    else html+='<span style="flex:1;"></span>';
+  }
+  html += '</div></div>';
+
+  empKeys.forEach(id => {
+    const emp = employees[id];
+    const off = isDayOff(id, dk);
+    const shift = daySchedule[id];
+    html += '<div class="ht-row" data-empid="'+id+'"'+(off?' style="opacity:.4;"':'')+'>';
+    html += '<div class="ht-name" style="color:'+(emp.color||'#FFFFFF')+';">'+emp.name+'</div>';
+    html += '<div class="ht-bar">';
+    html += '<div class="ht-hours">';
+    for(let h=6;h<=27;h++) html+='<span></span>';
+    html += '</div>';
+
+    if(off){
+      html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#E74C3C;font-size:.65rem;font-weight:600;">휴무</div>';
+    } else if(shift && shift.start && shift.end){
+      const left = timeToPercent(shift.start);
+      const right = timeToPercent(shift.end);
+      let width = right - left;
+      if(width<=0) width+=100;
+      html += '<div class="ht-fill" style="left:'+left+'%;width:'+Math.min(width,100-left)+'%;background:'+(emp.color||'#9090A8')+'88;">'+shift.start.replace(/^0/,'')+'-'+shift.end.replace(/^0/,'')+'</div>';
+    }
+    html += '</div></div>';
+  });
+  con.innerHTML = html;
+
+  // tap row to edit
+  con.querySelectorAll('.ht-row[data-empid]').forEach(row => {
+    row.addEventListener('click', ()=> openShiftModal(row.dataset.empid));
+  });
+}
 
 // ============================================================
 // Refresh Button
@@ -3318,9 +3524,8 @@ document.addEventListener('visibilitychange', ()=>{
 // ============================================================
 function init(){
   currentDate = new Date();
-  updateEditBtn();
   updateDateDisplay();
-  buildTimeGrids();
+  buildTimeSelects();
   loadAiKey();
   loadDayoffs();
   loadData().then(()=>{
