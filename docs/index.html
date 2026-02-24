@@ -2509,7 +2509,7 @@ $('shiftModalClose').addEventListener('click',()=> closeModal($shiftModal));
 // ============================================================
 // Month View Modal
 // ============================================================
-$('monthViewBtn').addEventListener('click', ()=>{
+if($('monthViewBtn')) $('monthViewBtn').addEventListener('click', ()=>{
   monthViewYear = currentDate.getFullYear();
   monthViewMonth = currentDate.getMonth()+1;
   renderMonthView();
