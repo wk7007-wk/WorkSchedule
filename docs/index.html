@@ -77,14 +77,8 @@ body{
 .timeline-title .today-info{font-size:.8rem;color:#FFD700;}
 
 .timeline-scroll{
-  overflow-x:auto;
+  overflow-x:hidden;
   overflow-y:visible;
-  -webkit-overflow-scrolling:touch;
-  position:relative;
-}
-.timeline-table{
-  display:grid;
-  min-width:max-content;
   position:relative;
 }
 
@@ -93,15 +87,15 @@ body{
   position:sticky;left:0;z-index:10;
   background:#1e1e3a;
   display:flex;align-items:center;
-  padding:0 10px;
-  min-width:72px;max-width:72px;
+  padding:0 6px;
+  min-width:50px;max-width:50px;
   border-right:1px solid #2E2E52;
-  font-size:.8rem;font-weight:600;
-  gap:6px;
-  min-height:40px;
+  font-size:.72rem;font-weight:600;
+  gap:4px;
+  min-height:36px;
 }
 .tl-name-col .dot{
-  width:10px;height:10px;border-radius:50%;flex-shrink:0;
+  width:8px;height:8px;border-radius:50%;flex-shrink:0;
 }
 .tl-name-col .name-text{
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -111,8 +105,8 @@ body{
 /* Hours column (right) */
 .tl-hours-col{
   display:flex;align-items:center;justify-content:center;
-  min-width:42px;max-width:42px;
-  font-size:.8rem;font-weight:700;color:#FFFFFF;
+  min-width:32px;max-width:32px;
+  font-size:.7rem;font-weight:700;color:#FFFFFF;
   background:#1e1e3a;
   border-left:1px solid #2E2E52;
 }
@@ -121,7 +115,7 @@ body{
 .tl-bar-area{
   position:relative;
   flex:1;
-  min-height:40px;
+  min-height:36px;
   cursor:pointer;
 }
 
@@ -129,7 +123,7 @@ body{
 .tl-row{
   display:flex;
   border-bottom:1px solid #2E2E52;
-  min-height:40px;
+  min-height:36px;
 }
 .tl-row:last-child{border-bottom:none;}
 .tl-row:active .tl-bar-area{background:#2A2A4580;}
@@ -155,9 +149,8 @@ body{
 .tl-hour-label{
   flex:1;
   display:flex;align-items:center;justify-content:center;
-  font-size:.65rem;color:#707088;
+  font-size:.6rem;color:#707088;
   border-left:1px solid #2E2E5240;
-  min-width:38px;
 }
 .tl-hour-label:first-child{border-left:none;}
 .tl-hour-label.current-hour{color:#FFD700;font-weight:700;}
@@ -191,7 +184,6 @@ body{
 .tl-grid-line{
   flex:1;
   border-left:1px solid #2E2E5230;
-  min-width:38px;
 }
 .tl-grid-line:first-child{border-left:none;}
 .tl-grid-line.current-hour-line{
@@ -230,8 +222,7 @@ body{
 .tl-summary-cell{
   flex:1;
   display:flex;align-items:center;justify-content:center;
-  font-size:.7rem;font-weight:700;
-  min-width:38px;
+  font-size:.65rem;font-weight:700;
   border-left:1px solid #2E2E5240;
 }
 .tl-summary-cell:first-child{border-left:none;}
@@ -254,8 +245,7 @@ body{
 .tl-role-cell{
   flex:1;
   display:flex;align-items:center;justify-content:center;
-  font-size:.6rem;color:#707088;
-  min-width:38px;
+  font-size:.55rem;color:#707088;
   border-left:1px solid #2E2E5220;
 }
 .tl-role-cell:first-child{border-left:none;}
@@ -675,14 +665,21 @@ select.form-input{
 .cal-btn:active{background:#2A2A45;}
 .cal-btn .cdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
 
+/* ===== Contact sync ===== */
+.contact-import-btn{
+  width:100%;margin-top:8px;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+}
+
 /* ===== Responsive ===== */
 @media(max-width:400px){
   .header h1{font-size:1rem;}
   .date-display{font-size:.9rem;min-width:90px;}
-  .tl-name-col{min-width:60px;max-width:60px;padding:0 6px;font-size:.72rem;}
-  .tl-hours-col{min-width:36px;max-width:36px;font-size:.72rem;}
-  .tl-hour-label,.tl-summary-cell,.tl-role-cell,.tl-grid-line{min-width:32px;}
-  .shift-bar{font-size:.6rem;}
+  .tl-name-col{min-width:44px;max-width:44px;padding:0 4px;font-size:.65rem;}
+  .tl-hours-col{min-width:28px;max-width:28px;font-size:.65rem;}
+  .shift-bar{font-size:.55rem;padding:0 3px;}
+  .tl-summary-cell{font-size:.6rem;}
+  .tl-role-cell{font-size:.5rem;}
 }
 </style>
 </head>
@@ -700,6 +697,7 @@ select.form-input{
     <button class="btn nav-btn" id="nextDay" aria-label="다음 날">▶</button>
   </div>
   <div class="header-right">
+    <button class="btn btn-sm" id="refreshBtn" aria-label="새로고침" style="font-size:1rem;padding:6px 8px;color:#9090A8;">↻</button>
     <button class="btn btn-sm btn-gold" id="monthViewBtn" aria-label="월간 보기" style="font-size:1rem;padding:6px 8px;">📅</button>
   </div>
 </div>
@@ -864,6 +862,7 @@ select.form-input{
     <div class="modal-title">직원관리</div>
     <div id="empList"></div>
     <button class="btn btn-accent" id="addEmpBtn" style="width:100%;margin-top:8px;">+ 직원 추가</button>
+    <button class="btn contact-import-btn" id="contactImportBtn">연락처에서 가져오기</button>
   </div>
 </div>
 
@@ -1284,11 +1283,13 @@ function renderTimeline(){
 
   const headerBarArea = document.createElement('div');
   headerBarArea.className = 'tl-header-bar-area';
+  // Sparse labels: show every 2 hours for fit-to-screen
+  const SHOW_HOURS = new Set([6,8,10,12,14,16,18,20,22,0,2]);
   TL_HOURS.forEach((h, idx) => {
     const label = document.createElement('div');
     label.className = 'tl-hour-label';
     if(isToday && h === now.getHours()) label.classList.add('current-hour');
-    label.textContent = pad(h);
+    label.textContent = SHOW_HOURS.has(h) ? pad(h) : '';
     headerBarArea.appendChild(label);
   });
   headerRow.appendChild(headerBarArea);
@@ -1469,17 +1470,6 @@ function renderTimeline(){
 
   container.appendChild(roleRow);
 
-  // Scroll to current time if today
-  if(isToday){
-    setTimeout(()=>{
-      const scroll = $('timelineScroll');
-      if(scroll && currentMinuteOfDay > 0){
-        const barAreaWidth = scroll.scrollWidth - 72 - 42; // minus name + hours col
-        const scrollTarget = (currentMinuteOfDay / TL_TOTAL_MINUTES) * barAreaWidth - scroll.clientWidth / 2;
-        scroll.scrollLeft = Math.max(0, scrollTarget);
-      }
-    }, 100);
-  }
 }
 
 function isHourInShift(hour, start, end){
@@ -2026,6 +2016,110 @@ $('nextDay').addEventListener('click', ()=>{
   currentDate.setDate(currentDate.getDate()+1);
   onDateChange();
 });
+
+// ============================================================
+// Refresh Button
+// ============================================================
+$('refreshBtn').addEventListener('click', ()=>{
+  showToast('새로고침...');
+  location.reload();
+});
+
+// ============================================================
+// Contact Import (NativeBridge or Contact Picker API)
+// ============================================================
+$('contactImportBtn').addEventListener('click', async()=>{
+  let contacts = null;
+
+  // 1) Try NativeBridge (앱 내)
+  if(window.NativeBridge && window.NativeBridge.getContacts){
+    try{
+      const raw = window.NativeBridge.getContacts();
+      contacts = JSON.parse(raw);
+    }catch(e){ console.error('NativeBridge contacts error',e); }
+  }
+
+  // 2) Fallback: Contact Picker API (Chrome/웹)
+  if(!contacts && 'contacts' in navigator && 'ContactsManager' in window){
+    try{
+      const props = ['name','tel'];
+      const opts = {multiple:true};
+      const picked = await navigator.contacts.select(props, opts);
+      contacts = picked.map(c => ({
+        name: (c.name && c.name[0]) || '',
+        phone: (c.tel && c.tel[0]) || ''
+      }));
+    }catch(e){
+      if(e.name !== 'TypeError') console.error('Contact Picker error',e);
+    }
+  }
+
+  if(!contacts || contacts.length === 0){
+    showToast('연락처를 가져올 수 없습니다');
+    return;
+  }
+
+  // Show selection UI
+  openContactPicker(contacts);
+});
+
+function openContactPicker(contacts){
+  // Reuse empModal body for contact selection
+  const $list = $('empList');
+  $list.innerHTML = '<div style="padding:8px 0;font-size:.85rem;color:#FFD700;font-weight:600;">연락처 선택 (탭하여 추가)</div>';
+
+  const existingNames = new Set(Object.values(employees).map(e => e.name));
+
+  contacts.forEach(c => {
+    if(!c.name) return;
+    const item = document.createElement('div');
+    item.className = 'emp-list-item';
+    const alreadyExists = existingNames.has(c.name);
+    item.innerHTML =
+      '<div class="emp-dot" style="background:'+(alreadyExists?'#2ECC71':'#9090A8')+'"></div>'+
+      '<div class="emp-info">'+
+        '<div class="name">'+c.name+'</div>'+
+        '<div class="detail">'+(c.phone||'전화없음')+(alreadyExists?' (등록됨)':'')+'</div>'+
+      '</div>'+
+      (alreadyExists ? '' : '<button class="btn btn-sm btn-accent" data-cname="'+c.name.replace(/"/g,'&quot;')+'" data-cphone="'+(c.phone||'').replace(/"/g,'&quot;')+'">추가</button>');
+    $list.appendChild(item);
+  });
+
+  // Back button
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn';
+  backBtn.style.cssText = 'width:100%;margin-top:8px;';
+  backBtn.textContent = '돌아가기';
+  backBtn.addEventListener('click', ()=> renderEmpList());
+  $list.appendChild(backBtn);
+
+  // Add button handlers
+  $list.querySelectorAll('[data-cname]').forEach(btn => {
+    btn.addEventListener('click', async()=>{
+      const name = btn.dataset.cname;
+      const phone = btn.dataset.cphone;
+      const colorIdx = Object.keys(employees).length % PRESET_COLORS.length;
+      const data = {
+        name: name,
+        phone: phone,
+        color: PRESET_COLORS[colorIdx],
+        role: '',
+        hourlyRate: 0,
+        maxHours: 40
+      };
+      const id = 'emp' + Date.now();
+      employees[id] = data;
+      const ok = await fbPut(FB_EMPLOYEES+'/'+id, data);
+      if(ok){
+        btn.textContent = '완료';
+        btn.disabled = true;
+        btn.style.opacity = '.5';
+        showToast(name+' 추가됨');
+        renderAll();
+      }
+    });
+  });
+}
 
 // ============================================================
 // Collapsible sections (localStorage persistence)

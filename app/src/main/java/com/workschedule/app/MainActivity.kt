@@ -1,14 +1,21 @@
 package com.workschedule.app
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.provider.ContactsContract
 import android.util.Base64
 import android.util.Log
 import android.webkit.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 
@@ -80,6 +87,49 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private companion object {
+        const val REQUEST_CONTACTS = 100
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CONTACTS && grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            // Permission granted — JS will retry getContacts
+            webView.evaluateJavascript("document.getElementById('contactImportBtn')?.click()", null)
+        }
+    }
+
+    private fun readContacts(): String {
+        val contacts = JSONArray()
+        try {
+            val cursor = contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                    ContactsContract.CommonDataKinds.Phone.NUMBER
+                ),
+                null, null,
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
+            )
+            val seen = mutableSetOf<String>()
+            cursor?.use {
+                while (it.moveToNext()) {
+                    val name = it.getString(0) ?: continue
+                    if (seen.contains(name)) continue
+                    seen.add(name)
+                    val phone = it.getString(1) ?: ""
+                    val obj = JSONObject()
+                    obj.put("name", name)
+                    obj.put("phone", phone)
+                    contacts.put(obj)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "readContacts error: ${e.message}")
+        }
+        return contacts.toString()
+    }
+
     inner class NativeBridge {
 
         @JavascriptInterface
@@ -90,6 +140,23 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 "unknown"
             }
+        }
+
+        @JavascriptInterface
+        fun getContacts(): String {
+            // Check permission
+            if (ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.READ_CONTACTS)
+                != PackageManager.PERMISSION_GRANTED) {
+                runOnUiThread {
+                    ActivityCompat.requestPermissions(
+                        this@MainActivity,
+                        arrayOf(Manifest.permission.READ_CONTACTS),
+                        REQUEST_CONTACTS
+                    )
+                }
+                return "[]"
+            }
+            return readContacts()
         }
 
         @JavascriptInterface
