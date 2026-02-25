@@ -1153,7 +1153,7 @@ let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'nul
 };
 // 기존 형태 마이그레이션 (custom 필드 있으면 리셋)
 if(staffSettings.custom){ staffSettings = {preset:'250', hourlyOverrides:null, dailyRevenue:null}; }
-function saveStaffSettings(){ localStorage.setItem('ws_staff_settings', JSON.stringify(staffSettings)); fbPut('/workschedule/staff_settings', staffSettings); }
+function saveStaffSettings(){ localStorage.setItem('ws_staff_settings', JSON.stringify(staffSettings)); fbPut(FB_WS+'/staff_settings', staffSettings); }
 
 // 날짜별 매출구간 맵
 let dailyRevenueMap = JSON.parse(localStorage.getItem('ws_daily_revenue') || '{}');
@@ -1303,7 +1303,7 @@ function recordPattern(empId, dk, shift){
     patterns[key].lastDate = dk;
     localStorage.setItem(LS_PATTERNS, JSON.stringify(patterns));
     // Firebase 백업
-    fbPut('/workschedule/patterns/'+encodeURIComponent(key), patterns[key]);
+    fbPut(FB_WS+'/patterns/'+encodeURIComponent(key), patterns[key]);
   }catch(e){}
 }
 function getPatternSuggestion(empId, dk){
@@ -2893,7 +2893,7 @@ function updateRolePills(){
 }
 
 // ========== 당일 매출 예상 설정 ==========
-function saveDailyRevenueMap(){ localStorage.setItem('ws_daily_revenue', JSON.stringify(dailyRevenueMap)); fbPut('/workschedule/daily_revenue', dailyRevenueMap); }
+function saveDailyRevenueMap(){ localStorage.setItem('ws_daily_revenue', JSON.stringify(dailyRevenueMap)); fbPut(FB_WS+'/daily_revenue', dailyRevenueMap); }
 
 function setDailyRevenue(key){
   const dk = dateKey(currentDate);
@@ -3169,7 +3169,7 @@ $('shiftSaveFixed').addEventListener('click', async()=>{
   // 로컬 FIXED_SCHEDULES 업데이트
   FIXED_SCHEDULES[empName] = newFixed;
   // Firebase에 저장 (고정값 영구 보존)
-  fbPut('/workschedule/fixed_schedules/'+encodeURIComponent(empName), newFixed);
+  fbPut(FB_WS+'/fixed_schedules/'+encodeURIComponent(empName), newFixed);
   // localStorage 캐시
   try{ localStorage.setItem('ws_fixed_schedules', JSON.stringify(FIXED_SCHEDULES)); }catch(e){}
 
@@ -3887,7 +3887,7 @@ $('confirmDayBtn').addEventListener('click', ()=>{
     showToast(dk+' 확정 완료');
   }
   lsSaveConfirmed(confirmedDays);
-  fbPut('/workschedule/confirmed/'+dk, confirmedDays[dk]||null);
+  fbPut(FB_WS+'/confirmed/'+dk, confirmedDays[dk]||null);
   updateConfirmBtn();
 });
 
@@ -4307,12 +4307,12 @@ function renderTimebarView(){
   // === 진행률 게이지 ===
   const total = working.length + empty.length;
   const pctCf = total > 0 ? Math.round(confirmedCount/total*100) : 0;
-  html += '<div style="margin-bottom:4px;">';
-  html += '<div style="display:flex;height:4px;border-radius:3px;overflow:hidden;background:'+C_BG+';">';
+  html += '<div style="margin-bottom:5px;">';
+  html += '<div style="display:flex;height:5px;border-radius:3px;overflow:hidden;background:'+C_BG+';">';
   if(pctCf > 0) html += '<div style="width:'+pctCf+'%;background:'+C_OK+';"></div>';
   html += '<div style="flex:1;background:#2E2E52;"></div>';
   html += '</div>';
-  html += '<div style="display:flex;gap:6px;margin-top:2px;font-size:.5rem;">';
+  html += '<div style="display:flex;gap:8px;margin-top:3px;font-size:.6rem;">';
   html += '<span style="color:'+C_OK+';font-weight:700;">확정'+confirmedCount+'</span>';
   if(unconfirmedCount) html += '<span style="color:'+C_DEF+';font-weight:700;">미확정'+unconfirmedCount+'</span>';
   if(empty.length) html += '<span style="color:#707088;">미입력'+empty.length+'</span>';
@@ -4322,15 +4322,15 @@ function renderTimebarView(){
   html += '</div></div>';
 
   // === 시간 헤더 ===
-  html += '<div style="display:flex;align-items:center;margin-bottom:1px;">';
-  html += '<div style="min-width:52px;"></div>';
-  html += '<div style="flex:1;position:relative;height:12px;display:flex;">';
+  html += '<div style="display:flex;align-items:center;margin-bottom:2px;">';
+  html += '<div style="min-width:56px;"></div>';
+  html += '<div style="flex:1;position:relative;height:14px;display:flex;">';
   for(let h=6;h<=27;h+=2){
     const rh = h>=24?h-24:h;
     const pct = (h-6)/barHours*100;
-    html += '<span style="position:absolute;left:'+pct+'%;font-size:.42rem;color:#707088;transform:translateX(-50%);">'+rh+'</span>';
+    html += '<span style="position:absolute;left:'+pct+'%;font-size:.5rem;color:#707088;transform:translateX(-50%);">'+rh+'</span>';
   }
-  html += '</div><div style="min-width:32px;"></div></div>';
+  html += '</div><div style="min-width:34px;"></div></div>';
 
   // === 근무자 타임바 ===
   working.forEach(w => {
@@ -4350,52 +4350,52 @@ function renderTimebarView(){
     const barBg = hasConflict ? '#E74C3C55' : roleColor+'40';
     const borderL = hasConflict ? C_OFF : roleColor;
 
-    html += '<div data-empid="'+w.id+'" style="display:flex;align-items:center;padding:1px 4px;cursor:pointer;">';
+    html += '<div data-empid="'+w.id+'" style="display:flex;align-items:center;padding:2px 4px;cursor:pointer;">';
     // 이름 + 주간휴무
-    html += '<div style="min-width:52px;font-size:.6rem;font-weight:700;color:'+(isCf?C_OK:'#E0E0EC')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">';
+    html += '<div style="min-width:56px;font-size:.75rem;font-weight:700;color:'+(isCf?C_OK:'#E0E0EC')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">';
     html += w.emp.name;
-    if(wOff) html += '<span style="font-size:.45rem;color:'+C_OFF+';">('+wOff+')</span>';
+    if(wOff) html += '<span style="font-size:.55rem;color:'+C_OFF+';">('+wOff+')</span>';
     html += '</div>';
     // 바 영역
-    html += '<div style="flex:1;position:relative;height:22px;background:#1A1A30;border-radius:3px;overflow:hidden;">';
+    html += '<div style="flex:1;position:relative;height:28px;background:#1A1A30;border-radius:4px;overflow:hidden;">';
     if(isToday) html += '<div style="position:absolute;left:'+nowPct+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:2;"></div>';
-    html += '<div style="position:absolute;left:'+left+'%;width:'+width+'%;top:1px;bottom:1px;background:'+barBg+';border-left:2px solid '+borderL+';border-radius:2px;display:flex;align-items:center;padding:0 3px;gap:2px;overflow:hidden;">';
-    html += '<span style="font-size:.48rem;color:#E0E0EC;font-weight:600;white-space:nowrap;">'+w.shift.start.replace(/^0/,'')+'-'+w.shift.end.replace(/^0/,'')+'</span>';
-    if(roles.length) html += '<span style="font-size:.42rem;white-space:nowrap;">'+roles.map(r=>'<span style="color:'+(ROLE_COLORS[r]||'#fff')+';">'+(ROLE_LABELS[r]||r)+'</span>').join(' ')+'</span>';
-    html += '<span style="font-size:.42rem;color:#9090A8;">('+w.hours+'h)</span>';
+    html += '<div style="position:absolute;left:'+left+'%;width:'+width+'%;top:1px;bottom:1px;background:'+barBg+';border-left:2px solid '+borderL+';border-radius:3px;display:flex;align-items:center;padding:0 4px;gap:3px;overflow:hidden;">';
+    html += '<span style="font-size:.58rem;color:#E0E0EC;font-weight:600;white-space:nowrap;">'+w.shift.start.replace(/^0/,'')+'-'+w.shift.end.replace(/^0/,'')+'</span>';
+    if(roles.length) html += '<span style="font-size:.5rem;white-space:nowrap;">'+roles.map(r=>'<span style="color:'+(ROLE_COLORS[r]||'#fff')+';">'+(ROLE_LABELS[r]||r)+'</span>').join(' ')+'</span>';
+    html += '<span style="font-size:.5rem;color:#9090A8;">('+w.hours+'h)</span>';
     html += '</div>';
     html += '</div>';
     // 상태 버튼
     if(isCf){
-      html += '<span data-action="status" data-sid="'+w.id+'" data-st="auto" style="min-width:28px;text-align:center;font-size:.5rem;padding:2px 4px;border-radius:3px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;margin-left:2px;">확</span>';
+      html += '<span data-action="status" data-sid="'+w.id+'" data-st="auto" style="min-width:30px;text-align:center;font-size:.6rem;padding:3px 5px;border-radius:4px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;margin-left:3px;">확</span>';
     } else {
-      html += '<span data-action="status" data-sid="'+w.id+'" data-st="confirmed" style="min-width:28px;text-align:center;font-size:.5rem;padding:2px 4px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;margin-left:2px;">미</span>';
+      html += '<span data-action="status" data-sid="'+w.id+'" data-st="confirmed" style="min-width:30px;text-align:center;font-size:.6rem;padding:3px 5px;border-radius:4px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;margin-left:3px;">미</span>';
     }
-    if(hasConflict) html += '<span style="font-size:.45rem;color:'+C_OFF+';font-weight:700;">!</span>';
+    if(hasConflict) html += '<span style="font-size:.55rem;color:'+C_OFF+';font-weight:700;">!</span>';
     html += '</div>';
   });
 
   // === 미입력 직원 ===
   if(empty.length > 0){
-    html += '<div style="margin-top:3px;padding-top:3px;border-top:1px solid #2E2E5240;">';
+    html += '<div style="margin-top:4px;padding-top:4px;border-top:1px solid #2E2E5240;">';
     empty.forEach(e => {
       const pattern = getPatternSuggestion(e.id, dk);
-      html += '<div data-empid="'+e.id+'" style="display:flex;align-items:center;gap:4px;padding:3px 4px;cursor:pointer;">';
-      html += '<div style="min-width:52px;font-size:.6rem;font-weight:700;color:#707088;">'+e.emp.name+'</div>';
-      html += '<div style="flex:1;position:relative;height:22px;background:#1A1A30;border-radius:3px;overflow:hidden;">';
+      html += '<div data-empid="'+e.id+'" style="display:flex;align-items:center;gap:4px;padding:2px 4px;cursor:pointer;">';
+      html += '<div style="min-width:56px;font-size:.75rem;font-weight:700;color:#707088;">'+e.emp.name+'</div>';
+      html += '<div style="flex:1;position:relative;height:28px;background:#1A1A30;border-radius:4px;overflow:hidden;">';
       if(isToday) html += '<div style="position:absolute;left:'+nowPct+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:2;"></div>';
       if(pattern){
         const pL = timeToPct(pattern.start), pR = timeToPct(pattern.end);
         let pW = pR - pL; if(pW<=0) pW+=100; pW = Math.min(pW, 100-pL);
-        html += '<div style="position:absolute;left:'+pL+'%;width:'+pW+'%;top:1px;bottom:1px;background:#2ECC7120;border:1px dashed #2ECC7160;border-radius:2px;display:flex;align-items:center;padding:0 3px;">';
-        html += '<span style="font-size:.45rem;color:'+C_OK+';font-weight:600;">AI '+pattern.start.replace(/^0/,'')+'-'+pattern.end.replace(/^0/,'')+'</span>';
+        html += '<div style="position:absolute;left:'+pL+'%;width:'+pW+'%;top:1px;bottom:1px;background:#2ECC7120;border:1px dashed #2ECC7160;border-radius:3px;display:flex;align-items:center;padding:0 4px;">';
+        html += '<span style="font-size:.55rem;color:'+C_OK+';font-weight:600;">AI '+pattern.start.replace(/^0/,'')+'-'+pattern.end.replace(/^0/,'')+'</span>';
         html += '</div>';
       } else {
-        html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.5rem;color:#707088;">미입력</div>';
+        html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;color:#707088;">미입력</div>';
       }
       html += '</div>';
-      if(pattern) html += '<span data-action="applyPattern" data-pid="'+e.id+'" style="font-size:.5rem;padding:2px 5px;border-radius:3px;background:'+C_OK+'33;color:'+C_OK+';cursor:pointer;font-weight:700;">적용</span>';
-      html += '<span data-action="toggleOff" data-oid="'+e.id+'" style="font-size:.5rem;padding:2px 5px;border-radius:3px;background:#333;color:#E74C3C;cursor:pointer;font-weight:700;">휴</span>';
+      if(pattern) html += '<span data-action="applyPattern" data-pid="'+e.id+'" style="font-size:.6rem;padding:3px 6px;border-radius:4px;background:'+C_OK+'33;color:'+C_OK+';cursor:pointer;font-weight:700;">적용</span>';
+      html += '<span data-action="toggleOff" data-oid="'+e.id+'" style="font-size:.6rem;padding:3px 6px;border-radius:4px;background:#333;color:#E74C3C;cursor:pointer;font-weight:700;">휴</span>';
       html += '</div>';
     });
     html += '</div>';
@@ -4403,36 +4403,36 @@ function renderTimebarView(){
 
   // === 휴무 직원 ===
   if(offList.length > 0){
-    html += '<div style="margin-top:3px;padding-top:3px;border-top:1px solid #2E2E5240;">';
+    html += '<div style="margin-top:4px;padding-top:4px;border-top:1px solid #2E2E5240;">';
     offList.forEach(o => {
       const oOff = weekOffCount[o.id]||0;
-      html += '<div data-empid="'+o.id+'" style="display:flex;align-items:center;gap:4px;padding:3px 4px;opacity:.4;cursor:pointer;">';
-      html += '<div style="min-width:52px;font-size:.6rem;font-weight:700;color:#E74C3C;">'+o.emp.name;
-      if(oOff) html += '<span style="font-size:.45rem;">('+oOff+')</span>';
+      html += '<div data-empid="'+o.id+'" style="display:flex;align-items:center;gap:4px;padding:2px 4px;opacity:.4;cursor:pointer;">';
+      html += '<div style="min-width:56px;font-size:.75rem;font-weight:700;color:#E74C3C;">'+o.emp.name;
+      if(oOff) html += '<span style="font-size:.55rem;">('+oOff+')</span>';
       html += '</div>';
-      html += '<div style="flex:1;position:relative;height:22px;background:#1A1A30;border-radius:3px;overflow:hidden;">';
-      html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.5rem;color:#E74C3C;font-weight:600;">휴무</div>';
+      html += '<div style="flex:1;position:relative;height:28px;background:#1A1A30;border-radius:4px;overflow:hidden;">';
+      html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;color:#E74C3C;font-weight:600;">휴무</div>';
       html += '</div>';
-      html += '<span data-action="toggleOff" data-oid="'+o.id+'" style="font-size:.5rem;padding:2px 5px;border-radius:3px;background:#333;color:#9090A8;cursor:pointer;font-weight:700;">해제</span>';
+      html += '<span data-action="toggleOff" data-oid="'+o.id+'" style="font-size:.6rem;padding:3px 6px;border-radius:4px;background:#333;color:#9090A8;cursor:pointer;font-weight:700;">해제</span>';
       html += '</div>';
     });
     html += '</div>';
   }
 
   // === 합계 인원 행 ===
-  html += '<div style="display:flex;align-items:center;padding:2px 4px;margin-top:3px;border-top:1px solid #2E2E52;">';
-  html += '<div style="min-width:52px;font-size:.45rem;color:#9090A8;">인원</div>';
-  html += '<div style="flex:1;position:relative;height:16px;display:flex;gap:1px;">';
+  html += '<div style="display:flex;align-items:center;padding:3px 4px;margin-top:4px;border-top:1px solid #2E2E52;">';
+  html += '<div style="min-width:56px;font-size:.5rem;color:#9090A8;">인원</div>';
+  html += '<div style="flex:1;position:relative;height:20px;display:flex;gap:1px;">';
   GAUGE_HOURS.forEach(h => {
     const hStr = pad(h)+':00';
     const s = staffing[hStr];
     const t = s ? s.total : 0;
     const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver);
-    html += '<div style="flex:1;background:'+(anyConflict?C_OFF+'22':t>0?'#3498DB15':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.42rem;color:'+(anyConflict?C_OFF:t>0?'#3498DB':'#707088')+';font-weight:700;border-radius:1px;">';
+    html += '<div style="flex:1;background:'+(anyConflict?C_OFF+'22':t>0?'#3498DB15':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.5rem;color:'+(anyConflict?C_OFF:t>0?'#3498DB':'#707088')+';font-weight:700;border-radius:1px;">';
     html += t > 0 ? t : '';
     html += '</div>';
   });
-  html += '</div><div style="min-width:32px;"></div></div>';
+  html += '</div><div style="min-width:34px;"></div></div>';
 
   html += '</div>';
   con.innerHTML = html;
