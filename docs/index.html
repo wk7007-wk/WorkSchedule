@@ -1119,7 +1119,7 @@ function makeHourlyPreset(label, rules){
 const STAFF_PRESETS = {
   '250': makeHourlyPreset('~250만', [
     {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:1}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[18,19], kitchen:{min:3,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[18,19], kitchen:{min:3,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[20,21,22,23,0,1,2], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
   ]),
   '300': makeHourlyPreset('~300만', [
@@ -1175,9 +1175,9 @@ let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'nul
     }
   }
   // v2: 소수점 프리셋 적용 → 기존 정수 오버라이드 초기화
-  if(staffSettings.ver !== 3){
+  if(staffSettings.ver !== 4){
     staffSettings.presetOverrides = {};
-    staffSettings.ver = 3;
+    staffSettings.ver = 4;
     changed = true;
   }
   if(changed){
