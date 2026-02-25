@@ -2419,25 +2419,25 @@ function calcStaffing(empKeys, dk){
     }
 
     const delivery = carFinal + bikeFinal;
-    // 배달대행 가용 여부
+    // 배달대행 = 오토바이 역할 담당 (부족분만 충족)
     const DA_START = timeToMinutesFrom6(pad(preset.daStart||10)+':00');
     const DA_END = timeToMinutesFrom6(pad(preset.daEnd||1)+':00');
     const daAvail = hMin >= DA_START && hMin < DA_END;
-    // 배달대행 포함 합산 (0.5명 단위 부족분 충족)
-    const deliveryNeed = Math.max(0, 1 - delivery); // 배달 1명 기준 부족분 (0, 0.5, 1)
-    const daFill = daAvail ? deliveryNeed : 0;
-    const deliveryWithDA = delivery + daFill;
+    const bikeMax = limits['오토바이'].max;
+    const daFill = daAvail ? Math.max(0, bikeMax - bikeFinal) : 0; // 오토바이 max까지 부족분
+    const bikeFinalDA = bikeFinal + daFill; // 대행 포함 오토바이
+    const deliveryWithDA = carFinal + bikeFinalDA;
 
     // 충돌 체크 (편입 후 기준)
     const carOver = carFinal > limits['차배달'].max;
-    const bikeOver = bikeFinal > limits['오토바이'].max;
+    const bikeOver = bikeFinal > bikeMax; // 실제 인원만 (대행 제외)
     const kitchenOver = kitchenFinal > limits['주방'].max;
     const kitchenUnder = kitchenFinal < limits['주방'].min;
 
     result[hStr] = {
       kitchen: kitchenFinal, carDel: carFinal, bikeDel: bikeFinal,
       kitchenRaw: kitchen, carRaw: carDel, bikeRaw: bikeDel,
-      delivery, deliveryWithDA, daFill, total, daAvail, hasBikeWorker,
+      delivery, deliveryWithDA, daFill, bikeFinalDA, total, daAvail, hasBikeWorker,
       carOver, bikeOver, kitchenOver, kitchenUnder
     };
   }
