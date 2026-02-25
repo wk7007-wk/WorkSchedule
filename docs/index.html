@@ -639,6 +639,27 @@ select.form-input{
   display:flex;align-items:center;justify-content:center;gap:6px;
 }
 
+/* ===== Date Strip (60일 스크롤) ===== */
+.date-strip{
+  display:flex;overflow-x:auto;gap:3px;padding:6px 8px;
+  background:#1A1A30;border-bottom:1px solid #2E2E52;
+  -webkit-overflow-scrolling:touch;scrollbar-width:none;
+}
+.date-strip::-webkit-scrollbar{display:none;}
+.date-strip-item{
+  flex:0 0 auto;min-width:40px;padding:4px 2px;border-radius:6px;
+  text-align:center;cursor:pointer;border:1px solid transparent;
+  transition:background .1s;position:relative;
+}
+.date-strip-item:active{background:#2A2A45;}
+.date-strip-item.selected{background:#2A2A45;border-color:#9090A8;}
+.date-strip-item.today-mark{border-color:#FFD700;}
+.date-strip-item .ds-dow{font-size:.5rem;color:#707088;line-height:1;}
+.date-strip-item .ds-date{font-size:.8rem;font-weight:700;color:#E0E0EC;line-height:1.3;}
+.date-strip-item .ds-date.sun{color:#E74C3C;}
+.date-strip-item .ds-date.sat{color:#4ECDC4;}
+.date-strip-item .ds-status{font-size:.4rem;line-height:1;margin-top:1px;font-weight:700;}
+
 /* ===== Date Picker Dropdown ===== */
 .date-picker-overlay{
   display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.5);
@@ -742,6 +763,9 @@ select.form-input{
 <div class="date-picker-overlay" id="datePickerOverlay">
   <div class="date-picker-list" id="datePickerList"></div>
 </div>
+
+<!-- Date Strip (60일 스크롤) -->
+<div class="date-strip" id="dateStrip"></div>
 
 <!-- Week Overview -->
 <div class="week-section">
@@ -1684,6 +1708,7 @@ function renderAll(){
     updateDateDisplay();
     renderBriefing();
     renderCurrentTab();
+    renderDateStrip();
     renderWeek();
     checkLogistics();
     buildCalButtons();
@@ -2296,6 +2321,86 @@ function isHourInShift(hour, start, end){
   let endMin = timeToMinutesFrom6(end);
   if(endMin <= startMin) endMin += 24*60;
   return hourMin >= startMin && hourMin < endMin;
+}
+
+// ============================================================
+// Date Strip (60일 스크롤 날짜 바)
+// ============================================================
+function renderDateStrip(){
+  const con = $('dateStrip');
+  if(!con) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const empKeys = Object.keys(employees);
+  const totalEmp = empKeys.length;
+  const selectedDk = dateKey(currentDate);
+  const DOW_SHORT = ['일','월','화','수','목','금','토'];
+
+  let html = '';
+  // -7일 ~ +52일 = 60일
+  for(let i=-7; i<53; i++){
+    const d = new Date(today);
+    d.setDate(d.getDate()+i);
+    const dk = dateKey(d);
+    const dow = d.getDay();
+    const isToday = i===0;
+    const isSelected = dk===selectedDk;
+
+    // 확정 상태 체크 (localStorage에서 직접 로드 — 60일 범위)
+    let confirmedCount = 0;
+    let assignedCount = 0;
+    const sched = dk===selectedDk ? daySchedule : (weekSchedules[dk] || lsLoadSchedule(dk));
+    if(sched){
+      empKeys.forEach(eid => {
+        if(sched[eid] && sched[eid].start){
+          assignedCount++;
+          const st = getShiftStatus(dk, eid);
+          if(st==='confirmed') confirmedCount++;
+        }
+      });
+    }
+
+    // 상태 라벨
+    let statusHtml = '';
+    if(assignedCount > 0){
+      if(confirmedCount === assignedCount){
+        statusHtml = '<div class="ds-status" style="color:#2ECC71;">확정</div>';
+      } else if(confirmedCount > 0){
+        statusHtml = '<div class="ds-status" style="color:#9090A8;">'+confirmedCount+'/'+assignedCount+'</div>';
+      } else {
+        statusHtml = '<div class="ds-status" style="color:#9090A8;">미정</div>';
+      }
+    }
+
+    const cls = ['date-strip-item'];
+    if(isSelected) cls.push('selected');
+    if(isToday) cls.push('today-mark');
+
+    const dowCls = dow===0 ? ' sun' : dow===6 ? ' sat' : '';
+
+    html += '<div class="'+cls.join(' ')+'" data-dk="'+dk+'">';
+    html += '<div class="ds-dow">'+DOW_SHORT[dow]+'</div>';
+    html += '<div class="ds-date'+dowCls+'">'+d.getDate()+'</div>';
+    html += statusHtml;
+    html += '</div>';
+  }
+  con.innerHTML = html;
+
+  // 클릭 이벤트
+  con.querySelectorAll('.date-strip-item').forEach(el => {
+    el.addEventListener('click', ()=>{
+      const parts = el.dataset.dk.split('-');
+      currentDate = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+      onDateChange();
+    });
+  });
+
+  // 선택된 날짜를 중앙으로 스크롤
+  const sel = con.querySelector('.selected');
+  if(sel){
+    setTimeout(()=>{
+      sel.scrollIntoView({inline:'center', behavior:'smooth', block:'nearest'});
+    }, 50);
+  }
 }
 
 // ============================================================
