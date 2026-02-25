@@ -3639,7 +3639,7 @@ function renderListView(){
     html += '<div style="font-size:.6rem;color:#E67E22;font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid #E67E22;">미입력 ('+empty.length+'명)</div>';
     empty.forEach(e => {
       const pattern = getPatternSuggestion(e.id, dk);
-      html += '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:2px;background:#1A1A30;border-radius:6px;border-left:3px solid #707088;">';
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:2px;background:#1A1A30;border-radius:6px;border-left:3px solid #707088;cursor:pointer;" data-empid="'+e.id+'">';
       html += '<span style="font-size:.85rem;font-weight:800;color:#707088;min-width:44px;">'+e.emp.name+'</span>';
       if(pattern){
         html += '<span style="font-size:.65rem;color:#9B59B6;">AI추천 '+pattern.start+'~'+pattern.end+'</span>';
@@ -3648,7 +3648,6 @@ function renderListView(){
         html += '<span style="font-size:.7rem;color:#707088;">미입력</span>';
       }
       html += '<span style="margin-left:auto;display:flex;gap:3px;">';
-      html += '<span data-empid="'+e.id+'" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:#242444;color:#9090A8;cursor:pointer;">입력</span>';
       html += '<span onclick="event.stopPropagation();toggleDayOffFromList(\''+e.id+'\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:#333;color:#E74C3C;cursor:pointer;font-weight:700;">휴</span>';
       html += '</span>';
       html += '</div>';
