@@ -2821,10 +2821,18 @@ $('shiftDayoff').addEventListener('click', ()=>{
     if(dayoffs[shiftSelectedEmpId]) delete dayoffs[shiftSelectedEmpId][dk];
     lsSaveDayoffs();
     fbDelete(FB_DAYOFFS+'/'+shiftSelectedEmpId+'/'+dk);
+    // dayoff 플래그 스케줄 삭제
     if(daySchedule[shiftSelectedEmpId] && daySchedule[shiftSelectedEmpId].dayoff){
       delete daySchedule[shiftSelectedEmpId];
-      lsSaveSchedule(dk, daySchedule);
     }
+    // 고정스케줄 재적용
+    const empName = employees[shiftSelectedEmpId]?.name || '';
+    const fix = FIXED_SCHEDULES[empName];
+    if(fix && fix.type==='fixed' && fix.start){
+      daySchedule[shiftSelectedEmpId] = {start:fix.start, end:fix.end, role:fix.role};
+      fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId, daySchedule[shiftSelectedEmpId]);
+    }
+    lsSaveSchedule(dk, daySchedule);
     closeModal($shiftModal);
     showToast('휴무 해제');
   } else {
@@ -3795,11 +3803,20 @@ function toggleDayOffFromList(empId){
   const dk = dateKey(currentDate);
   if(!dayoffs[empId]) dayoffs[empId] = {};
   if(dayoffs[empId][dk]){
+    // 휴무 해제 → 고정스케줄 재적용
     delete dayoffs[empId][dk];
+    if(daySchedule[empId] && daySchedule[empId].dayoff) delete daySchedule[empId];
+    const empName = employees[empId]?.name || '';
+    const fix = FIXED_SCHEDULES[empName];
+    if(fix && fix.type==='fixed' && fix.start){
+      daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role};
+      fbPut(FB_SCHEDULES+'/'+dk+'/'+empId, daySchedule[empId]);
+    }
+    lsSaveSchedule(dk, daySchedule);
     showToast('휴무 해제');
   } else {
+    // 휴무 지정
     dayoffs[empId][dk] = true;
-    // 기존 스케줄 삭제
     if(daySchedule[empId]){
       delete daySchedule[empId];
       lsSaveSchedule(dk, daySchedule);
