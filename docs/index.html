@@ -5161,7 +5161,7 @@ function buildKakaoPerEmp(){
   const empKeys = Object.keys(employees);
   empKeys.forEach(eid=>{
     const emp = employees[eid];
-    // 오늘부터 7일 중 확정 스케줄 있는 직원만
+    // 확정 스케줄 있거나, 이전 공유 이력 있는 직원 (취소 전송용)
     let hasConfirmed = false;
     for(let i=0;i<7;i++){
       const d = new Date(today); d.setDate(d.getDate()+i);
@@ -5171,11 +5171,15 @@ function buildKakaoPerEmp(){
         if(sched[eid]&&sched[eid].start){ hasConfirmed=true; break; }
       }
     }
-    if(!hasConfirmed) return;
+    const hasPrevShared = JSON.parse(localStorage.getItem('ws_shared_'+eid)||'[]').length > 0;
+    if(!hasConfirmed && !hasPrevShared) return;
     const btn = document.createElement('button');
     btn.className = 'btn btn-sm';
-    btn.style.cssText = 'background:#FFE81266;color:#FFE812;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:4px;';
-    btn.textContent = emp.name;
+    const isCancel = !hasConfirmed && hasPrevShared;
+    btn.style.cssText = isCancel
+      ? 'background:#E74C3C33;color:#E74C3C;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:4px;'
+      : 'background:#FFE81266;color:#FFE812;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:4px;';
+    btn.textContent = emp.name + (isCancel?' (취소)':'');
     btn.addEventListener('click', ()=> sharePerEmployee(eid));
     box.appendChild(btn);
   });
@@ -5205,15 +5209,22 @@ async function sharePerEmployee(empId){
         role:shift.role||''
       });
     }
-    if(!events.length){ showToast(emp.name+' 확정 근무 없음'); return; }
-
-    // 이미지 생성 (프리미엄 글래스모피즘)
-    const imgBase64 = await buildShareImage_personal(emp, lines);
-
-    // .ics 생성 (SEQUENCE로 수정 반영 + 이전 공유 대비 취소 반영)
-    const seq = Math.floor(Date.now()/1000); // 매번 증가 → 캘린더앱이 최신으로 인식
     const prevKey = 'ws_shared_'+empId;
     const prevDates = JSON.parse(localStorage.getItem(prevKey)||'[]');
+    // 확정도 없고 취소할 이전 이력도 없으면 종료
+    if(!events.length && !prevDates.length){ showToast(emp.name+' 확정 근무 없음'); return; }
+
+    // 전부 취소인 경우 → .ics만 전송 (이미지 없이)
+    const cancelOnly = !events.length && prevDates.length > 0;
+
+    // 이미지 생성 (확정 있을 때만)
+    let imgBase64 = '';
+    if(!cancelOnly){
+      imgBase64 = await buildShareImage_personal(emp, lines);
+    }
+
+    // .ics 생성 (SEQUENCE로 수정 반영 + 이전 공유 대비 취소 반영)
+    const seq = Math.floor(Date.now()/1000);
     const curDates = events.map(ev=>ev.date);
 
     let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
@@ -5249,18 +5260,27 @@ async function sharePerEmployee(empId){
     // 공유 이력 저장
     localStorage.setItem(prevKey, JSON.stringify(curDates));
 
-    // 미리보기 모달
-    const proceed = await showSharePreview(imgBase64);
-    if(!proceed) return;
-
-    if(window.NativeBridge && window.NativeBridge.shareSchedule){
-      window.NativeBridge.shareSchedule(imgBase64, ics, emp.name);
+    if(cancelOnly){
+      // 취소만 → 미리보기 없이 .ics만 전송
+      if(window.NativeBridge && window.NativeBridge.shareText){
+        // .ics를 텍스트로 공유 (이미지 없음)
+        downloadBlob(ics, emp.name+'_근무취소.ics', 'text/calendar;charset=utf-8');
+      }
+      showToast(emp.name+' 일정 취소 전송');
     } else {
-      const link = document.createElement('a');
-      link.download = emp.name+'_근무표.png';
-      link.href = imgBase64;
-      link.click();
-      downloadBlob(ics, emp.name+'_근무표.ics', 'text/calendar;charset=utf-8');
+      // 미리보기 모달
+      const proceed = await showSharePreview(imgBase64);
+      if(!proceed) return;
+
+      if(window.NativeBridge && window.NativeBridge.shareSchedule){
+        window.NativeBridge.shareSchedule(imgBase64, ics, emp.name);
+      } else {
+        const link = document.createElement('a');
+        link.download = emp.name+'_근무표.png';
+        link.href = imgBase64;
+        link.click();
+        downloadBlob(ics, emp.name+'_근무표.ics', 'text/calendar;charset=utf-8');
+      }
     }
   }catch(e){
     console.error('개별 공유 에러',e);
