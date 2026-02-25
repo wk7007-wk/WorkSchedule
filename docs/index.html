@@ -272,14 +272,11 @@ body{
   min-height:60px;
 }
 .week-day:active{background:#2A2A45;}
-.week-day.today{border-color:#FFD700;}
 .week-day .day-label{font-size:.7rem;color:#707088;margin-bottom:2px;}
 .week-day .day-date{font-size:.8rem;font-weight:600;color:#E0E0EC;margin-bottom:4px;}
 .week-day .day-date.sun{color:#E74C3C;}
-.week-day .day-date.sat{color:#4A9EFF;}
-.week-day .day-dots{display:flex;flex-wrap:wrap;justify-content:center;gap:3px;}
-.week-day .day-dots .wdot{width:8px;height:8px;border-radius:50%;}
-.week-day .day-count{font-size:.65rem;color:#9090A8;margin-top:3px;}
+.week-day .day-date.sat{color:#4ECDC4;}
+.week-day .day-count{font-size:.65rem;margin-top:3px;}
 
 .week-offs{
   padding:8px 14px;
@@ -2359,28 +2356,27 @@ function renderDateStrip(){
       });
     }
 
-    // 상태 라벨
-    let statusHtml = '';
+    // 테두리 색상으로 확정/미정 표시
+    let borderColor = 'transparent';
     if(assignedCount > 0){
-      if(confirmedCount === assignedCount){
-        statusHtml = '<div class="ds-status" style="color:#2ECC71;">확정</div>';
-      } else if(confirmedCount > 0){
-        statusHtml = '<div class="ds-status" style="color:#9090A8;">'+confirmedCount+'/'+assignedCount+'</div>';
-      } else {
-        statusHtml = '<div class="ds-status" style="color:#9090A8;">미정</div>';
-      }
+      if(confirmedCount === assignedCount) borderColor = C_OK;
+      else borderColor = C_DEF;
     }
 
     const cls = ['date-strip-item'];
     if(isSelected) cls.push('selected');
-    if(isToday) cls.push('today-mark');
 
     const dowCls = dow===0 ? ' sun' : dow===6 ? ' sat' : '';
+    const borderStyle = 'border-color:'+borderColor+';';
+    const selBg = isSelected ? 'background:#2A2A45;' : '';
 
-    html += '<div class="'+cls.join(' ')+'" data-dk="'+dk+'">';
-    html += '<div class="ds-dow">'+DOW_SHORT[dow]+'</div>';
+    html += '<div class="'+cls.join(' ')+'" data-dk="'+dk+'" style="'+borderStyle+selBg+'">';
+    if(isToday){
+      html += '<div class="ds-dow" style="color:'+C_OK+';font-weight:700;">오늘</div>';
+    } else {
+      html += '<div class="ds-dow">'+DOW_SHORT[dow]+'</div>';
+    }
     html += '<div class="ds-date'+dowCls+'">'+d.getDate()+'</div>';
-    html += statusHtml;
     html += '</div>';
   }
   con.innerHTML = html;
@@ -2430,15 +2426,35 @@ function renderWeek(){
     const isTodayDay = isSameDay(d, today);
     const isPast = d < todayMidnight;
 
+    // 확정 상태 체크
+    let confirmedCount = 0;
+    let scheduledCount = 0;
+    empKeys.forEach(empId => {
+      if(sched[empId] && sched[empId].start){
+        scheduledCount++;
+        if(getShiftStatus(dk, empId)==='confirmed') confirmedCount++;
+      } else {
+        daysOff[empId] = (daysOff[empId]||0) + 1;
+      }
+    });
+    const allConfirmed = scheduledCount > 0 && confirmedCount === scheduledCount;
+    const borderC = scheduledCount > 0 ? (allConfirmed ? C_OK : C_DEF) : '#2E2E52';
+
     const cell = document.createElement('div');
     cell.className = 'week-day';
-    if(isTodayDay) cell.classList.add('today');
+    cell.style.borderColor = borderC;
     if(isCurrentDay) cell.style.background = '#2A2A45';
     if(isPast) cell.style.opacity = '.3';
 
     const label = document.createElement('div');
     label.className = 'day-label';
-    label.textContent = DOW_KR_SHORT[dow];
+    if(isTodayDay){
+      label.textContent = '오늘';
+      label.style.color = C_OK;
+      label.style.fontWeight = '700';
+    } else {
+      label.textContent = DOW_KR_SHORT[dow];
+    }
     cell.appendChild(label);
 
     const dateNum = document.createElement('div');
@@ -2448,26 +2464,11 @@ function renderWeek(){
     dateNum.textContent = d.getDate();
     cell.appendChild(dateNum);
 
-    // Colored dots for each scheduled employee
-    const dots = document.createElement('div');
-    dots.className = 'day-dots';
-    let scheduledCount = 0;
-    empKeys.forEach(empId => {
-      if(sched[empId] && sched[empId].start){
-        const dot = document.createElement('div');
-        dot.className = 'wdot';
-        dot.style.background = employees[empId] ? employees[empId].color : '#9090A8';
-        dots.appendChild(dot);
-        scheduledCount++;
-      } else {
-        daysOff[empId] = (daysOff[empId]||0) + 1;
-      }
-    });
-    cell.appendChild(dots);
-
+    // 인원수 + 확정 비율
     if(scheduledCount > 0){
       const cnt = document.createElement('div');
       cnt.className = 'day-count';
+      cnt.style.color = allConfirmed ? C_OK : C_DEF;
       cnt.textContent = scheduledCount+'명';
       cell.appendChild(cnt);
     }
@@ -2485,9 +2486,11 @@ function renderWeek(){
   empKeys.forEach(empId => {
     const emp = employees[empId];
     if(!emp) return;
+    const offCount = daysOff[empId]||0;
+    if(offCount === 0) return;
     const chip = document.createElement('div');
     chip.className = 'off-chip';
-    chip.innerHTML = '<div class="odot" style="background:'+(emp.color||'#9090A8')+'"></div><span class="off-text">'+emp.name+' 휴'+daysOff[empId]+'일</span>';
+    chip.innerHTML = '<span class="off-text" style="color:'+C_DEF+';">'+emp.name+' <span style="color:'+C_OFF+';">휴'+offCount+'</span></span>';
     $weekOffs.appendChild(chip);
   });
 }
