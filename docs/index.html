@@ -5210,8 +5210,14 @@ async function sharePerEmployee(empId){
     // 이미지 생성 (프리미엄 글래스모피즘)
     const imgBase64 = await buildShareImage_personal(emp, lines);
 
-    // .ics 생성
+    // .ics 생성 (SEQUENCE로 수정 반영 + 이전 공유 대비 취소 반영)
+    const seq = Math.floor(Date.now()/1000); // 매번 증가 → 캘린더앱이 최신으로 인식
+    const prevKey = 'ws_shared_'+empId;
+    const prevDates = JSON.parse(localStorage.getItem(prevKey)||'[]');
+    const curDates = events.map(ev=>ev.date);
+
     let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
+    // 현재 확정 일정
     events.forEach(ev=>{
       const [y,mo,dd] = ev.date.split('-');
       const [sh,sm] = ev.start.split(':').map(Number);
@@ -5223,13 +5229,25 @@ async function sharePerEmployee(empId){
         endDate = dateStr(nd);
       }
       const [ey,emo,ed] = endDate.split('-');
-      // 고정 UID → 같은 날짜+직원 재전송 시 캘린더앱이 업데이트(중복방지)
       ics += 'BEGIN:VEVENT\r\nUID:bbq-'+ev.date+'-'+ev.empId+'@workschedule\r\n';
+      ics += 'SEQUENCE:'+seq+'\r\n';
       ics += 'DTSTART;TZID=Asia/Seoul:'+y+mo+dd+'T'+pad(sh)+pad(sm)+'00\r\n';
       ics += 'DTEND;TZID=Asia/Seoul:'+ey+emo+ed+'T'+pad(eh)+pad(em)+'00\r\n';
       ics += 'SUMMARY:BBQ\r\nDESCRIPTION:'+ev.start+'~'+ev.end+' '+(ev.role||'')+'\r\nEND:VEVENT\r\n';
     });
+    // 이전에 공유했으나 지금 없는 날짜 → STATUS:CANCELLED
+    prevDates.forEach(pd=>{
+      if(curDates.includes(pd)) return;
+      const [y,mo,dd] = pd.split('-');
+      ics += 'BEGIN:VEVENT\r\nUID:bbq-'+pd+'-'+empId+'@workschedule\r\n';
+      ics += 'SEQUENCE:'+seq+'\r\nMETHOD:CANCEL\r\nSTATUS:CANCELLED\r\n';
+      ics += 'DTSTART;TZID=Asia/Seoul:'+y+mo+dd+'T000000\r\n';
+      ics += 'DTEND;TZID=Asia/Seoul:'+y+mo+dd+'T235900\r\n';
+      ics += 'SUMMARY:BBQ (취소)\r\nEND:VEVENT\r\n';
+    });
     ics += 'END:VCALENDAR\r\n';
+    // 공유 이력 저장
+    localStorage.setItem(prevKey, JSON.stringify(curDates));
 
     // 미리보기 모달
     const proceed = await showSharePreview(imgBase64);
