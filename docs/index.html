@@ -1109,43 +1109,74 @@ const ROLE_LABELS = {'주방':'주방','차배달':'차','오토바이':'바이�
 const ROLE_COLORS = {'주방':'#E67E22','차배달':'#4ECDC4','오토바이':'#FFD700'};
 
 // ========== 인원 기준 설정 (예상매출 기반) ==========
+// ========== 시간별 인원 기준 (per-hour) ==========
+const GAUGE_HOURS = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
+// 4 매출구간 프리셋 — 각 시간별 {주방:{min,max}, 오토바이:{min,max}, 차:{min,max}}
+function makeHourlyPreset(label, rules){
+  // rules: [{hours:[...], kitchen:{min,max}, bike:{min,max}, car:{min,max}}]
+  const hourly = {};
+  GAUGE_HOURS.forEach(h => { hourly[h] = {kitchen:{min:0,max:0},bike:{min:0,max:0},car:{min:0,max:0}}; });
+  rules.forEach(r => { r.hours.forEach(h => { if(hourly[h]!==undefined){ hourly[h] = {kitchen:r.kitchen, bike:r.bike, car:r.car}; }}); });
+  return {label, hourly, daStart:10, daEnd:1};
+}
 const STAFF_PRESETS = {
-  '보통': { label:'보통(~150만)', kitchen17before:{max:1,min:1}, kitchenPeak:{max:3,min:2}, kitchenLateNight:{max:2,min:1}, kitchenNight:{max:3,min:2}, kitchenOther:{max:2,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
-  '바쁨': { label:'바쁨(150~250만)', kitchen17before:{max:2,min:1}, kitchenPeak:{max:4,min:2}, kitchenLateNight:{max:3,min:1}, kitchenNight:{max:3,min:2}, kitchenOther:{max:3,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
-  '매우바쁨': { label:'매우바쁨(250만~)', kitchen17before:{max:2,min:1}, kitchenPeak:{max:5,min:3}, kitchenLateNight:{max:3,min:2}, kitchenNight:{max:4,min:2}, kitchenOther:{max:3,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
+  '한가': makeHourlyPreset('한가(~80만)', [
+    {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:1}, bike:{min:0,max:1}, car:{min:0,max:0}},
+    {hours:[17,18,19], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[22,23,0], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[1,2], kitchen:{min:1,max:1}, bike:{min:1,max:1}, car:{min:0,max:1}},
+  ]),
+  '보통': makeHourlyPreset('보통(80~150만)', [
+    {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:1}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[17,18,19], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[22,23,0], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[1,2], kitchen:{min:1,max:2}, bike:{min:1,max:1}, car:{min:0,max:1}},
+  ]),
+  '바쁨': makeHourlyPreset('바쁨(150~250만)', [
+    {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[17,18,19], kitchen:{min:2,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[22,23,0], kitchen:{min:1,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[1,2], kitchen:{min:1,max:2}, bike:{min:1,max:1}, car:{min:0,max:1}},
+  ]),
+  '매우바쁨': makeHourlyPreset('매우바쁨(250만~)', [
+    {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[17,18,19], kitchen:{min:3,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21], kitchen:{min:2,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[22,23,0], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[1,2], kitchen:{min:1,max:2}, bike:{min:1,max:1}, car:{min:0,max:1}},
+  ]),
 };
 let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'null') || {
   preset: '보통',
-  custom: null // null이면 프리셋 사용, 아니면 커스텀
+  hourlyOverrides: null, // {hour: {kitchen:{min,max},bike:{min,max},car:{min,max}}}
+  dailyRevenue: null // 당일 매출 예상 구간 키 (null이면 preset 사용)
 };
+// 기존 형태 마이그레이션 (custom 필드 있으면 리셋)
+if(staffSettings.custom){ staffSettings = {preset:'보통', hourlyOverrides:null, dailyRevenue:null}; }
 function saveStaffSettings(){ localStorage.setItem('ws_staff_settings', JSON.stringify(staffSettings)); fbPut('/workschedule/staff_settings', staffSettings); }
-function getActiveStaffConfig(){
-  if(staffSettings.custom) return staffSettings.custom;
-  return STAFF_PRESETS[staffSettings.preset] || STAFF_PRESETS['보통'];
-}
 
-// 시간대별 역할 제한
+function getActivePresetKey(){ return staffSettings.dailyRevenue || staffSettings.preset || '보통'; }
+function getActivePreset(){ return STAFF_PRESETS[getActivePresetKey()] || STAFF_PRESETS['보통']; }
+
+// 시간대별 역할 제한 (per-hour)
 function getRoleLimits(hour){
-  const cfg = getActiveStaffConfig();
-  const isBefore17 = hour >= 6 && hour < 17;
-  const isPeak = hour >= 17 && hour <= 19;
-  const isLateNight = hour >= 22 || hour < 3; // 22시~03시
-  const isNight = hour >= 20 && hour < 22; // 20~21시
-  let kitchenLimits;
-  if(isBefore17) kitchenLimits = cfg.kitchen17before;
-  else if(isPeak) kitchenLimits = cfg.kitchenPeak;
-  else if(isLateNight) kitchenLimits = cfg.kitchenLateNight || cfg.kitchenNight;
-  else if(isNight) kitchenLimits = cfg.kitchenNight;
-  else kitchenLimits = cfg.kitchenOther;
-  // 배달대행 종료 후(1시~) → 배달 최소 1명 (오토바이 우선)
-  const daEnd = cfg.daEnd || 1;
-  const afterDA = (hour >= daEnd && hour < 6); // 대행 종료 ~ 영업종료
-  let bikeLimits = {...cfg.bike};
-  if(afterDA) bikeLimits = {max: cfg.bike.max, min: 1};
+  // 시간별 오버라이드 우선
+  if(staffSettings.hourlyOverrides && staffSettings.hourlyOverrides[hour]){
+    return {
+      '주방': staffSettings.hourlyOverrides[hour].kitchen,
+      '오토바이': staffSettings.hourlyOverrides[hour].bike,
+      '차배달': staffSettings.hourlyOverrides[hour].car,
+    };
+  }
+  const preset = getActivePreset();
+  const h = preset.hourly[hour] || {kitchen:{min:0,max:0},bike:{min:0,max:0},car:{min:0,max:0}};
   return {
-    '차배달': cfg.car,
-    '오토바이': bikeLimits,
-    '주방': kitchenLimits,
+    '주방': h.kitchen,
+    '오토바이': h.bike,
+    '차배달': h.car,
   };
 }
 
@@ -1854,31 +1885,36 @@ function renderBriefing(){
   }
   html += '</div>';
 
-  // ===== 3줄 인원 게이지 (주방/오토바이/차) =====
-  const hmHours = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
+  // ===== 당일 매출 예상 + 3줄 인원 게이지 =====
+  const hmHours = GAUGE_HOURS;
   const gaugeRows = [
-    {key:'kitchen', label:'주방', color:'#E67E22', getVal:s=>s.kitchen, getLimits:h=>getRoleLimits(h)['주방']},
-    {key:'bikeDel', label:'바이크', color:'#FFD700', getVal:s=>s.bikeDel, getLimits:h=>getRoleLimits(h)['오토바이']},
-    {key:'carDel', label:'차', color:'#4ECDC4', getVal:s=>s.carDel, getLimits:h=>getRoleLimits(h)['차배달']},
+    {key:'kitchen', roleKey:'주방', label:'주방', color:'#E67E22', getVal:s=>s.kitchen},
+    {key:'bikeDel', roleKey:'오토바이', label:'바이크', color:'#FFD700', getVal:s=>s.bikeDel},
+    {key:'carDel', roleKey:'차배달', label:'차', color:'#4ECDC4', getVal:s=>s.carDel},
   ];
-  // 설정 버튼 + 프리셋 라벨
-  const activeCfg = getActiveStaffConfig();
-  const presetLabel = staffSettings.custom ? '커스텀' : (activeCfg.label || staffSettings.preset);
-  html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">';
-  html += '<span style="font-size:.5rem;color:#707088;">인원기준</span>';
-  html += '<span onclick="openStaffSettingsModal()" style="font-size:.55rem;padding:1px 6px;border-radius:3px;background:#242444;border:1px solid #2E2E52;color:#FFD700;cursor:pointer;font-weight:600;">'+presetLabel+' ▼</span>';
+  // 매출 구간 선택 버튼 (4구간)
+  const activeKey = getActivePresetKey();
+  html += '<div style="display:flex;gap:3px;margin-bottom:3px;">';
+  for(const [key, pre] of Object.entries(STAFF_PRESETS)){
+    const sel = activeKey === key;
+    html += '<div onclick="setDailyRevenue(\''+key+'\')" style="flex:1;padding:3px 2px;border-radius:4px;text-align:center;cursor:pointer;font-size:.5rem;font-weight:700;'
+      +(sel?'background:#FFD70033;border:1.5px solid #FFD700;color:#FFD700;':'background:#1A1A30;border:1.5px solid #2E2E52;color:#707088;')
+      +'">'+pre.label+'</div>';
+  }
   html += '</div>';
+  if(staffSettings.hourlyOverrides) html += '<div style="font-size:.45rem;color:#E67E22;margin-bottom:1px;">커스텀 수정 적용중 <span onclick="clearHourlyOverrides()" style="text-decoration:underline;cursor:pointer;">초기화</span></div>';
 
   gaugeRows.forEach(row => {
     html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;">';
-    html += '<span onclick="openStaffSettingsModal()" style="font-size:.5rem;font-weight:700;color:'+row.color+';min-width:28px;cursor:pointer;">'+row.label+'</span>';
-    html += '<div onclick="openStaffSettingsModal()" style="flex:1;display:flex;gap:1px;height:16px;cursor:pointer;">';
+    html += '<span style="font-size:.5rem;font-weight:700;color:'+row.color+';min-width:28px;">'+row.label+'</span>';
+    html += '<div style="flex:1;display:flex;gap:1px;height:16px;">';
     hmHours.forEach(h => {
       const hStr = pad(h)+':00';
       const s = staffing[hStr];
       const val = s ? row.getVal(s) : 0;
-      const lim = row.getLimits(h);
+      const lim = getRoleLimits(h)[row.roleKey];
       const isBikeDA = row.key==='bikeDel' && val===0 && s && s.daAvail;
+      const hasOverride = staffSettings.hourlyOverrides && staffSettings.hourlyOverrides[h];
       let bg = '#1A1A30', tc = '#707088', txt = '';
       if(isBikeDA){
         bg = '#E67E2230'; tc = '#E67E22'; txt = '대';
@@ -1890,7 +1926,7 @@ function renderBriefing(){
       } else if(lim.min > 0){
         bg = C_OFF+'22'; tc = C_OFF; txt = '!';
       }
-      html += '<div style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+tc+';font-weight:700;border-radius:1px;">';
+      html += '<div onclick="openHourLimitEdit('+h+')" style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+tc+';font-weight:700;border-radius:1px;cursor:pointer;'+(hasOverride?'border-bottom:1px solid #FFD700;':'')+'">';
       html += txt;
       html += '</div>';
     });
@@ -2200,7 +2236,7 @@ function renderTimeline(){
 function calcStaffing(empKeys, dk){
   const result = {};
   const checkHours = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
-  const cfg = getActiveStaffConfig();
+  const preset = getActivePreset();
 
   for(const h of checkHours){
     const hStr = pad(h)+':00';
@@ -2311,8 +2347,8 @@ function calcStaffing(empKeys, dk){
 
     const delivery = carFinal + bikeFinal;
     // 배달대행 가용 여부
-    const DA_START = timeToMinutesFrom6(pad(cfg.daStart)+':00');
-    const DA_END = timeToMinutesFrom6(pad(cfg.daEnd)+':00');
+    const DA_START = timeToMinutesFrom6(pad(preset.daStart||10)+':00');
+    const DA_END = timeToMinutesFrom6(pad(preset.daEnd||1)+':00');
     const daAvail = hMin >= DA_START && hMin < DA_END;
     // 배달대행 포함 합산
     const deliveryWithDA = delivery + (daAvail && delivery < 1 ? 1 : 0);
@@ -2815,115 +2851,96 @@ function updateRolePills(){
   $('shiftRoleNote').textContent = empName ? '('+empName+': '+caps.map(c=>ROLE_LABELS[c]||c).join('+')+' 가능)' : '';
 }
 
-// ========== 인원 기준 설정 모달 ==========
-function openStaffSettingsModal(){
-  let overlay = document.getElementById('staffSettingsOverlay');
-  if(overlay){ overlay.remove(); }
+// ========== 당일 매출 예상 설정 ==========
+function setDailyRevenue(key){
+  staffSettings.dailyRevenue = key;
+  staffSettings.hourlyOverrides = null; // 프리셋 변경 시 오버라이드 초기화
+  saveStaffSettings();
+  renderAll();
+}
+function clearHourlyOverrides(){
+  staffSettings.hourlyOverrides = null;
+  saveStaffSettings();
+  renderAll();
+}
+
+// ========== 시간별 인원 수정 팝업 (게이지 셀 터치) ==========
+function openHourLimitEdit(hour){
+  let overlay = document.getElementById('hourLimitOverlay');
+  if(overlay) overlay.remove();
   overlay = document.createElement('div');
-  overlay.id = 'staffSettingsOverlay';
+  overlay.id = 'hourLimitOverlay';
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
-  const cfg = getActiveStaffConfig();
-  const isCustom = !!staffSettings.custom;
 
-  let h = '<div style="background:#1E1E3A;border-radius:12px;padding:16px;width:90%;max-width:360px;max-height:80vh;overflow-y:auto;">';
-  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
-  h += '<span style="font-size:.9rem;font-weight:800;color:#FFD700;">인원 기준 설정</span>';
-  h += '<span id="ssClose" style="font-size:1.2rem;color:#707088;cursor:pointer;">&times;</span>';
-  h += '</div>';
-
-  // 프리셋 선택
-  h += '<div style="font-size:.65rem;color:#9090A8;margin-bottom:4px;">예상매출 기준 프리셋</div>';
-  h += '<div style="display:flex;gap:4px;margin-bottom:10px;">';
-  for(const [key, pre] of Object.entries(STAFF_PRESETS)){
-    const sel = !isCustom && staffSettings.preset === key;
-    h += '<div onclick="applyStaffPreset(\''+key+'\')" style="flex:1;padding:6px 4px;border-radius:6px;text-align:center;cursor:pointer;font-size:.6rem;font-weight:700;'
-      +(sel?'background:#FFD70033;border:2px solid #FFD700;color:#FFD700;':'background:#242444;border:2px solid #2E2E52;color:#9090A8;')
-      +'">'+pre.label+'</div>';
-  }
-  h += '</div>';
-
-  // 커스텀 상세 (현재 적용값 표시)
-  h += '<div style="font-size:.65rem;color:#9090A8;margin-bottom:4px;">현재 적용값 (터치하여 커스텀 수정)</div>';
-  const sections = [
-    {id:'k17b', label:'주방 17시전', val:cfg.kitchen17before},
-    {id:'kpeak', label:'주방 피크(17~19)', val:cfg.kitchenPeak},
-    {id:'knight', label:'주방 야간(20~21)', val:cfg.kitchenNight},
-    {id:'klate', label:'주방 심야(22~03)', val:cfg.kitchenLateNight||cfg.kitchenNight},
-    {id:'kother', label:'주방 기타', val:cfg.kitchenOther},
-    {id:'bike', label:'오토바이', val:cfg.bike},
-    {id:'car', label:'차배달', val:cfg.car},
+  const limits = getRoleLimits(hour);
+  const roles = [
+    {key:'kitchen', roleKey:'주방', label:'주방', color:'#E67E22', lim:limits['주방']},
+    {key:'bike', roleKey:'오토바이', label:'바이크', color:'#FFD700', lim:limits['오토바이']},
+    {key:'car', roleKey:'차배달', label:'차', color:'#4ECDC4', lim:limits['차배달']},
   ];
-  sections.forEach(s => {
-    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;padding:4px 8px;background:#242444;border-radius:6px;">';
-    h += '<span style="font-size:.6rem;color:#E0E0EC;min-width:90px;">'+s.label+'</span>';
-    h += '<span style="font-size:.55rem;color:#707088;">최소</span>';
-    h += '<input type="number" value="'+s.val.min+'" min="0" max="9" data-ss="'+s.id+'_min" style="width:32px;background:#1A1A30;border:1px solid #2E2E52;color:#FFD700;text-align:center;font-size:.7rem;border-radius:3px;padding:2px;">';
-    h += '<span style="font-size:.55rem;color:#707088;">최대</span>';
-    h += '<input type="number" value="'+s.val.max+'" min="0" max="9" data-ss="'+s.id+'_max" style="width:32px;background:#1A1A30;border:1px solid #2E2E52;color:#FFD700;text-align:center;font-size:.7rem;border-radius:3px;padding:2px;">';
+
+  let h = '<div style="background:#1E1E3A;border-radius:12px;padding:16px;width:280px;">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  h += '<span style="font-size:.9rem;font-weight:800;color:#FFD700;">'+hour+'시 인원 설정</span>';
+  h += '<span id="hlClose" style="font-size:1.2rem;color:#707088;cursor:pointer;">&times;</span>';
+  h += '</div>';
+
+  roles.forEach(r => {
+    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:6px 8px;background:#242444;border-radius:6px;">';
+    h += '<span style="font-size:.7rem;font-weight:700;color:'+r.color+';min-width:40px;">'+r.label+'</span>';
+    h += '<span style="font-size:.6rem;color:#707088;">최소</span>';
+    h += '<div style="display:flex;align-items:center;gap:2px;">';
+    h += '<span onclick="hlAdj(\''+r.key+'_min\',-1)" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#1A1A30;border-radius:4px;color:#E0E0EC;font-weight:700;cursor:pointer;">-</span>';
+    h += '<input type="number" value="'+r.lim.min+'" min="0" max="9" data-hl="'+r.key+'_min" style="width:28px;background:#1A1A30;border:1px solid #2E2E52;color:#FFD700;text-align:center;font-size:.8rem;border-radius:3px;padding:2px;">';
+    h += '<span onclick="hlAdj(\''+r.key+'_min\',1)" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#1A1A30;border-radius:4px;color:#E0E0EC;font-weight:700;cursor:pointer;">+</span>';
+    h += '</div>';
+    h += '<span style="font-size:.6rem;color:#707088;">최대</span>';
+    h += '<div style="display:flex;align-items:center;gap:2px;">';
+    h += '<span onclick="hlAdj(\''+r.key+'_max\',-1)" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#1A1A30;border-radius:4px;color:#E0E0EC;font-weight:700;cursor:pointer;">-</span>';
+    h += '<input type="number" value="'+r.lim.max+'" min="0" max="9" data-hl="'+r.key+'_max" style="width:28px;background:#1A1A30;border:1px solid #2E2E52;color:#FFD700;text-align:center;font-size:.8rem;border-radius:3px;padding:2px;">';
+    h += '<span onclick="hlAdj(\''+r.key+'_max\',1)" style="width:22px;height:22px;display:flex;align-items:center;justify-content:center;background:#1A1A30;border-radius:4px;color:#E0E0EC;font-weight:700;cursor:pointer;">+</span>';
+    h += '</div>';
     h += '</div>';
   });
 
-  // 배달대행 시간
-  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;padding:4px 8px;background:#242444;border-radius:6px;">';
-  h += '<span style="font-size:.6rem;color:#E67E22;min-width:90px;">배달대행</span>';
-  h += '<span style="font-size:.55rem;color:#707088;">시작</span>';
-  h += '<input type="number" value="'+cfg.daStart+'" min="0" max="23" data-ss="daStart" style="width:32px;background:#1A1A30;border:1px solid #2E2E52;color:#FFD700;text-align:center;font-size:.7rem;border-radius:3px;padding:2px;">';
-  h += '<span style="font-size:.55rem;color:#707088;">~종료</span>';
-  h += '<input type="number" value="'+cfg.daEnd+'" min="0" max="23" data-ss="daEnd" style="width:32px;background:#1A1A30;border:1px solid #2E2E52;color:#FFD700;text-align:center;font-size:.7rem;border-radius:3px;padding:2px;">';
-  h += '<span style="font-size:.5rem;color:#707088;">시</span>';
+  h += '<div style="display:flex;gap:6px;margin-top:8px;">';
+  h += '<div onclick="saveHourLimit('+hour+')" style="flex:1;padding:8px;border-radius:6px;text-align:center;cursor:pointer;font-size:.7rem;font-weight:700;background:#FFD70033;border:1px solid #FFD700;color:#FFD700;">저장</div>';
+  h += '<div onclick="deleteHourLimit('+hour+')" style="flex:1;padding:8px;border-radius:6px;text-align:center;cursor:pointer;font-size:.7rem;font-weight:700;background:#24244480;border:1px solid #2E2E52;color:#9090A8;">프리셋복귀</div>';
+  h += '</div>';
   h += '</div>';
 
-  // 버튼
-  h += '<div style="display:flex;gap:6px;">';
-  h += '<div onclick="saveCustomStaffSettings()" style="flex:1;padding:8px;border-radius:6px;text-align:center;cursor:pointer;font-size:.7rem;font-weight:700;background:#FFD70033;border:1px solid #FFD700;color:#FFD700;">커스텀 저장</div>';
-  h += '<div onclick="resetStaffToPreset()" style="flex:1;padding:8px;border-radius:6px;text-align:center;cursor:pointer;font-size:.7rem;font-weight:700;background:#24244480;border:1px solid #2E2E52;color:#9090A8;">프리셋 복귀</div>';
-  h += '</div>';
-
-  // 편입 규칙 안내
-  h += '<div style="margin-top:8px;padding:6px 8px;background:#1A1A30;border-radius:6px;font-size:.5rem;color:#707088;line-height:1.5;">';
-  h += '• 멀티역할 = 0.5명 간주<br>';
-  h += '• 주방초과 → 오토바이 우선편입 → 차 편입<br>';
-  h += '• 오토바이 출근자 있으면 → 차로 편입<br>';
-  h += '• 배달대행 시간 내 배달 부족 → 대행 합산';
-  h += '</div>';
-
-  h += '</div>';
   overlay.innerHTML = h;
   document.body.appendChild(overlay);
-  overlay.querySelector('#ssClose').onclick = ()=> overlay.remove();
+  overlay.querySelector('#hlClose').onclick = ()=> overlay.remove();
   overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
 }
-
-function applyStaffPreset(key){
-  staffSettings.preset = key;
-  staffSettings.custom = null;
-  saveStaffSettings();
-  document.getElementById('staffSettingsOverlay')?.remove();
-  renderAll();
+function hlAdj(key, delta){
+  const inp = document.querySelector('[data-hl="'+key+'"]');
+  if(inp){ inp.value = Math.max(0, Math.min(9, parseInt(inp.value||'0')+delta)); }
 }
-function saveCustomStaffSettings(){
-  const g = (id) => parseInt(document.querySelector('[data-ss="'+id+'"]')?.value||'0');
-  staffSettings.custom = {
-    label:'커스텀',
-    kitchen17before:{max:g('k17b_max'),min:g('k17b_min')},
-    kitchenPeak:{max:g('kpeak_max'),min:g('kpeak_min')},
-    kitchenNight:{max:g('knight_max'),min:g('knight_min')},
-    kitchenLateNight:{max:g('klate_max'),min:g('klate_min')},
-    kitchenOther:{max:g('kother_max'),min:g('kother_min')},
-    car:{max:g('car_max'),min:g('car_min')},
-    bike:{max:g('bike_max'),min:g('bike_min')},
-    daStart:g('daStart'), daEnd:g('daEnd'),
+function saveHourLimit(hour){
+  const g = (k) => parseInt(document.querySelector('[data-hl="'+k+'"]')?.value||'0');
+  if(!staffSettings.hourlyOverrides) staffSettings.hourlyOverrides = {};
+  staffSettings.hourlyOverrides[hour] = {
+    kitchen:{min:g('kitchen_min'),max:g('kitchen_max')},
+    bike:{min:g('bike_min'),max:g('bike_max')},
+    car:{min:g('car_min'),max:g('car_max')},
   };
   saveStaffSettings();
-  document.getElementById('staffSettingsOverlay')?.remove();
+  document.getElementById('hourLimitOverlay')?.remove();
   renderAll();
 }
-function resetStaffToPreset(){
-  staffSettings.custom = null;
+function deleteHourLimit(hour){
+  if(staffSettings.hourlyOverrides){ delete staffSettings.hourlyOverrides[hour]; if(!Object.keys(staffSettings.hourlyOverrides).length) staffSettings.hourlyOverrides = null; }
   saveStaffSettings();
-  document.getElementById('staffSettingsOverlay')?.remove();
+  document.getElementById('hourLimitOverlay')?.remove();
   renderAll();
 }
+
+// ========== 기존 호환용 ==========
+function openStaffSettingsModal(){ /* 게이지 셀 터치로 대체됨 */ }
+function applyStaffPreset(key){ setDailyRevenue(key); }
+function resetStaffToPreset(){ clearHourlyOverrides(); }
 
 function openShiftModal(empId){
   shiftSelectedEmpId = empId || null;
