@@ -1158,7 +1158,12 @@ let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'nul
 if(staffSettings.custom){ staffSettings = {preset:'보통', hourlyOverrides:null, dailyRevenue:null}; }
 function saveStaffSettings(){ localStorage.setItem('ws_staff_settings', JSON.stringify(staffSettings)); fbPut('/workschedule/staff_settings', staffSettings); }
 
-function getActivePresetKey(){ return staffSettings.dailyRevenue || staffSettings.preset || '보통'; }
+// 날짜별 매출구간 맵
+let dailyRevenueMap = JSON.parse(localStorage.getItem('ws_daily_revenue') || '{}');
+function getActivePresetKey(){
+  const dk = dateKey(currentDate);
+  return dailyRevenueMap[dk] || staffSettings.preset || '보통';
+}
 function getActivePreset(){ return STAFF_PRESETS[getActivePresetKey()] || STAFF_PRESETS['보통']; }
 
 // 시간대별 역할 제한 (per-hour)
@@ -1892,17 +1897,20 @@ function renderBriefing(){
     {key:'bikeDel', roleKey:'오토바이', label:'바이크', color:'#FFD700', getVal:s=>s.bikeDel},
     {key:'carDel', roleKey:'차배달', label:'차', color:'#4ECDC4', getVal:s=>s.carDel},
   ];
-  // 매출 구간 선택 버튼 (4구간)
+  // 매출 구간 선택 버튼 (4구간) + 설정 버튼
   const activeKey = getActivePresetKey();
-  html += '<div style="display:flex;gap:3px;margin-bottom:3px;">';
+  const presetLabels = JSON.parse(localStorage.getItem('ws_preset_labels') || '{}');
+  html += '<div style="display:flex;gap:3px;margin-bottom:3px;align-items:center;">';
   for(const [key, pre] of Object.entries(STAFF_PRESETS)){
     const sel = activeKey === key;
-    html += '<div onclick="setDailyRevenue(\''+key+'\')" style="flex:1;padding:3px 2px;border-radius:4px;text-align:center;cursor:pointer;font-size:.5rem;font-weight:700;'
+    const label = presetLabels[key] || pre.label;
+    html += '<div data-revenue-key="'+key+'" style="flex:1;padding:4px 2px;border-radius:4px;text-align:center;cursor:pointer;font-size:.5rem;font-weight:700;'
       +(sel?'background:#FFD70033;border:1.5px solid #FFD700;color:#FFD700;':'background:#1A1A30;border:1.5px solid #2E2E52;color:#707088;')
-      +'">'+pre.label+'</div>';
+      +'">'+label+'</div>';
   }
+  html += '<div data-revenue-edit style="padding:4px 5px;border-radius:4px;cursor:pointer;font-size:.5rem;color:#707088;background:#1A1A30;border:1px solid #2E2E52;">⚙</div>';
   html += '</div>';
-  if(staffSettings.hourlyOverrides) html += '<div style="font-size:.45rem;color:#E67E22;margin-bottom:1px;">커스텀 수정 적용중 <span onclick="clearHourlyOverrides()" style="text-decoration:underline;cursor:pointer;">초기화</span></div>';
+  if(staffSettings.hourlyOverrides) html += '<div style="font-size:.45rem;color:#E67E22;margin-bottom:1px;">커스텀 수정 적용중 <span data-clear-overrides style="text-decoration:underline;cursor:pointer;">초기화</span></div>';
 
   gaugeRows.forEach(row => {
     html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;">';
@@ -1941,7 +1949,14 @@ function renderBriefing(){
 
   panel.innerHTML = html;
 
-  // 게이지 셀 터치 → 시간별 수정 팝업 (이벤트 위임)
+  // 이벤트 위임: 매출구간 버튼 + 게이지 셀 + 초기화
+  panel.querySelectorAll('[data-revenue-key]').forEach(btn => {
+    btn.addEventListener('click', () => setDailyRevenue(btn.dataset.revenueKey));
+  });
+  const rvEdit = panel.querySelector('[data-revenue-edit]');
+  if(rvEdit) rvEdit.addEventListener('click', () => openRevenueEditModal());
+  const clrBtn = panel.querySelector('[data-clear-overrides]');
+  if(clrBtn) clrBtn.addEventListener('click', () => clearHourlyOverrides());
   panel.querySelectorAll('[data-gauge-hour]').forEach(cell => {
     cell.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -2860,9 +2875,13 @@ function updateRolePills(){
 }
 
 // ========== 당일 매출 예상 설정 ==========
+function saveDailyRevenueMap(){ localStorage.setItem('ws_daily_revenue', JSON.stringify(dailyRevenueMap)); fbPut('/workschedule/daily_revenue', dailyRevenueMap); }
+
 function setDailyRevenue(key){
-  staffSettings.dailyRevenue = key;
-  staffSettings.hourlyOverrides = null; // 프리셋 변경 시 오버라이드 초기화
+  const dk = dateKey(currentDate);
+  dailyRevenueMap[dk] = key;
+  saveDailyRevenueMap();
+  staffSettings.hourlyOverrides = null;
   saveStaffSettings();
   renderAll();
 }
@@ -2870,6 +2889,42 @@ function clearHourlyOverrides(){
   staffSettings.hourlyOverrides = null;
   saveStaffSettings();
   renderAll();
+}
+// 구간 매출 금액 수정 모달
+function openRevenueEditModal(){
+  let overlay = document.getElementById('revenueEditOverlay');
+  if(overlay) overlay.remove();
+  overlay = document.createElement('div');
+  overlay.id = 'revenueEditOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  // 구간별 라벨 수정
+  const presetLabels = JSON.parse(localStorage.getItem('ws_preset_labels') || 'null') || {};
+  let h = '<div style="background:#1E1E3A;border-radius:12px;padding:16px;width:85%;max-width:320px;">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+  h += '<span style="font-size:.85rem;font-weight:800;color:#FFD700;">매출 구간 설정</span>';
+  h += '<span id="rvClose" style="font-size:1.2rem;color:#707088;cursor:pointer;">&times;</span>';
+  h += '</div>';
+  h += '<div style="font-size:.55rem;color:#9090A8;margin-bottom:6px;">구간명을 수정하면 버튼 라벨이 변경됩니다</div>';
+  Object.entries(STAFF_PRESETS).forEach(([key, pre]) => {
+    const customLabel = presetLabels[key] || pre.label;
+    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:6px 8px;background:#242444;border-radius:6px;">';
+    h += '<span style="font-size:.6rem;color:#FFD700;font-weight:700;min-width:40px;">'+key+'</span>';
+    h += '<input type="text" value="'+customLabel+'" data-rv-key="'+key+'" style="flex:1;background:#1A1A30;border:1px solid #2E2E52;color:#E0E0EC;font-size:.65rem;border-radius:3px;padding:4px 6px;">';
+    h += '</div>';
+  });
+  h += '<div id="rvSaveBtn" style="padding:8px;border-radius:6px;text-align:center;cursor:pointer;font-size:.7rem;font-weight:700;background:#FFD70033;border:1px solid #FFD700;color:#FFD700;margin-top:6px;">저장</div>';
+  h += '</div>';
+  overlay.innerHTML = h;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#rvClose').addEventListener('click', ()=> overlay.remove());
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+  overlay.querySelector('#rvSaveBtn').addEventListener('click', ()=>{
+    const labels = {};
+    overlay.querySelectorAll('[data-rv-key]').forEach(inp => { labels[inp.dataset.rvKey] = inp.value.trim(); });
+    localStorage.setItem('ws_preset_labels', JSON.stringify(labels));
+    overlay.remove();
+    renderAll();
+  });
 }
 
 // ========== 시간별 인원 수정 팝업 (게이지 셀 터치) ==========
