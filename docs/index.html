@@ -5284,6 +5284,7 @@ function buildKakaoPerEmp(){
   let hasAny = false;
   empKeys.forEach(eid=>{
     const emp = employees[eid];
+    if(emp.name === '이원규') return;
     let hasConfirmed = false;
     for(let i=0;i<7;i++){
       const d = new Date(today); d.setDate(d.getDate()+i);
