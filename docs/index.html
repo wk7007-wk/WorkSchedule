@@ -1118,24 +1118,24 @@ function makeHourlyPreset(label, rules){
 }
 const STAFF_PRESETS = {
   '250': makeHourlyPreset('~250만', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:0.5,max:1}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
-    {hours:[18,19], kitchen:{min:3,max:3.5}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
-    {hours:[20,21,22,23,0,1,2], kitchen:{min:2,max:3}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
+    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:1}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[18,19], kitchen:{min:3,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21,22,23,0,1,2], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
   ]),
   '300': makeHourlyPreset('~300만', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:0.5,max:1.5}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
-    {hours:[18,19], kitchen:{min:3.5,max:4.5}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
-    {hours:[20,21,22,23,0,1,2], kitchen:{min:2.5,max:3.5}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
+    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[18,19], kitchen:{min:4,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21,22,23,0,1,2], kitchen:{min:3,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
   ]),
   '350': makeHourlyPreset('~350만', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:0.5}},
-    {hours:[18,19], kitchen:{min:4,max:5}, bike:{min:0,max:1}, car:{min:0,max:0.5}},
-    {hours:[20,21,22,23,0,1,2], kitchen:{min:3,max:4}, bike:{min:0,max:1}, car:{min:0,max:0.5}},
+    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[18,19], kitchen:{min:4,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21,22,23,0,1,2], kitchen:{min:3,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
   ]),
   '맥스': makeHourlyPreset('350만~', [
     {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[18,19], kitchen:{min:4.5,max:6}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[20,21,22,23,0,1,2], kitchen:{min:3.5,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[18,19], kitchen:{min:5,max:6}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21,22,23,0,1,2], kitchen:{min:4,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
   ]),
 };
 let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'null') || {
@@ -1175,9 +1175,9 @@ let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'nul
     }
   }
   // v2: 소수점 프리셋 적용 → 기존 정수 오버라이드 초기화
-  if(staffSettings.ver !== 2){
+  if(staffSettings.ver !== 3){
     staffSettings.presetOverrides = {};
-    staffSettings.ver = 2;
+    staffSettings.ver = 3;
     changed = true;
   }
   if(changed){
@@ -2428,11 +2428,12 @@ function calcStaffing(empKeys, dk){
     const daFill = daAvail ? bikeNeed + carNeed : 0; // 배달 부족분 합산
     const deliveryWithDA = delivery + daFill;
 
-    // 충돌 체크 (편입 후 기준)
+    // 충돌 체크: 주방 min/max = 총 인원 기준 (가게에 주방 공백 없음)
+    // 배달(bike/car)은 대행이 커버하므로 over 체크만
     const carOver = carFinal > limits['차배달'].max;
     const bikeOver = bikeFinal > limits['오토바이'].max;
-    const kitchenOver = kitchenFinal > limits['주방'].max;
-    const kitchenUnder = kitchenFinal < limits['주방'].min;
+    const kitchenOver = total > limits['주방'].max;
+    const kitchenUnder = total < limits['주방'].min;
 
     result[hStr] = {
       kitchen: kitchenFinal, carDel: carFinal, bikeDel: bikeFinal,
