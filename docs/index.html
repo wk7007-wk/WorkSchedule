@@ -1197,6 +1197,12 @@ let dataLoaded = false;
 let confirmedDays = {}; // { 'yyyy-MM-dd': true } — 확정된 날짜
 let shiftStatus = {}; // { 'yyyy-MM-dd_empId': 'auto'|'confirmed'|'pending' } — 보정 상태
 
+// 색상 상수 (전역)
+const C_OK = '#2ECC71';   // 확정
+const C_DEF = '#9090A8';  // 보정(기본)
+const C_OFF = '#E74C3C';  // 휴무/충돌
+const C_BG = '#1A1A30';
+
 const LS_CONFIRMED = 'ws_confirmed';
 const LS_SHIFT_STATUS = 'ws_shift_status';
 const LS_PATTERNS = 'ws_patterns'; // AI 학습용 확정 패턴
@@ -3655,12 +3661,6 @@ function renderListView(){
     }
   });
   working.sort((a,b) => timeToMinutesFrom6(a.shift.start) - timeToMinutesFrom6(b.shift.start));
-
-  // 색상 통일: 초록=확정, 회색=보정/기본, 빨강=휴무/충돌
-  const C_OK = '#2ECC71';  // 확정
-  const C_DEF = '#9090A8'; // 보정(기본)
-  const C_OFF = '#E74C3C'; // 휴무/충돌
-  const C_BG = '#1A1A30';
 
   let html = '<div style="padding:6px 8px;">';
 
