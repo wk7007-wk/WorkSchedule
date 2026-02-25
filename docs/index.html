@@ -4484,7 +4484,7 @@ function renderTimebarView(){
     html += '</div>';
   }
 
-  // === 합계 인원 행 ===
+  // === 합계 인원 행 (터치→구간설정) ===
   html += '<div style="display:flex;align-items:center;padding:3px 6px;margin-top:4px;border-top:1px solid #2E2E52;">';
   html += '<div style="min-width:58px;font-size:.55rem;color:#9090A8;">인원</div>';
   html += '<div style="flex:1;position:relative;height:22px;display:flex;gap:1px;">';
@@ -4493,7 +4493,7 @@ function renderTimebarView(){
     const s = staffing[hStr];
     const t = s ? s.total : 0;
     const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver);
-    html += '<div style="flex:1;background:'+(anyConflict?C_OFF+'22':t>0?'#3498DB15':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:'+(anyConflict?C_OFF:t>0?'#3498DB':'#707088')+';font-weight:700;border-radius:1px;">';
+    html += '<div data-action="gaugeEdit" data-hour="'+h+'" style="flex:1;background:'+(anyConflict?C_OFF+'22':t>0?'#3498DB15':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:'+(anyConflict?C_OFF:t>0?'#3498DB':'#707088')+';font-weight:700;border-radius:1px;cursor:pointer;">';
     html += t > 0 ? t : '';
     html += '</div>';
   });
@@ -4512,6 +4512,7 @@ function renderTimebarView(){
       else if(action==='status') setShiftStatus(dk, tgt.dataset.sid, tgt.dataset.st);
       else if(action==='applyPattern') applyPatternSuggestion(tgt.dataset.pid, dk);
       else if(action==='toggleOff') toggleDayOffFromList(tgt.dataset.oid);
+      else if(action==='gaugeEdit') openHourLimitEdit(parseInt(tgt.dataset.hour));
       return;
     }
     const row = e.target.closest('[data-empid]');
