@@ -4955,6 +4955,126 @@ $('copyUrlBtn').addEventListener('click', ()=>{
 });
 
 // ============================================================
+// 공유 이미지 빌더 + 미리보기
+// ============================================================
+
+// 미리보기 모달 — Promise 반환 (true=전송, false=취소)
+function showSharePreview(imgBase64){
+  return new Promise(resolve=>{
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;';
+    const title = document.createElement('div');
+    title.style.cssText = 'color:#E0E0EC;font-size:15px;font-weight:700;margin-bottom:10px;';
+    title.textContent = '공유 미리보기';
+    const img = document.createElement('img');
+    img.src = imgBase64;
+    img.style.cssText = 'max-width:92vw;max-height:65vh;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);';
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:12px;margin-top:14px;';
+    const btnSend = document.createElement('button');
+    btnSend.textContent = '전송';
+    btnSend.style.cssText = 'padding:10px 32px;border:none;border-radius:8px;font-size:14px;font-weight:700;color:#FFF;background:linear-gradient(135deg,#667eea,#764ba2);cursor:pointer;';
+    const btnCancel = document.createElement('button');
+    btnCancel.textContent = '취소';
+    btnCancel.style.cssText = 'padding:10px 32px;border:1px solid rgba(255,255,255,.2);border-radius:8px;font-size:14px;font-weight:600;color:#9090A8;background:rgba(255,255,255,.05);cursor:pointer;';
+    btnRow.append(btnCancel, btnSend);
+    overlay.append(title, img, btnRow);
+    document.body.appendChild(overlay);
+    const close = ok=>{ document.body.removeChild(overlay); resolve(ok); };
+    btnSend.onclick = ()=> close(true);
+    btnCancel.onclick = ()=> close(false);
+    overlay.onclick = e=>{ if(e.target===overlay) close(false); };
+  });
+}
+
+// 전체 근무표 이미지 (프리미엄 다크 글래스모피즘)
+async function buildShareImage_full(dayTexts, events, contactMap, empKeys){
+  const W = 420;
+  const tmpDiv = document.createElement('div');
+  tmpDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:'+W+'px;padding:0;font-family:"Pretendard",system-ui,-apple-system,sans-serif;font-size:14px;overflow:hidden;';
+  // 배경 그라데이션
+  let html = '<div style="background:linear-gradient(160deg,#0F0C29 0%,#302B63 50%,#24243E 100%);padding:28px 24px 20px;position:relative;">';
+  // 상단 장식 라인
+  html += '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#667eea,#764ba2,#f093fb);"></div>';
+  // 타이틀 영역
+  html += '<div style="display:flex;align-items:center;margin-bottom:20px;">';
+  html += '<div style="width:4px;height:28px;background:linear-gradient(180deg,#667eea,#764ba2);border-radius:2px;margin-right:12px;"></div>';
+  html += '<div><div style="font-size:20px;font-weight:800;color:#FFFFFF;letter-spacing:-.5px;">확정 근무표</div>';
+  html += '<div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:2px;">'+events.length+'건 확정</div></div></div>';
+  // 날짜 카드들
+  dayTexts.forEach(t=>{
+    const parts = t.split(') ');
+    const dateP = parts[0]+')';
+    const rest = parts.slice(1).join(') ');
+    // 직원별 파싱
+    const empEntries = rest.trim().split(/\s{2,}|\s(?=[가-힣])/);
+    html += '<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin-bottom:10px;">';
+    html += '<div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:8px;letter-spacing:.5px;">'+dateP+'</div>';
+    // 직원 라인들
+    const empParts = rest.trim().split(/(?=\S+\s\d{1,2}:\d{2})/);
+    empParts.forEach(ep=>{
+      if(!ep.trim()) return;
+      html += '<div style="display:flex;align-items:center;padding:4px 0;">';
+      html += '<div style="width:6px;height:6px;border-radius:50%;background:#667eea;margin-right:8px;flex-shrink:0;"></div>';
+      html += '<span style="color:rgba(255,255,255,.9);font-size:13px;font-weight:500;">'+ep.trim()+'</span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  // 하단 워터마크
+  html += '<div style="text-align:center;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06);">';
+  html += '<span style="font-size:10px;color:rgba(255,255,255,.25);letter-spacing:1px;">WORK SCHEDULE</span></div>';
+  html += '</div>';
+  tmpDiv.innerHTML = html;
+  document.body.appendChild(tmpDiv);
+  const canvas = await html2canvas(tmpDiv,{backgroundColor:null,scale:2,logging:false});
+  document.body.removeChild(tmpDiv);
+  return canvas.toDataURL('image/png');
+}
+
+// 개별 직원 이미지 (프리미엄 다크 글래스모피즘)
+async function buildShareImage_personal(emp, lines){
+  const W = 380;
+  const empColor = emp.color || '#667eea';
+  const tmpDiv = document.createElement('div');
+  tmpDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:'+W+'px;padding:0;font-family:"Pretendard",system-ui,-apple-system,sans-serif;font-size:14px;overflow:hidden;';
+  let html = '<div style="background:linear-gradient(160deg,#0F0C29 0%,#302B63 50%,#24243E 100%);padding:28px 24px 20px;position:relative;">';
+  // 상단 악센트 바
+  html += '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,'+empColor+',#764ba2);"></div>';
+  // 프로필 헤더
+  html += '<div style="display:flex;align-items:center;margin-bottom:22px;">';
+  html += '<div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,'+empColor+'40,'+empColor+'15);border:2px solid '+empColor+'60;display:flex;align-items:center;justify-content:center;margin-right:14px;">';
+  html += '<span style="font-size:18px;font-weight:800;color:'+empColor+';">'+emp.name.charAt(0)+'</span></div>';
+  html += '<div><div style="font-size:19px;font-weight:800;color:#FFFFFF;letter-spacing:-.3px;">'+emp.name+'</div>';
+  html += '<div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:2px;">확정 근무 스케줄</div></div></div>';
+  // 스케줄 카드
+  lines.forEach((l,i)=>{
+    // 날짜/시간 파싱
+    const match = l.match(/^(\d+\/\d+\([^)]+\))\s+(\d+:\d+~\d+:\d+)(.*)/);
+    const dateStr = match ? match[1] : l;
+    const timeStr = match ? match[2] : '';
+    const roleStr = match ? match[3].trim() : '';
+    html += '<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">';
+    html += '<div>';
+    html += '<div style="font-size:13px;font-weight:700;color:#a78bfa;">'+dateStr+'</div>';
+    if(roleStr) html += '<div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:3px;">'+roleStr+'</div>';
+    html += '</div>';
+    html += '<div style="background:linear-gradient(135deg,'+empColor+'30,'+empColor+'10);border:1px solid '+empColor+'40;border-radius:8px;padding:6px 12px;">';
+    html += '<span style="font-size:14px;font-weight:700;color:'+empColor+';letter-spacing:.5px;">'+timeStr+'</span></div>';
+    html += '</div>';
+  });
+  // 하단 워터마크
+  html += '<div style="text-align:center;margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,.06);">';
+  html += '<span style="font-size:10px;color:rgba(255,255,255,.25);letter-spacing:1px;">WORK SCHEDULE</span></div>';
+  html += '</div>';
+  tmpDiv.innerHTML = html;
+  document.body.appendChild(tmpDiv);
+  const canvas = await html2canvas(tmpDiv,{backgroundColor:null,scale:2,logging:false});
+  document.body.removeChild(tmpDiv);
+  return canvas.toDataURL('image/png');
+}
+
+// ============================================================
 // 카톡 공유 (확정 근무표 이미지 + .ics 캘린더)
 // ============================================================
 $('shareKakaoBtn').addEventListener('click', async()=>{
@@ -5005,22 +5125,12 @@ $('shareKakaoBtn').addEventListener('click', async()=>{
 
     if(events.length === 0){ showToast('확정된 근무가 없습니다'); return; }
 
-    // 임시 div로 이미지 생성 (확정 근무표 요약)
-    const tmpDiv = document.createElement('div');
-    tmpDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:400px;padding:16px;background:#1A1A30;color:#E0E0EC;font-family:sans-serif;font-size:14px;';
-    tmpDiv.innerHTML = '<div style="font-size:18px;font-weight:700;color:#FFD700;margin-bottom:12px;">근무표 (확정)</div>'
-      + dayTexts.map(t=>{
-        const parts = t.split(') ');
-        const dateP = parts[0]+')';
-        const rest = parts.slice(1).join(') ');
-        return '<div style="margin-bottom:8px;"><span style="color:#2ECC71;font-weight:700;">'+dateP+'</span> <span style="color:#E0E0EC;">'+rest+'</span></div>';
-      }).join('')
-      + '<div style="margin-top:8px;font-size:10px;color:#707088;">'+events.length+'건 · '+(contactMap[empKeys[0]]?'연락처 매칭됨':'')+'</div>';
-    document.body.appendChild(tmpDiv);
+    // 임시 div로 이미지 생성 (프리미엄 글래스모피즘)
+    const imgBase64 = await buildShareImage_full(dayTexts, events, contactMap, empKeys);
 
-    const canvas = await html2canvas(tmpDiv,{backgroundColor:'#1A1A30',scale:2,logging:false});
-    document.body.removeChild(tmpDiv);
-    const imgBase64 = canvas.toDataURL('image/png');
+    // 미리보기 모달
+    const proceed = await showSharePreview(imgBase64);
+    if(!proceed) return;
 
     // 전체 공유 = 이미지만 (캘린더는 개별에서)
     if(window.NativeBridge && window.NativeBridge.shareImage){
@@ -5094,16 +5204,8 @@ async function sharePerEmployee(empId){
     }
     if(!events.length){ showToast(emp.name+' 확정 근무 없음'); return; }
 
-    // 이미지 생성
-    const tmpDiv = document.createElement('div');
-    tmpDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:360px;padding:16px;background:#1A1A30;color:#E0E0EC;font-family:sans-serif;font-size:14px;';
-    tmpDiv.innerHTML = '<div style="font-size:18px;font-weight:700;color:#FFD700;margin-bottom:4px;">'+emp.name+' 근무표</div>'
-      +'<div style="font-size:11px;color:#707088;margin-bottom:12px;">확정 스케줄</div>'
-      +lines.map(l=>'<div style="margin-bottom:6px;padding:6px 8px;background:#242444;border-radius:6px;border-left:3px solid '+(emp.color||'#9090A8')+';">'+l+'</div>').join('');
-    document.body.appendChild(tmpDiv);
-    const canvas = await html2canvas(tmpDiv,{backgroundColor:'#1A1A30',scale:2,logging:false});
-    document.body.removeChild(tmpDiv);
-    const imgBase64 = canvas.toDataURL('image/png');
+    // 이미지 생성 (프리미엄 글래스모피즘)
+    const imgBase64 = await buildShareImage_personal(emp, lines);
 
     // .ics 생성
     let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
@@ -5124,6 +5226,10 @@ async function sharePerEmployee(empId){
       ics += 'SUMMARY:'+ev.summary+'\r\nDESCRIPTION:'+ev.description+'\r\nEND:VEVENT\r\n';
     });
     ics += 'END:VCALENDAR\r\n';
+
+    // 미리보기 모달
+    const proceed = await showSharePreview(imgBase64);
+    if(!proceed) return;
 
     if(window.NativeBridge && window.NativeBridge.shareSchedule){
       window.NativeBridge.shareSchedule(imgBase64, ics);
