@@ -2260,11 +2260,10 @@ function renderTimeline(){
   checkHours.forEach(h => {
     const hStr = pad(h)+':00';
     const s = staffing[hStr];
-    const delivery = s ? s.delivery : 0;
-    const daAvail = s ? s.daAvail : false;
-    const needDA = daAvail && delivery < 1;
-    html += '<div style="flex:1;background:'+(needDA?'#E67E2233':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.4rem;color:'+(needDA?'#E67E22':'#707088')+';font-weight:600;border-radius:1px;">';
-    html += needDA ? '대' : '';
+    const df = s ? s.daFill : 0;
+    const hasDA = df > 0;
+    html += '<div style="flex:1;background:'+(hasDA?'#E67E2233':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.4rem;color:'+(hasDA?'#E67E22':'#707088')+';font-weight:600;border-radius:1px;">';
+    html += hasDA ? (df < 1 ? '.5' : '대') : '';
     html += '</div>';
   });
   html += '</div></div></div>';
@@ -2424,8 +2423,10 @@ function calcStaffing(empKeys, dk){
     const DA_START = timeToMinutesFrom6(pad(preset.daStart||10)+':00');
     const DA_END = timeToMinutesFrom6(pad(preset.daEnd||1)+':00');
     const daAvail = hMin >= DA_START && hMin < DA_END;
-    // 배달대행 포함 합산
-    const deliveryWithDA = delivery + (daAvail && delivery < 1 ? 1 : 0);
+    // 배달대행 포함 합산 (0.5명 단위 부족분 충족)
+    const deliveryNeed = Math.max(0, 1 - delivery); // 배달 1명 기준 부족분 (0, 0.5, 1)
+    const daFill = daAvail ? deliveryNeed : 0;
+    const deliveryWithDA = delivery + daFill;
 
     // 충돌 체크 (편입 후 기준)
     const carOver = carFinal > limits['차배달'].max;
@@ -2436,7 +2437,7 @@ function calcStaffing(empKeys, dk){
     result[hStr] = {
       kitchen: kitchenFinal, carDel: carFinal, bikeDel: bikeFinal,
       kitchenRaw: kitchen, carRaw: carDel, bikeRaw: bikeDel,
-      delivery, deliveryWithDA, total, daAvail, hasBikeWorker,
+      delivery, deliveryWithDA, daFill, total, daAvail, hasBikeWorker,
       carOver, bikeOver, kitchenOver, kitchenUnder
     };
   }
