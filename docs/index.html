@@ -874,8 +874,9 @@ select.form-input{
       </div>
     </div>
     <div class="modal-footer" style="flex-wrap:wrap;">
+      <button class="btn btn-danger btn-sm" id="shiftDayoff" style="font-size:.7rem;">휴무지정</button>
       <button class="btn btn-danger" id="shiftDelete" style="display:none;">삭제</button>
-      <button class="btn btn-gold btn-sm" id="shiftSaveFixed" style="font-size:.7rem;">고정으로 저장</button>
+      <button class="btn btn-gold btn-sm" id="shiftSaveFixed" style="font-size:.7rem;">고정</button>
       <button class="btn" id="shiftCancel">취소</button>
       <button class="btn btn-accent" id="shiftSave">저장</button>
     </div>
@@ -2576,19 +2577,9 @@ function openShiftModal(empId){
   const empName = empId ? (employees[empId]?.name||'') : '';
   $('shiftTitle').textContent = '근무 ' + (shiftEditMode ? '수정' : '추가') + ' - ' + m+'/'+d+' ('+dow+')';
 
-  // 고정값 정보 + "고정으로 저장" 버튼 표시
-  const fix = empName ? getFixedSchedule(empName) : null;
-  const fixBtn = $('shiftSaveFixed');
-  if(empId){
-    fixBtn.style.display = '';
-    if(fix && fix.type==='fixed'){
-      fixBtn.textContent = '고정변경 (현재 '+fix.start+'~'+fix.end+')';
-    } else {
-      fixBtn.textContent = '고정으로 저장';
-    }
-  } else {
-    fixBtn.style.display = 'none';
-  }
+  // 고정/휴무 버튼 표시
+  $('shiftSaveFixed').style.display = empId ? '' : 'none';
+  $('shiftDayoff').style.display = empId ? '' : 'none';
 
   openModal($shiftModal);
 }
@@ -2696,6 +2687,24 @@ $('shiftSaveFixed').addEventListener('click', async()=>{
   showToast(empName+' 고정값 변경됨');
   renderAll();
   loadWeekSchedules();
+});
+
+// 수정 팝업에서 휴무 지정
+$('shiftDayoff').addEventListener('click', ()=>{
+  if(!shiftSelectedEmpId) return;
+  const dk = dateKey(currentDate);
+  if(!dayoffs[shiftSelectedEmpId]) dayoffs[shiftSelectedEmpId] = {};
+  dayoffs[shiftSelectedEmpId][dk] = true;
+  if(daySchedule[shiftSelectedEmpId]){
+    delete daySchedule[shiftSelectedEmpId];
+    lsSaveSchedule(dk, daySchedule);
+    fbDelete(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId);
+  }
+  lsSaveDayoffs();
+  fbPut(FB_DAYOFFS+'/'+shiftSelectedEmpId+'/'+dk, true);
+  closeModal($shiftModal);
+  showToast('휴무 지정');
+  renderAll();
 });
 
 $('shiftCancel').addEventListener('click',()=> closeModal($shiftModal));
