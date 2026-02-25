@@ -5078,8 +5078,73 @@ async function buildShareImage_personal(emp, lines){
   return canvas.toDataURL('image/png');
 }
 
+// 전체 확정 데이터 수집 (공통 헬퍼)
+function collectAllConfirmed(){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const empKeys = Object.keys(employees);
+  const events = [], dayTexts = [];
+  for(let i=0;i<7;i++){
+    const d = new Date(today); d.setDate(d.getDate()+i);
+    const dk = dateKey(d);
+    const sched = lsLoadSchedule(dk)||{};
+    const dow = DOW_KR[d.getDay()];
+    let dayLine = (d.getMonth()+1)+'/'+d.getDate()+'('+dow+') ';
+    let hasShift = false;
+    empKeys.forEach(eid=>{
+      if(getShiftStatus(dk,eid)!=='confirmed') return;
+      const shift = sched[eid];
+      if(!shift||!shift.start) return;
+      hasShift = true;
+      dayLine += employees[eid].name+' '+shift.start+'~'+shift.end+' ';
+      events.push({date:dk, empId:eid, start:shift.start, end:shift.end, role:shift.role||''});
+    });
+    if(hasShift) dayTexts.push(dayLine.trim());
+  }
+  return {events, dayTexts};
+}
+
+// 직원 1명분 .ics 생성 (공통 헬퍼)
+function buildIcsForEmployee(empId, events){
+  const seq = Math.floor(Date.now()/1000);
+  const prevKey = 'ws_shared_'+empId;
+  const prevDates = JSON.parse(localStorage.getItem(prevKey)||'[]');
+  const curDates = events.map(ev=>ev.date);
+
+  let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
+  events.forEach(ev=>{
+    const [y,mo,dd] = ev.date.split('-');
+    const [sh,sm] = ev.start.split(':').map(Number);
+    const [eh,em] = ev.end.split(':').map(Number);
+    let endDate = ev.date;
+    if(eh<sh||(eh===sh&&em<sm)){
+      const nd = new Date(parseInt(y),parseInt(mo)-1,parseInt(dd));
+      nd.setDate(nd.getDate()+1);
+      endDate = dateStr(nd);
+    }
+    const [ey,emo,ed] = endDate.split('-');
+    ics += 'BEGIN:VEVENT\r\nUID:bbq-'+ev.date+'-'+ev.empId+'@workschedule\r\n';
+    ics += 'SEQUENCE:'+seq+'\r\n';
+    ics += 'DTSTART;TZID=Asia/Seoul:'+y+mo+dd+'T'+pad(sh)+pad(sm)+'00\r\n';
+    ics += 'DTEND;TZID=Asia/Seoul:'+ey+emo+ed+'T'+pad(eh)+pad(em)+'00\r\n';
+    ics += 'SUMMARY:BBQ\r\nDESCRIPTION:'+ev.start+'~'+ev.end+' '+(ev.role||'')+'\r\nEND:VEVENT\r\n';
+  });
+  // 이전 공유 이력 대비 취소
+  prevDates.forEach(pd=>{
+    if(curDates.includes(pd)) return;
+    const [y,mo,dd] = pd.split('-');
+    ics += 'BEGIN:VEVENT\r\nUID:bbq-'+pd+'-'+empId+'@workschedule\r\n';
+    ics += 'SEQUENCE:'+seq+'\r\nSTATUS:CANCELLED\r\n';
+    ics += 'DTSTART;TZID=Asia/Seoul:'+y+mo+dd+'T000000\r\n';
+    ics += 'DTEND;TZID=Asia/Seoul:'+y+mo+dd+'T235900\r\n';
+    ics += 'SUMMARY:BBQ (취소)\r\nEND:VEVENT\r\n';
+  });
+  ics += 'END:VCALENDAR\r\n';
+  localStorage.setItem(prevKey, JSON.stringify(curDates));
+  return ics;
+}
+
 // ============================================================
-// 카톡 공유 (확정 근무표 이미지 + .ics 캘린더)
+// 카톡 공유 Mode1: 전체이미지 + 전원 개별ICS
 // ============================================================
 $('shareKakaoBtn').addEventListener('click', async()=>{
   showToast('확정 근무표 생성 중...');
@@ -5120,8 +5185,7 @@ $('shareKakaoBtn').addEventListener('click', async()=>{
         events.push({
           date:dk, empId:eid,
           start:shift.start, end:shift.end,
-          summary:'근무 - '+emp.name,
-          description:'역할: '+(shift.role||'미지정')+', '+shift.start+'~'+shift.end
+          role:shift.role||''
         });
       });
       if(hasShift) dayTexts.push(dayLine.trim());
@@ -5129,22 +5193,38 @@ $('shareKakaoBtn').addEventListener('click', async()=>{
 
     if(events.length === 0){ showToast('확정된 근무가 없습니다'); return; }
 
-    // 임시 div로 이미지 생성 (프리미엄 글래스모피즘)
+    // 전체 이미지 생성
     const imgBase64 = await buildShareImage_full(dayTexts, events, contactMap, empKeys);
 
-    // 미리보기 모달
+    // 미리보기
     const proceed = await showSharePreview(imgBase64);
     if(!proceed) return;
 
-    // 전체 공유 = 이미지만 (캘린더는 개별에서)
-    if(window.NativeBridge && window.NativeBridge.shareImage){
-      window.NativeBridge.shareImage(imgBase64);
+    // Mode 1: 전체이미지 + 인원별 개별 .ics 모두 첨부
+    const perEmpIcs = [];
+    const byEmp = {};
+    events.forEach(ev=>{
+      if(!byEmp[ev.empId]) byEmp[ev.empId] = [];
+      byEmp[ev.empId].push(ev);
+    });
+    Object.keys(byEmp).forEach(eid=>{
+      const emp = employees[eid];
+      if(!emp) return;
+      const ics = buildIcsForEmployee(eid, byEmp[eid]);
+      perEmpIcs.push({name: emp.name, ics: ics});
+    });
+
+    if(window.NativeBridge && window.NativeBridge.shareMultiFiles){
+      window.NativeBridge.shareMultiFiles(imgBase64, JSON.stringify(perEmpIcs));
     } else {
+      // 웹 fallback: 이미지 + 개별 ics 다운로드
       const link = document.createElement('a');
-      link.download = '근무표_확정.png';
+      link.download = '근무표.png';
       link.href = imgBase64;
       link.click();
-      showToast('이미지 다운로드');
+      perEmpIcs.forEach(p=>{
+        downloadBlob(p.ics, p.name+'.ics', 'text/calendar;charset=utf-8');
+      });
     }
   }catch(e){
     console.error('카톡 공유 에러',e);
@@ -5152,16 +5232,29 @@ $('shareKakaoBtn').addEventListener('click', async()=>{
   }
 });
 
-// 개별 직원 카톡 공유 버튼 생성
+// 개별 직원 카톡 공유 버튼 생성 (Mode2: 개별이미지 / Mode3: 전체이미지)
 function buildKakaoPerEmp(){
   const box = $('kakaoPerEmp');
   if(!box) return;
   box.innerHTML = '';
   const today = new Date(); today.setHours(0,0,0,0);
   const empKeys = Object.keys(employees);
+  // Mode 2 라벨
+  const lbl2 = document.createElement('div');
+  lbl2.style.cssText = 'font-size:.6rem;color:#707088;margin-bottom:2px;';
+  lbl2.textContent = '개별이미지+ICS';
+  const row2 = document.createElement('div');
+  row2.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;';
+  // Mode 3 라벨
+  const lbl3 = document.createElement('div');
+  lbl3.style.cssText = 'font-size:.6rem;color:#707088;margin-bottom:2px;';
+  lbl3.textContent = '전체이미지+ICS';
+  const row3 = document.createElement('div');
+  row3.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;';
+
+  let hasAny = false;
   empKeys.forEach(eid=>{
     const emp = employees[eid];
-    // 확정 스케줄 있거나, 이전 공유 이력 있는 직원 (취소 전송용)
     let hasConfirmed = false;
     for(let i=0;i<7;i++){
       const d = new Date(today); d.setDate(d.getDate()+i);
@@ -5171,22 +5264,34 @@ function buildKakaoPerEmp(){
         if(sched[eid]&&sched[eid].start){ hasConfirmed=true; break; }
       }
     }
-    const hasPrevShared = JSON.parse(localStorage.getItem('ws_shared_'+eid)||'[]').length > 0;
-    if(!hasConfirmed && !hasPrevShared) return;
-    const btn = document.createElement('button');
-    btn.className = 'btn btn-sm';
-    const isCancel = !hasConfirmed && hasPrevShared;
-    btn.style.cssText = isCancel
-      ? 'background:#E74C3C33;color:#E74C3C;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:4px;'
-      : 'background:#FFE81266;color:#FFE812;font-size:.7rem;font-weight:700;padding:3px 8px;border-radius:4px;';
-    btn.textContent = emp.name + (isCancel?' (취소)':'');
-    btn.addEventListener('click', ()=> sharePerEmployee(eid));
-    box.appendChild(btn);
+    const hasPrev = JSON.parse(localStorage.getItem('ws_shared_'+eid)||'[]').length > 0;
+    if(!hasConfirmed && !hasPrev) return;
+    hasAny = true;
+    const isCancel = !hasConfirmed && hasPrev;
+    const mkBtn = (mode)=>{
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-sm';
+      btn.style.cssText = isCancel
+        ? 'background:#E74C3C33;color:#E74C3C;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:4px;'
+        : mode==='full'
+          ? 'background:#667eea33;color:#a78bfa;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:4px;'
+          : 'background:#FFE81266;color:#FFE812;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:4px;';
+      btn.textContent = emp.name+(isCancel?' ✕':'');
+      btn.addEventListener('click', ()=> sharePerEmployee(eid, mode));
+      return btn;
+    };
+    row2.appendChild(mkBtn('personal'));
+    row3.appendChild(mkBtn('full'));
   });
-  if(!box.children.length) box.innerHTML = '<span style="font-size:.7rem;color:#707088;">확정 근무 없음</span>';
+  if(hasAny){
+    box.append(lbl2, row2, lbl3, row3);
+  } else {
+    box.innerHTML = '<span style="font-size:.7rem;color:#707088;">확정 근무 없음</span>';
+  }
 }
 
-async function sharePerEmployee(empId){
+// Mode 2: 개별이미지+1명ICS / Mode 3: 전체이미지+1명ICS
+async function sharePerEmployee(empId, mode){
   const emp = employees[empId];
   if(!emp) return;
   showToast(emp.name+' 공유 준비...');
@@ -5203,84 +5308,42 @@ async function sharePerEmployee(empId){
       if(!shift||!shift.start) continue;
       const dow = DOW_KR[d.getDay()];
       lines.push((d.getMonth()+1)+'/'+d.getDate()+'('+dow+') '+shift.start+'~'+shift.end+(shift.role?' '+shift.role:''));
-      events.push({
-        date:dk, empId:empId,
-        start:shift.start, end:shift.end,
-        role:shift.role||''
-      });
+      events.push({date:dk, empId, start:shift.start, end:shift.end, role:shift.role||''});
     }
-    const prevKey = 'ws_shared_'+empId;
-    const prevDates = JSON.parse(localStorage.getItem(prevKey)||'[]');
-    // 확정도 없고 취소할 이전 이력도 없으면 종료
+    const prevDates = JSON.parse(localStorage.getItem('ws_shared_'+empId)||'[]');
     if(!events.length && !prevDates.length){ showToast(emp.name+' 확정 근무 없음'); return; }
-
-    // 전부 취소인 경우 → .ics만 전송 (이미지 없이)
     const cancelOnly = !events.length && prevDates.length > 0;
 
-    // 이미지 생성 (확정 있을 때만)
-    let imgBase64 = '';
-    if(!cancelOnly){
+    // .ics (공통 헬퍼 사용)
+    const ics = buildIcsForEmployee(empId, events);
+
+    if(cancelOnly){
+      downloadBlob(ics, emp.name+'.ics', 'text/calendar;charset=utf-8');
+      showToast(emp.name+' 일정 취소 전송');
+      return;
+    }
+
+    // 이미지: mode==='full' → 전체, 기본 → 개별
+    let imgBase64;
+    if(mode==='full'){
+      // 전체 근무표 이미지 생성
+      const allData = collectAllConfirmed();
+      imgBase64 = await buildShareImage_full(allData.dayTexts, allData.events, {}, Object.keys(employees));
+    } else {
       imgBase64 = await buildShareImage_personal(emp, lines);
     }
 
-    // .ics 생성 (SEQUENCE로 수정 반영 + 이전 공유 대비 취소 반영)
-    const seq = Math.floor(Date.now()/1000);
-    const curDates = events.map(ev=>ev.date);
+    const proceed = await showSharePreview(imgBase64);
+    if(!proceed) return;
 
-    let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
-    // 현재 확정 일정
-    events.forEach(ev=>{
-      const [y,mo,dd] = ev.date.split('-');
-      const [sh,sm] = ev.start.split(':').map(Number);
-      const [eh,em] = ev.end.split(':').map(Number);
-      let endDate = ev.date;
-      if(eh<sh||(eh===sh&&em<sm)){
-        const nd = new Date(parseInt(y),parseInt(mo)-1,parseInt(dd));
-        nd.setDate(nd.getDate()+1);
-        endDate = dateStr(nd);
-      }
-      const [ey,emo,ed] = endDate.split('-');
-      ics += 'BEGIN:VEVENT\r\nUID:bbq-'+ev.date+'-'+ev.empId+'@workschedule\r\n';
-      ics += 'SEQUENCE:'+seq+'\r\n';
-      ics += 'DTSTART;TZID=Asia/Seoul:'+y+mo+dd+'T'+pad(sh)+pad(sm)+'00\r\n';
-      ics += 'DTEND;TZID=Asia/Seoul:'+ey+emo+ed+'T'+pad(eh)+pad(em)+'00\r\n';
-      ics += 'SUMMARY:BBQ\r\nDESCRIPTION:'+ev.start+'~'+ev.end+' '+(ev.role||'')+'\r\nEND:VEVENT\r\n';
-    });
-    // 이전에 공유했으나 지금 없는 날짜 → STATUS:CANCELLED
-    prevDates.forEach(pd=>{
-      if(curDates.includes(pd)) return;
-      const [y,mo,dd] = pd.split('-');
-      ics += 'BEGIN:VEVENT\r\nUID:bbq-'+pd+'-'+empId+'@workschedule\r\n';
-      ics += 'SEQUENCE:'+seq+'\r\nMETHOD:CANCEL\r\nSTATUS:CANCELLED\r\n';
-      ics += 'DTSTART;TZID=Asia/Seoul:'+y+mo+dd+'T000000\r\n';
-      ics += 'DTEND;TZID=Asia/Seoul:'+y+mo+dd+'T235900\r\n';
-      ics += 'SUMMARY:BBQ (취소)\r\nEND:VEVENT\r\n';
-    });
-    ics += 'END:VCALENDAR\r\n';
-    // 공유 이력 저장
-    localStorage.setItem(prevKey, JSON.stringify(curDates));
-
-    if(cancelOnly){
-      // 취소만 → 미리보기 없이 .ics만 전송
-      if(window.NativeBridge && window.NativeBridge.shareText){
-        // .ics를 텍스트로 공유 (이미지 없음)
-        downloadBlob(ics, emp.name+'_근무취소.ics', 'text/calendar;charset=utf-8');
-      }
-      showToast(emp.name+' 일정 취소 전송');
+    if(window.NativeBridge && window.NativeBridge.shareSchedule){
+      window.NativeBridge.shareSchedule(imgBase64, ics, emp.name);
     } else {
-      // 미리보기 모달
-      const proceed = await showSharePreview(imgBase64);
-      if(!proceed) return;
-
-      if(window.NativeBridge && window.NativeBridge.shareSchedule){
-        window.NativeBridge.shareSchedule(imgBase64, ics, emp.name);
-      } else {
-        const link = document.createElement('a');
-        link.download = emp.name+'_근무표.png';
-        link.href = imgBase64;
-        link.click();
-        downloadBlob(ics, emp.name+'_근무표.ics', 'text/calendar;charset=utf-8');
-      }
+      const link = document.createElement('a');
+      link.download = emp.name+'_근무표.png';
+      link.href = imgBase64;
+      link.click();
+      downloadBlob(ics, emp.name+'.ics', 'text/calendar;charset=utf-8');
     }
   }catch(e){
     console.error('개별 공유 에러',e);

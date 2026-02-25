@@ -232,5 +232,38 @@ class MainActivity : AppCompatActivity() {
                 Log.e(TAG, "shareSchedule error: ${e.message}")
             }
         }
+        @JavascriptInterface
+        fun shareMultiFiles(imageBase64: String, icsDataJson: String) {
+            try {
+                val cleanBase64 = if (imageBase64.contains(",")) imageBase64.substringAfter(",") else imageBase64
+                val imgBytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+                val bitmap = BitmapFactory.decodeByteArray(imgBytes, 0, imgBytes.size)
+
+                val imgFile = File(cacheDir, "근무표.png")
+                FileOutputStream(imgFile).use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+
+                val uris = arrayListOf<Uri>()
+                uris.add(FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", imgFile))
+
+                val arr = JSONArray(icsDataJson)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val name = obj.getString("name")
+                    val ics = obj.getString("ics")
+                    val icsFile = File(cacheDir, "${name}.ics")
+                    icsFile.writeText(ics)
+                    uris.add(FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", icsFile))
+                }
+
+                val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = "*/*"
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(intent, "근무표 공유"))
+            } catch (e: Exception) {
+                Log.e(TAG, "shareMultiFiles error: ${e.message}")
+            }
+        }
     }
 }
