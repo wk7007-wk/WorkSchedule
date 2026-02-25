@@ -1110,9 +1110,9 @@ const ROLE_COLORS = {'주방':'#E67E22','차배달':'#4ECDC4','오토바이':'#F
 
 // ========== 인원 기준 설정 (예상매출 기반) ==========
 const STAFF_PRESETS = {
-  '보통': { label:'보통(~150만)', kitchen17before:{max:1,min:1}, kitchenPeak:{max:3,min:2}, kitchenNight:{max:3,min:2}, kitchenOther:{max:2,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
-  '바쁨': { label:'바쁨(150~250만)', kitchen17before:{max:2,min:1}, kitchenPeak:{max:4,min:2}, kitchenNight:{max:3,min:2}, kitchenOther:{max:3,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
-  '매우바쁨': { label:'매우바쁨(250만~)', kitchen17before:{max:2,min:1}, kitchenPeak:{max:5,min:3}, kitchenNight:{max:4,min:2}, kitchenOther:{max:3,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
+  '보통': { label:'보통(~150만)', kitchen17before:{max:1,min:1}, kitchenPeak:{max:3,min:2}, kitchenLateNight:{max:2,min:1}, kitchenNight:{max:3,min:2}, kitchenOther:{max:2,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
+  '바쁨': { label:'바쁨(150~250만)', kitchen17before:{max:2,min:1}, kitchenPeak:{max:4,min:2}, kitchenLateNight:{max:3,min:1}, kitchenNight:{max:3,min:2}, kitchenOther:{max:3,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
+  '매우바쁨': { label:'매우바쁨(250만~)', kitchen17before:{max:2,min:1}, kitchenPeak:{max:5,min:3}, kitchenLateNight:{max:3,min:2}, kitchenNight:{max:4,min:2}, kitchenOther:{max:3,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
 };
 let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'null') || {
   preset: '보통',
@@ -1129,10 +1129,12 @@ function getRoleLimits(hour){
   const cfg = getActiveStaffConfig();
   const isBefore17 = hour >= 6 && hour < 17;
   const isPeak = hour >= 17 && hour <= 19;
-  const isNight = (hour >= 17 || hour < 3);
+  const isLateNight = hour >= 22 || hour < 3; // 22시~03시
+  const isNight = hour >= 20 && hour < 22; // 20~21시
   let kitchenLimits;
   if(isBefore17) kitchenLimits = cfg.kitchen17before;
   else if(isPeak) kitchenLimits = cfg.kitchenPeak;
+  else if(isLateNight) kitchenLimits = cfg.kitchenLateNight || cfg.kitchenNight;
   else if(isNight) kitchenLimits = cfg.kitchenNight;
   else kitchenLimits = cfg.kitchenOther;
   return {
@@ -2793,7 +2795,8 @@ function openStaffSettingsModal(){
   const sections = [
     {id:'k17b', label:'주방 17시전', val:cfg.kitchen17before},
     {id:'kpeak', label:'주방 피크(17~19)', val:cfg.kitchenPeak},
-    {id:'knight', label:'주방 야간(20~03)', val:cfg.kitchenNight},
+    {id:'knight', label:'주방 야간(20~21)', val:cfg.kitchenNight},
+    {id:'klate', label:'주방 심야(22~03)', val:cfg.kitchenLateNight||cfg.kitchenNight},
     {id:'kother', label:'주방 기타', val:cfg.kitchenOther},
     {id:'bike', label:'오토바이', val:cfg.bike},
     {id:'car', label:'차배달', val:cfg.car},
@@ -2853,6 +2856,7 @@ function saveCustomStaffSettings(){
     kitchen17before:{max:g('k17b_max'),min:g('k17b_min')},
     kitchenPeak:{max:g('kpeak_max'),min:g('kpeak_min')},
     kitchenNight:{max:g('knight_max'),min:g('knight_min')},
+    kitchenLateNight:{max:g('klate_max'),min:g('klate_min')},
     kitchenOther:{max:g('kother_max'),min:g('kother_min')},
     car:{max:g('car_max'),min:g('car_min')},
     bike:{max:g('bike_max'),min:g('bike_min')},
