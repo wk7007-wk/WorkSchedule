@@ -5202,8 +5202,7 @@ async function sharePerEmployee(empId){
       events.push({
         date:dk, empId:empId,
         start:shift.start, end:shift.end,
-        summary:'근무 - '+emp.name,
-        description:'역할: '+(shift.role||'미지정')+', '+shift.start+'~'+shift.end
+        role:shift.role||''
       });
     }
     if(!events.length){ showToast(emp.name+' 확정 근무 없음'); return; }
@@ -5224,10 +5223,11 @@ async function sharePerEmployee(empId){
         endDate = dateStr(nd);
       }
       const [ey,emo,ed] = endDate.split('-');
-      ics += 'BEGIN:VEVENT\r\nUID:'+ev.date+'-'+ev.empId+'-'+(+new Date()+Math.random())+'@ws\r\n';
+      // 고정 UID → 같은 날짜+직원 재전송 시 캘린더앱이 업데이트(중복방지)
+      ics += 'BEGIN:VEVENT\r\nUID:bbq-'+ev.date+'-'+ev.empId+'@workschedule\r\n';
       ics += 'DTSTART;TZID=Asia/Seoul:'+y+mo+dd+'T'+pad(sh)+pad(sm)+'00\r\n';
       ics += 'DTEND;TZID=Asia/Seoul:'+ey+emo+ed+'T'+pad(eh)+pad(em)+'00\r\n';
-      ics += 'SUMMARY:'+ev.summary+'\r\nDESCRIPTION:'+ev.description+'\r\nEND:VEVENT\r\n';
+      ics += 'SUMMARY:BBQ\r\nDESCRIPTION:'+ev.start+'~'+ev.end+' '+(ev.role||'')+'\r\nEND:VEVENT\r\n';
     });
     ics += 'END:VCALENDAR\r\n';
 
