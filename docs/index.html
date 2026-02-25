@@ -1870,16 +1870,21 @@ function renderBriefing(){
       const s = staffing[hStr];
       const val = s ? row.getVal(s) : 0;
       const lim = row.getLimits(h);
-      let bg = '#1A1A30', tc = '#707088';
-      if(val > 0){
-        if(val > lim.max){ bg = C_OFF; tc = '#fff'; }       // 초과=빨강
-        else if(val < lim.min){ bg = C_OFF+'55'; tc = C_OFF; } // 부족=빨강연하게
-        else { bg = '#3498DB40'; tc = '#E0E0EC'; }           // 정상=파랑
+      // 오토바이 공백 + 배달대행 가용 → 대행 표시
+      const isBikeDA = row.key==='bikeDel' && val===0 && s && s.daAvail;
+      let bg = '#1A1A30', tc = '#707088', txt = '';
+      if(isBikeDA){
+        bg = '#E67E2230'; tc = '#E67E22'; txt = '대';
+      } else if(val > 0){
+        if(val > lim.max){ bg = C_OFF; tc = '#fff'; }
+        else if(val < lim.min){ bg = C_OFF+'55'; tc = C_OFF; }
+        else { bg = '#3498DB40'; tc = '#E0E0EC'; }
+        txt = val%1===0 ? val : val.toFixed(1);
       } else if(lim.min > 0){
-        bg = C_OFF+'22'; tc = C_OFF; // 빈칸인데 최소필요=빨강어둡게
+        bg = C_OFF+'22'; tc = C_OFF; txt = '!';
       }
       html += '<div style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+tc+';font-weight:700;border-radius:1px;">';
-      html += val > 0 ? (val%1===0?val:val.toFixed(1)) : (lim.min>0?'!':'');
+      html += txt;
       html += '</div>';
     });
     html += '</div></div>';
@@ -2111,16 +2116,20 @@ function renderTimeline(){
       const s = staffing[hStr];
       const val = s ? role.getVal(s) : 0;
       const lim = role.getLimits(h);
-      let bg = '#1A1A30', textColor = '#707088';
-      if(val > 0){
+      const isBikeDA = role.key==='bikeDel' && val===0 && s && s.daAvail;
+      let bg = '#1A1A30', textColor = '#707088', txt = '';
+      if(isBikeDA){
+        bg = '#E67E2230'; textColor = '#E67E22'; txt = '대';
+      } else if(val > 0){
         if(val > lim.max){ bg = C_OFF; textColor = '#fff'; }
         else if(val < lim.min){ bg = C_OFF+'55'; textColor = C_OFF; }
         else { bg = '#3498DB40'; textColor = '#E0E0EC'; }
+        txt = val%1===0 ? val : val.toFixed(1);
       } else if(lim.min > 0){
-        bg = C_OFF+'22'; textColor = C_OFF;
+        bg = C_OFF+'22'; textColor = C_OFF; txt = '!';
       }
       html += '<div style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+textColor+';font-weight:700;border-radius:1px;">';
-      html += val > 0 ? (val%1===0?val:val.toFixed(1)) : (lim.min>0?'!':'');
+      html += txt;
       html += '</div>';
     });
     html += '</div></div></div>';
