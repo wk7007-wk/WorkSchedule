@@ -1174,6 +1174,12 @@ let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'nul
       }
     }
   }
+  // v2: 소수점 프리셋 적용 → 기존 정수 오버라이드 초기화
+  if(staffSettings.ver !== 2){
+    staffSettings.presetOverrides = {};
+    staffSettings.ver = 2;
+    changed = true;
+  }
   if(changed){
     localStorage.setItem('ws_staff_settings', JSON.stringify(staffSettings));
   }
