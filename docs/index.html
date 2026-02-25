@@ -2317,120 +2317,57 @@ function calcStaffing(empKeys, dk){
     let kitchen = 0, carDel = 0, bikeDel = 0, total = 0;
     let hasBikeWorker = false; // 오토바이 출근자 존재 여부
 
+    // 배달 가능 인력 카운트
+    let bikeCapable = 0, carCapable = 0;
     empKeys.forEach(empId => {
       if(isDayOff(empId, dk)) return;
       const shift = daySchedule[empId];
       if(!shift || !shift.start || !shift.end) return;
-
       const sMin = timeToMinutesFrom6(shift.start);
       let eMin = timeToMinutesFrom6(shift.end);
       if(eMin <= sMin) eMin += 24*60;
-
       if(hMin >= sMin && hMin < eMin){
         total++;
-        const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
-        const dlvWeight = roles.length > 1 ? 0.5 : 1; // 멀티역할 배달 0.5
-        // 주방은 항상 1명 (가게에 있으면 주방 공백 없음)
-        if(roles.includes('주방')) kitchen += 1;
-        if(roles.includes('차배달')) carDel += dlvWeight;
-        if(roles.includes('오토바이')){ bikeDel += dlvWeight; hasBikeWorker = true; }
-        if(roles.length === 0) kitchen += 1; // 미지정 → 주방
+        const caps = employees[empId]?.capabilities || [];
+        if(caps.includes('오토바이')){ bikeCapable++; hasBikeWorker = true; }
+        if(caps.includes('차배달')) carCapable++;
       }
     });
 
     const limits = getRoleLimits(h);
 
-    // === 편입 로직: 주방 초과 시 배달로 편입 ===
-    // 오토바이 우선, 차 차순. 오토바이 출근자 있으면 차로 편입.
-    let kitchenFinal = kitchen, carFinal = carDel, bikeFinal = bikeDel;
-    const kitchenMax = limits['주방'].max;
-    if(kitchenFinal > kitchenMax){
-      let overflow = kitchenFinal - kitchenMax;
-      // 오토바이 출근자가 이미 있으면 → 차로 편입
-      if(hasBikeWorker && bikeFinal >= limits['오토바이'].max){
-        // 오토바이 풀 → 차로 편입
-        const carSpace = limits['차배달'].max - carFinal;
-        if(carSpace > 0){
-          const move = Math.min(overflow, carSpace);
-          carFinal += move; kitchenFinal -= move; overflow -= move;
-        }
-        if(overflow > 0){
-          const bikeSpace = limits['오토바이'].max - bikeFinal;
-          if(bikeSpace > 0){ const move = Math.min(overflow, bikeSpace); bikeFinal += move; kitchenFinal -= move; overflow -= move; }
-        }
-      } else {
-        // 오토바이 우선 편입
-        const bikeSpace = limits['오토바이'].max - bikeFinal;
-        if(bikeSpace > 0){
-          const move = Math.min(overflow, bikeSpace);
-          bikeFinal += move; kitchenFinal -= move; overflow -= move;
-        }
-        if(overflow > 0){
-          const carSpace = limits['차배달'].max - carFinal;
-          if(carSpace > 0){ const move = Math.min(overflow, carSpace); carFinal += move; kitchenFinal -= move; overflow -= move; }
-        }
-      }
-    }
+    // === 편입 로직: min 먼저 채우고 → 나머지 배달 가능자를 배달로 편입 ===
+    let kitchenFinal = total; // 전원 주방 시작 (가게에 주방 공백 없음)
+    let bikeFinal = 0, carFinal = 0;
+    const kMin = limits['주방'].min;
+    let extras = Math.max(0, kitchenFinal - kMin); // min 초과 인력
 
-    // === 역방향 편입: 배달 부족 시 주방 가능자를 배달로 편입 ===
-    // 오토바이 min 부족 → 주방에서 오토바이 가능자 편입
-    const bikeMin = limits['오토바이'].min;
-    if(bikeFinal < bikeMin && kitchenFinal > limits['주방'].min){
-      // 해당 시간대 근무자 중 오토바이 가능자 확인
-      let bikeCapable = 0;
-      empKeys.forEach(empId => {
-        if(isDayOff(empId, dk)) return;
-        const shift = daySchedule[empId];
-        if(!shift || !shift.start || !shift.end) return;
-        const sMin = timeToMinutesFrom6(shift.start);
-        let eMin = timeToMinutesFrom6(shift.end);
-        if(eMin <= sMin) eMin += 24*60;
-        if(hMin >= sMin && hMin < eMin){
-          const caps = employees[empId]?.capabilities || [];
-          const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
-          if(caps.includes('오토바이') && !roles.includes('오토바이')) bikeCapable++;
-        }
-      });
-      if(bikeCapable > 0){
-        const need = Math.min(bikeMin - bikeFinal, kitchenFinal - limits['주방'].min, bikeCapable);
-        if(need > 0){ bikeFinal += need; kitchenFinal -= need; }
-      }
+    // 오토바이 편입 (가능자 중 extras만큼)
+    if(extras > 0){
+      const move = Math.min(extras, limits['오토바이'].max, bikeCapable);
+      bikeFinal += move; kitchenFinal -= move; extras -= move;
     }
-    // 차배달 min 부족도 동일
-    const carMin = limits['차배달'].min;
-    if(carFinal < carMin && kitchenFinal > limits['주방'].min){
-      let carCapable = 0;
-      empKeys.forEach(empId => {
-        if(isDayOff(empId, dk)) return;
-        const shift = daySchedule[empId];
-        if(!shift || !shift.start || !shift.end) return;
-        const sMin = timeToMinutesFrom6(shift.start);
-        let eMin = timeToMinutesFrom6(shift.end);
-        if(eMin <= sMin) eMin += 24*60;
-        if(hMin >= sMin && hMin < eMin){
-          const caps = employees[empId]?.capabilities || [];
-          const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
-          if(caps.includes('차배달') && !roles.includes('차배달')) carCapable++;
-        }
-      });
-      if(carCapable > 0){
-        const need = Math.min(carMin - carFinal, kitchenFinal - limits['주방'].min, carCapable);
-        if(need > 0){ carFinal += need; kitchenFinal -= need; }
-      }
+    // 차배달 편입 (오토바이에 안 간 가능자)
+    if(extras > 0){
+      const remainCar = Math.min(carCapable, extras);
+      const move = Math.min(extras, limits['차배달'].max, remainCar);
+      carFinal += move; kitchenFinal -= move; extras -= move;
     }
 
     const delivery = carFinal + bikeFinal;
-    // 배달대행 = 배달 전체(차+오토바이) 부족분 충족 (0.5~3명)
+    // 배달대행 = 배달 부족분 충족 (10~01시 영업)
     const DA_START = timeToMinutesFrom6(pad(preset.daStart||10)+':00');
     const DA_END = timeToMinutesFrom6(pad(preset.daEnd||1)+':00');
     const daAvail = hMin >= DA_START && hMin < DA_END;
-    const bikeNeed = Math.max(0, limits['오토바이'].max - bikeFinal);
+    // 대행 영업시간: 바이크 min=1 (대행이 최소 1명 역할), 바이크 실인원=0 가능
+    const effBikeMin = daAvail ? 1 : limits['오토바이'].min;
+    const bikeNeed = Math.max(0, Math.max(effBikeMin, limits['오토바이'].max) - bikeFinal);
     const carNeed = Math.max(0, limits['차배달'].max - carFinal);
-    const daFill = daAvail ? bikeNeed + carNeed : 0; // 배달 부족분 합산
+    const daFill = daAvail ? bikeNeed + carNeed : 0;
     const deliveryWithDA = delivery + daFill;
 
     // 충돌 체크: 주방 min/max = 총 인원 기준 (가게에 주방 공백 없음)
-    // 배달(bike/car)은 대행이 커버하므로 over 체크만
+    // 배달은 대행이 커버
     const carOver = carFinal > limits['차배달'].max;
     const bikeOver = bikeFinal > limits['오토바이'].max;
     const kitchenOver = total > limits['주방'].max;
@@ -2438,7 +2375,6 @@ function calcStaffing(empKeys, dk){
 
     result[hStr] = {
       kitchen: kitchenFinal, carDel: carFinal, bikeDel: bikeFinal,
-      kitchenRaw: kitchen, carRaw: carDel, bikeRaw: bikeDel,
       delivery, deliveryWithDA, daFill, total, daAvail, hasBikeWorker,
       carOver, bikeOver, kitchenOver, kitchenUnder
     };
