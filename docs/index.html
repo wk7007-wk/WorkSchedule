@@ -5008,19 +5008,16 @@ async function buildShareImage_full(dayTexts, events, contactMap, empKeys){
     const rest = parts.slice(1).join(') ');
     html += '<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin-bottom:10px;">';
     html += '<div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:8px;letter-spacing:.5px;">'+dateP+'</div>';
-    // 직원별 파싱: "이원규 06:00~20:00 히오 18:00~03:00" → 개별 분리
-    const empParts = rest.trim().split(/(?=\S+\s\d{1,2}:\d{2})/);
-    empParts.forEach(ep=>{
-      if(!ep.trim()) return;
-      // 이름과 시간 분리
-      const m = ep.trim().match(/^(.+?)\s+(\d{1,2}:\d{2}~\d{1,2}:\d{2})$/);
-      const eName = m ? m[1] : ep.trim();
-      const eTime = m ? m[2] : '';
+    // 직원별 파싱: matchAll로 "이름 HH:MM~HH:MM" 쌍 추출
+    const matches = [...rest.trim().matchAll(/(\S+)\s+(\d{1,2}:\d{2}~\d{1,2}:\d{2})/g)];
+    matches.forEach(m=>{
+      const eName = m[1];
+      const eTime = m[2];
       html += '<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;">';
       html += '<div style="display:flex;align-items:center;">';
       html += '<div style="width:6px;height:6px;border-radius:50%;background:#667eea;margin-right:8px;flex-shrink:0;"></div>';
       html += '<span style="color:#FFFFFF;font-size:13px;font-weight:700;">'+eName+'</span></div>';
-      if(eTime) html += '<span style="background:rgba(102,126,234,.15);border:1px solid rgba(102,126,234,.3);border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;color:#a78bfa;letter-spacing:.3px;">'+eTime+'</span>';
+      html += '<span style="background:rgba(102,126,234,.15);border:1px solid rgba(102,126,234,.3);border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;color:#a78bfa;letter-spacing:.3px;">'+eTime+'</span>';
       html += '</div>';
     });
     html += '</div>';
