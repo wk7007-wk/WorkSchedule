@@ -3001,7 +3001,7 @@ function openHourLimitEdit(hour){
 
   // 빠른시간 선택
   h += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">';
-  const quickRanges = [{l:'오전(6-16)',f:0,t:10},{l:'피크(17-19)',f:11,t:13},{l:'야간(20-0)',f:14,t:17},{l:'심야(1-2)',f:18,t:20},{l:'전체',f:0,t:20}];
+  const quickRanges = [{l:'6-16',f:0,t:10},{l:'17-19',f:11,t:13},{l:'20-23',f:14,t:17},{l:'0-2',f:18,t:20},{l:'전체',f:0,t:20}];
   quickRanges.forEach(q => {
     h += '<span data-hl-range="'+q.f+'_'+q.t+'" style="font-size:.55rem;padding:3px 7px;border-radius:5px;background:#1A1A30;border:1px solid #2E2E52;color:#9090A8;cursor:pointer;font-weight:600;">'+q.l+'</span>';
   });
