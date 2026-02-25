@@ -5006,10 +5006,12 @@ async function buildShareImage_full(dayTexts, events, contactMap, empKeys){
     const parts = t.split(') ');
     const dateP = parts[0]+')';
     const rest = parts.slice(1).join(') ');
+    // 휴무 파트 분리: "근무자들 | 이름,이름휴무"
+    const [shiftPart, offPart] = rest.split('|').map(s=>(s||'').trim());
     html += '<div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin-bottom:10px;">';
     html += '<div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:8px;letter-spacing:.5px;">'+dateP+'</div>';
-    // 직원별 파싱: matchAll로 "이름 HH:MM~HH:MM" 쌍 추출
-    const matches = [...rest.trim().matchAll(/(\S+)\s+(\d{1,2}:\d{2}~\d{1,2}:\d{2})/g)];
+    // 근무자: matchAll로 "이름 HH:MM~HH:MM" 쌍 추출
+    const matches = [...shiftPart.matchAll(/(\S+)\s+(\d{1,2}:\d{2}~\d{1,2}:\d{2})/g)];
     matches.forEach(m=>{
       const eName = m[1];
       const eTime = m[2];
@@ -5020,6 +5022,13 @@ async function buildShareImage_full(dayTexts, events, contactMap, empKeys){
       html += '<span style="background:rgba(102,126,234,.15);border:1px solid rgba(102,126,234,.3);border-radius:6px;padding:3px 10px;font-size:12px;font-weight:600;color:#a78bfa;letter-spacing:.3px;">'+eTime+'</span>';
       html += '</div>';
     });
+    // 휴무자 표시
+    if(offPart){
+      html += '<div style="display:flex;align-items:center;padding:5px 0;margin-top:4px;border-top:1px solid rgba(255,255,255,.05);">';
+      html += '<div style="width:6px;height:6px;border-radius:50%;background:#E74C3C;margin-right:8px;flex-shrink:0;"></div>';
+      html += '<span style="color:#E74C3C;font-size:12px;font-weight:600;">'+offPart+'</span>';
+      html += '</div>';
+    }
     html += '</div>';
   });
   // 하단 워터마크
@@ -5095,7 +5104,9 @@ function collectAllConfirmed(){
     if(!allConfirmed) continue;
     let dayLine = (d.getMonth()+1)+'/'+d.getDate()+'('+dow+') ';
     let hasShift = false;
+    const offNames = [];
     empKeys.forEach(eid=>{
+      if(isDayOff(eid, dk)){ offNames.push(employees[eid].name); return; }
       if(getShiftStatus(dk,eid)!=='confirmed') return;
       const shift = sched[eid];
       if(!shift||!shift.start) return;
@@ -5103,6 +5114,7 @@ function collectAllConfirmed(){
       dayLine += employees[eid].name+' '+shift.start+'~'+shift.end+' ';
       events.push({date:dk, empId:eid, start:shift.start, end:shift.end, role:shift.role||''});
     });
+    if(offNames.length) dayLine += '| '+offNames.join(',')+'휴무 ';
     if(hasShift) dayTexts.push(dayLine.trim());
   }
   return {events, dayTexts};
@@ -5187,7 +5199,9 @@ $('shareKakaoBtn').addEventListener('click', async()=>{
       if(!allConfirmed) continue; // 일부라도 미확정이면 해당 날짜 스킵
       let dayLine = (d.getMonth()+1)+'/'+d.getDate()+'('+dow+') ';
       let hasShift = false;
+      const offNames = [];
       empKeys.forEach(eid=>{
+        if(isDayOff(eid, dk)){ offNames.push(employees[eid].name); return; }
         const st = getShiftStatus(dk, eid);
         if(st !== 'confirmed') return;
         const shift = sched[eid];
@@ -5201,6 +5215,7 @@ $('shareKakaoBtn').addEventListener('click', async()=>{
           role:shift.role||''
         });
       });
+      if(offNames.length) dayLine += '| '+offNames.join(',')+'휴무 ';
       if(hasShift) dayTexts.push(dayLine.trim());
     }
 
