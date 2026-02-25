@@ -3739,11 +3739,12 @@ function renderListView(){
     html += '<span style="font-size:.65rem;color:'+C_DEF+';font-weight:700;">'+w.hours+'h</span>';
     html += '<span style="margin-left:auto;display:flex;gap:2px;">';
     // 상태 토글 버튼
-    const cfBg = w.status==='confirmed' ? 'background:'+C_OK+';color:#fff;' : 'background:#333;color:#707088;';
-    const pdBg = (w.status==='pending'||w.status==='auto'&&w.status!=='confirmed') ? 'background:#333;color:'+C_DEF+';' : 'background:#333;color:#707088;';
-    html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;'+cfBg+'font-weight:700;">확</span>';
-    html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'pending\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;'+pdBg+'font-weight:700;">미확정</span>';
-    html += '<span onclick="event.stopPropagation();toggleDayOffFromList(\''+w.id+'\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:#E74C3C;font-weight:700;">휴</span>';
+    // 현재 상태만 표기 (터치 시 토글)
+    if(w.status==='confirmed'){
+      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'auto\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;">확정</span>';
+    } else {
+      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;">미확정</span>';
+    }
     html += '</span></div>';
 
     // 행2: 타임라인 게이지
@@ -3761,9 +3762,8 @@ function renderListView(){
     // 행3: 역할 + 태그
     html += '<div style="display:flex;align-items:center;gap:4px;margin-top:2px;">';
     html += roleHtml;
-    if(w.isFixed) html += '<span style="font-size:.5rem;color:#707088;background:#707088222;padding:1px 4px;border-radius:3px;">고정</span>';
-    if(hasConflict) html += '<span style="font-size:.5rem;color:#E74C3C;background:#E74C3C22;padding:1px 4px;border-radius:3px;">충돌</span>';
-    html += '<span style="font-size:.5rem;color:'+stColor+';background:'+stColor+'22;padding:1px 4px;border-radius:3px;">'+stLabel+'</span>';
+    if(w.isFixed) html += '<span style="font-size:.5rem;color:#707088;background:#70708822;padding:1px 4px;border-radius:3px;">고정</span>';
+    if(hasConflict) html += '<span style="font-size:.5rem;color:'+C_OFF+';background:'+C_OFF+'22;padding:1px 4px;border-radius:3px;">충돌</span>';
     if(patternMatch && w.status!=='confirmed') html += '<span style="font-size:.5rem;color:'+C_DEF+';background:'+C_DEF+'22;padding:1px 4px;border-radius:3px;">패턴일치</span>';
     html += '</div>';
 
