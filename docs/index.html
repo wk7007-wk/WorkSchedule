@@ -2346,7 +2346,8 @@ function renderDateStrip(){
     const isSelected = dk===selectedDk;
 
     // 확정 상태 체크 (localStorage에서 직접 로드 — 60일 범위)
-    let confirmedCount = 0;
+    // auto(고정배치)+confirmed = 확정, pending만 미확정
+    let pendingCount = 0;
     let assignedCount = 0;
     const sched = dk===selectedDk ? daySchedule : (weekSchedules[dk] || lsLoadSchedule(dk));
     if(sched){
@@ -2354,17 +2355,17 @@ function renderDateStrip(){
         if(sched[eid] && sched[eid].start){
           assignedCount++;
           const st = getShiftStatus(dk, eid);
-          if(st==='confirmed') confirmedCount++;
+          if(st==='pending') pendingCount++;
         }
       });
     }
 
-    // 테두리 색상: 확정=초록, 미확정=회색, 없음=기본
+    // 테두리 색상: 전원배치+미정없음=확정(초록), 미정있음=미정(회색)
     let borderColor = '#2E2E52';
     let statusLabel = '';
     if(assignedCount > 0){
-      if(confirmedCount === assignedCount){ borderColor = C_OK; statusLabel = '확정'; }
-      else { borderColor = C_DEF; statusLabel = '미정'; }
+      if(pendingCount === 0){ borderColor = C_OK; statusLabel = '확정'; }
+      else { borderColor = C_DEF; statusLabel = pendingCount+'명미정'; }
     }
 
     const dowCls = dow===0 ? ' sun' : dow===6 ? ' sat' : '';
@@ -2427,18 +2428,18 @@ function renderWeek(){
     const isTodayDay = isSameDay(d, today);
     const isPast = d < todayMidnight;
 
-    // 확정 상태 체크
-    let confirmedCount = 0;
+    // 확정 상태 체크 (auto+confirmed=확정, pending만 미확정)
+    let pendingCnt = 0;
     let scheduledCount = 0;
     empKeys.forEach(empId => {
       if(sched[empId] && sched[empId].start){
         scheduledCount++;
-        if(getShiftStatus(dk, empId)==='confirmed') confirmedCount++;
+        if(getShiftStatus(dk, empId)==='pending') pendingCnt++;
       } else {
         daysOff[empId] = (daysOff[empId]||0) + 1;
       }
     });
-    const allConfirmed = scheduledCount > 0 && confirmedCount === scheduledCount;
+    const allConfirmed = scheduledCount > 0 && pendingCnt === 0;
     const borderC = scheduledCount > 0 ? (allConfirmed ? C_OK : C_DEF) : '#2E2E52';
 
     const cell = document.createElement('div');
@@ -3635,7 +3636,7 @@ function renderListView(){
 
   // 분류
   const working = [], offList = [], empty = [];
-  let totalHours = 0, confirmedCount = 0, autoCount = 0, pendingCount = 0;
+  let totalHours = 0, okCount = 0, pendingCount = 0;
   empKeys.forEach(id => {
     const emp = employees[id];
     const off = isDayOff(id, dk);
@@ -3647,9 +3648,8 @@ function renderListView(){
       const isFixed = fix && fix.type==='fixed' && shift.start===fix.start && shift.end===fix.end;
       const hours = calcHours(shift.start, shift.end);
       totalHours += hours;
-      if(st==='confirmed') confirmedCount++;
-      else if(st==='pending') pendingCount++;
-      else autoCount++;
+      if(st==='pending') pendingCount++;
+      else okCount++; // auto + confirmed = 확정
       working.push({id, emp, shift, status:st, isFixed, hours});
     } else {
       empty.push({id, emp});
@@ -3668,27 +3668,24 @@ function renderListView(){
   if(confirmed) html += ' <span style="font-size:.6rem;color:'+C_OK+';">확정</span>';
   html += '</div>';
   html += '<div style="display:flex;gap:4px;align-items:center;">';
-  if(working.length > 0 && confirmedCount < working.length){
+  if(pendingCount > 0){
     html += '<span onclick="confirmAllShifts()" style="font-size:.55rem;padding:3px 6px;border-radius:4px;background:'+C_OK+'22;color:'+C_OK+';cursor:pointer;font-weight:700;">전체확정</span>';
-  }
-  if(confirmedCount > 0){
-    html += '<span onclick="resetAllShifts()" style="font-size:.55rem;padding:3px 6px;border-radius:4px;background:#33333388;color:'+C_DEF+';cursor:pointer;font-weight:700;">초기화</span>';
   }
   html += '</div></div>';
 
   // === 진행률 게이지 (초록+회색 2톤) ===
   const total = working.length + empty.length;
-  const pctConfirmed = total > 0 ? Math.round(confirmedCount/total*100) : 0;
-  const pctRest = 100 - pctConfirmed;
+  const pctOk = total > 0 ? Math.round(okCount/total*100) : 0;
+  const pctRest = 100 - pctOk;
 
   html += '<div style="margin-bottom:6px;">';
   html += '<div style="display:flex;height:5px;border-radius:3px;overflow:hidden;background:'+C_BG+';">';
-  if(pctConfirmed > 0) html += '<div style="width:'+pctConfirmed+'%;background:'+C_OK+';"></div>';
+  if(pctOk > 0) html += '<div style="width:'+pctOk+'%;background:'+C_OK+';"></div>';
   if(pctRest > 0) html += '<div style="width:'+pctRest+'%;background:#2E2E52;"></div>';
   html += '</div>';
   html += '<div style="display:flex;gap:8px;margin-top:3px;font-size:.55rem;">';
-  html += '<span style="color:'+C_OK+';font-weight:700;">확정 '+confirmedCount+'</span>';
-  if(autoCount+pendingCount) html += '<span style="color:'+C_DEF+';font-weight:700;">미확정 '+(autoCount+pendingCount)+'</span>';
+  html += '<span style="color:'+C_OK+';font-weight:700;">확정 '+okCount+'</span>';
+  if(pendingCount) html += '<span style="color:'+C_DEF+';font-weight:700;">미정 '+pendingCount+'</span>';
   if(empty.length) html += '<span style="color:#707088;">미입력 '+empty.length+'</span>';
   html += '<span style="color:#707088;margin-left:auto;">'+working.length+'명 '+totalHours.toFixed(1).replace('.0','')+'h</span>';
   if(offList.length) html += '<span style="color:'+C_OFF+';">휴'+offList.length+'</span>';
@@ -3713,10 +3710,10 @@ function renderListView(){
     const endPct = Math.min(100, ((eH + eM/60) - GAUGE_START) / GAUGE_RANGE * 100);
     const widthPct = Math.max(1, endPct - startPct);
 
-    // 상태 색상 (3색 체계: 확정=초록, 보정/미정=회색, 충돌/휴무=빨강)
-    const stColor = w.status==='confirmed' ? C_OK : C_DEF;
-    const stLabel = w.status==='confirmed' ? '확정' : '미확정';
-    const stBg = w.status==='confirmed' ? C_OK+'10' : C_DEF+'08';
+    // 상태 색상: pending만 미확정, 나머지(auto+confirmed)는 확정
+    const isPending = w.status==='pending';
+    const stColor = isPending ? C_DEF : C_OK;
+    const stBg = isPending ? C_DEF+'08' : C_OK+'10';
     const borderC = hasConflict ? C_OFF : stColor;
 
     // 패턴 제안
@@ -3736,11 +3733,9 @@ function renderListView(){
     html += '<div style="position:absolute;left:'+startPct+'%;width:'+widthPct+'%;top:1px;bottom:1px;background:'+barC+'40;border-radius:2px;border-left:2px solid '+barC+';"></div>';
     html += '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:.55rem;color:#E0E0EC;font-weight:600;white-space:nowrap;text-shadow:0 0 3px #000;">'+timeLabel+' ('+w.hours+'h)</span>';
     html += '</div>';
-    // 상태 버튼
-    if(w.status==='confirmed'){
-      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'auto\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;">확정</span>';
-    } else {
-      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;">미확정</span>';
+    // 상태 버튼 (pending만 미확정 표시)
+    if(isPending){
+      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;">미정</span>';
     }
     if(hasConflict) html += '<span style="font-size:.5rem;color:'+C_OFF+';font-weight:700;">!</span>';
     html += '</div>';
