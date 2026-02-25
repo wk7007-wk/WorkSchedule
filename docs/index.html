@@ -2580,6 +2580,19 @@ function openShiftModal(empId){
   // 고정/휴무 버튼 표시
   $('shiftSaveFixed').style.display = empId ? '' : 'none';
   $('shiftDayoff').style.display = empId ? '' : 'none';
+  // 휴무 상태면 버튼을 "휴무해제"로 변경
+  const isOff = empId && isDayOff(empId, dateKey(currentDate));
+  if(isOff){
+    $('shiftDayoff').textContent = '휴무해제';
+    $('shiftDayoff').classList.remove('btn-danger');
+    $('shiftDayoff').style.background = '#333';
+    $('shiftDayoff').style.color = '#9090A8';
+  } else {
+    $('shiftDayoff').textContent = '휴무지정';
+    $('shiftDayoff').classList.add('btn-danger');
+    $('shiftDayoff').style.background = '';
+    $('shiftDayoff').style.color = '';
+  }
 
   openModal($shiftModal);
 }
@@ -2693,17 +2706,32 @@ $('shiftSaveFixed').addEventListener('click', async()=>{
 $('shiftDayoff').addEventListener('click', ()=>{
   if(!shiftSelectedEmpId) return;
   const dk = dateKey(currentDate);
-  if(!dayoffs[shiftSelectedEmpId]) dayoffs[shiftSelectedEmpId] = {};
-  dayoffs[shiftSelectedEmpId][dk] = true;
-  if(daySchedule[shiftSelectedEmpId]){
-    delete daySchedule[shiftSelectedEmpId];
-    lsSaveSchedule(dk, daySchedule);
-    fbDelete(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId);
+  const isOff = isDayOff(shiftSelectedEmpId, dk);
+  if(isOff){
+    // 휴무 해제
+    if(dayoffs[shiftSelectedEmpId]) delete dayoffs[shiftSelectedEmpId][dk];
+    lsSaveDayoffs();
+    fbDelete(FB_DAYOFFS+'/'+shiftSelectedEmpId+'/'+dk);
+    if(daySchedule[shiftSelectedEmpId] && daySchedule[shiftSelectedEmpId].dayoff){
+      delete daySchedule[shiftSelectedEmpId];
+      lsSaveSchedule(dk, daySchedule);
+    }
+    closeModal($shiftModal);
+    showToast('휴무 해제');
+  } else {
+    // 휴무 지정
+    if(!dayoffs[shiftSelectedEmpId]) dayoffs[shiftSelectedEmpId] = {};
+    dayoffs[shiftSelectedEmpId][dk] = true;
+    if(daySchedule[shiftSelectedEmpId]){
+      delete daySchedule[shiftSelectedEmpId];
+      lsSaveSchedule(dk, daySchedule);
+      fbDelete(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId);
+    }
+    lsSaveDayoffs();
+    fbPut(FB_DAYOFFS+'/'+shiftSelectedEmpId+'/'+dk, true);
+    closeModal($shiftModal);
+    showToast('휴무 지정');
   }
-  lsSaveDayoffs();
-  fbPut(FB_DAYOFFS+'/'+shiftSelectedEmpId+'/'+dk, true);
-  closeModal($shiftModal);
-  showToast('휴무 지정');
   renderAll();
 });
 
