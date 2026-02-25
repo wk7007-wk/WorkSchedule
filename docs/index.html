@@ -3728,45 +3728,26 @@ function renderListView(){
     const pattern = getPatternSuggestion(w.id, dk);
     const patternMatch = pattern && w.shift.start===pattern.start && w.shift.end===pattern.end;
 
-    html += '<div style="background:'+stBg+';border-left:3px solid '+borderC+';border-radius:6px;margin-bottom:3px;padding:5px 8px;">';
+    const barC = hasConflict ? C_OFF : stColor;
+    const timeLabel = w.shift.start.replace(/^0/,'')+'-'+w.shift.end.replace(/^0/,'');
 
-    // 행1: 이름 + 출퇴근 텍스트 + 상태버튼
-    html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;">';
-    html += '<span style="font-size:.85rem;font-weight:800;color:#FFF;min-width:44px;">'+w.emp.name+'</span>';
-    html += '<span style="font-size:.75rem;font-weight:600;color:#E0E0EC;">출근 '+w.shift.start+'</span>';
-    html += '<span style="font-size:.6rem;color:#707088;">~</span>';
-    html += '<span style="font-size:.75rem;font-weight:600;color:#E0E0EC;">퇴근 '+w.shift.end+'</span>';
-    html += '<span style="font-size:.65rem;color:'+C_DEF+';font-weight:700;">'+w.hours+'h</span>';
-    html += '<span style="margin-left:auto;display:flex;gap:2px;">';
-    // 상태 토글 버튼
-    // 현재 상태만 표기 (터치 시 토글)
+    html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;padding:4px 6px;background:'+stBg+';border-left:3px solid '+borderC+';border-radius:6px;cursor:pointer;" data-empid="'+w.id+'">';
+    // 이름
+    html += '<span style="font-size:.8rem;font-weight:800;color:#FFF;min-width:38px;">'+w.emp.name+'</span>';
+    // 역할 (색상텍스트, 있을때만)
+    if(roles.length) html += '<span style="font-size:.55rem;">'+roles.map(r=>'<span style="color:'+(ROLE_COLORS[r]||C_DEF)+';font-weight:700;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ')+'</span>';
+    // 게이지 (시간 내장)
+    html += '<div style="position:relative;flex:1;height:18px;background:#1A1A30;border-radius:3px;overflow:hidden;">';
+    html += '<div style="position:absolute;left:'+startPct+'%;width:'+widthPct+'%;top:1px;bottom:1px;background:'+barC+'40;border-radius:2px;border-left:2px solid '+barC+';"></div>';
+    html += '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:.55rem;color:#E0E0EC;font-weight:600;white-space:nowrap;text-shadow:0 0 3px #000;">'+timeLabel+' ('+w.hours+'h)</span>';
+    html += '</div>';
+    // 상태 버튼
     if(w.status==='confirmed'){
-      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'auto\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;">확정</span>';
+      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'auto\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;">확정</span>';
     } else {
-      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;">미확정</span>';
+      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;">미확정</span>';
     }
-    html += '</span></div>';
-
-    // 행2: 타임라인 게이지
-    html += '<div style="position:relative;height:16px;background:#1A1A30;border-radius:3px;overflow:hidden;cursor:pointer;" data-empid="'+w.id+'">';
-    // 시간 눈금
-    for(let h=6;h<=27;h+=3){
-      const pct = ((h-GAUGE_START)/GAUGE_RANGE*100);
-      html += '<div style="position:absolute;left:'+pct+'%;top:0;bottom:0;width:1px;background:#2E2E5240;"></div>';
-    }
-    // 근무 바
-    const barC = hasConflict ? '#E74C3C' : stColor;
-    html += '<div style="position:absolute;left:'+startPct+'%;width:'+widthPct+'%;top:1px;bottom:1px;background:'+barC+'40;border-radius:2px;border-left:2px solid '+barC+';border-right:2px solid '+barC+'66;"></div>';
-    html += '</div>';
-
-    // 행3: 역할 + 태그
-    html += '<div style="display:flex;align-items:center;gap:4px;margin-top:2px;">';
-    html += roleHtml;
-    if(w.isFixed) html += '<span style="font-size:.5rem;color:#707088;background:#70708822;padding:1px 4px;border-radius:3px;">고정</span>';
-    if(hasConflict) html += '<span style="font-size:.5rem;color:'+C_OFF+';background:'+C_OFF+'22;padding:1px 4px;border-radius:3px;">충돌</span>';
-    if(patternMatch && w.status!=='confirmed') html += '<span style="font-size:.5rem;color:'+C_DEF+';background:'+C_DEF+'22;padding:1px 4px;border-radius:3px;">패턴일치</span>';
-    html += '</div>';
-
+    if(hasConflict) html += '<span style="font-size:.5rem;color:'+C_OFF+';font-weight:700;">!</span>';
     html += '</div>';
   });
 
