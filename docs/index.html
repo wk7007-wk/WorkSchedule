@@ -5085,6 +5085,14 @@ function collectAllConfirmed(){
     const dk = dateKey(d);
     const sched = lsLoadSchedule(dk)||{};
     const dow = DOW_KR[d.getDay()];
+    // 당일 전원 확정 체크
+    let allConfirmed = true;
+    empKeys.forEach(eid=>{
+      const shift = sched[eid];
+      if(!shift||!shift.start) return;
+      if(getShiftStatus(dk,eid)!=='confirmed') allConfirmed = false;
+    });
+    if(!allConfirmed) continue;
     let dayLine = (d.getMonth()+1)+'/'+d.getDate()+'('+dow+') ';
     let hasShift = false;
     empKeys.forEach(eid=>{
@@ -5169,6 +5177,14 @@ $('shareKakaoBtn').addEventListener('click', async()=>{
       const dk = dateKey(d);
       const sched = lsLoadSchedule(dk) || {};
       const dow = DOW_KR[d.getDay()];
+      // 당일 전원 확정 여부 체크
+      let allConfirmed = true;
+      empKeys.forEach(eid=>{
+        const shift = sched[eid];
+        if(!shift || !shift.start) return; // 미입력은 무시
+        if(getShiftStatus(dk, eid) !== 'confirmed') allConfirmed = false;
+      });
+      if(!allConfirmed) continue; // 일부라도 미확정이면 해당 날짜 스킵
       let dayLine = (d.getMonth()+1)+'/'+d.getDate()+'('+dow+') ';
       let hasShift = false;
       empKeys.forEach(eid=>{
