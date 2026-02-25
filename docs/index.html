@@ -5238,6 +5238,7 @@ $('shareKakaoBtn').addEventListener('click', async()=>{
     Object.keys(byEmp).forEach(eid=>{
       const emp = employees[eid];
       if(!emp) return;
+      if(emp.name === '이원규') return; // 사장 제외
       const ics = buildIcsForEmployee(eid, byEmp[eid], false);
       perEmpIcs.push({name: emp.name, ics: ics});
     });
