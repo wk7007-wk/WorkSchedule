@@ -3661,7 +3661,7 @@ function renderListView(){
     html += '<div style="margin-top:4px;padding-top:4px;border-top:1px solid #2E2E5240;">';
     html += '<div style="font-size:.6rem;color:#E74C3C;font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid #E74C3C;">휴무 ('+offList.length+'명)</div>';
     offList.forEach(o => {
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:2px;background:#E74C3C08;border-radius:6px;border-left:3px solid #E74C3C;">';
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:2px;background:#E74C3C08;border-radius:6px;border-left:3px solid #E74C3C;cursor:pointer;" data-empid="'+o.id+'">';
       html += '<span style="font-size:.8rem;font-weight:800;color:#E74C3C;">'+o.emp.name+'</span>';
       html += '<span style="font-size:.65rem;color:#E74C3C;">휴무</span>';
       html += '<span onclick="event.stopPropagation();toggleDayOffFromList(\''+o.id+'\')" style="margin-left:auto;font-size:.55rem;padding:2px 6px;border-radius:3px;background:#333;color:#9090A8;cursor:pointer;font-weight:700;">해제</span>';
