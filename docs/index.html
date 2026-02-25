@@ -1118,24 +1118,24 @@ function makeHourlyPreset(label, rules){
 }
 const STAFF_PRESETS = {
   '250': makeHourlyPreset('~250만', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:1}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[18,19], kitchen:{min:3,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[20,21,22,23,0,1,2], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:0.5,max:1}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
+    {hours:[18,19], kitchen:{min:3,max:3.5}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
+    {hours:[20,21,22,23,0,1,2], kitchen:{min:2,max:3}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
   ]),
   '300': makeHourlyPreset('~300만', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[18,19], kitchen:{min:3,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[20,21,22,23,0,1,2], kitchen:{min:2,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:0.5,max:1.5}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
+    {hours:[18,19], kitchen:{min:3.5,max:4.5}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
+    {hours:[20,21,22,23,0,1,2], kitchen:{min:2.5,max:3.5}, bike:{min:0,max:0.5}, car:{min:0,max:0.5}},
   ]),
   '350': makeHourlyPreset('~350만', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[18,19], kitchen:{min:4,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[20,21,22,23,0,1,2], kitchen:{min:3,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:0.5}},
+    {hours:[18,19], kitchen:{min:4,max:5}, bike:{min:0,max:1}, car:{min:0,max:0.5}},
+    {hours:[20,21,22,23,0,1,2], kitchen:{min:3,max:4}, bike:{min:0,max:1}, car:{min:0,max:0.5}},
   ]),
   '맥스': makeHourlyPreset('350만~', [
     {hours:[6,7,8,9,10,11,12,13,14,15,16,17], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[18,19], kitchen:{min:4,max:6}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[20,21,22,23,0,1,2], kitchen:{min:3,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[18,19], kitchen:{min:4.5,max:6}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21,22,23,0,1,2], kitchen:{min:3.5,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
   ]),
 };
 let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'null') || {
@@ -2935,8 +2935,7 @@ function setDailyRevenue(key){
   renderAll();
 }
 function clearHourlyOverrides(){
-  const pk = getActivePresetKey();
-  delete staffSettings.presetOverrides[pk];
+  staffSettings.presetOverrides = {}; // 모든 구간 오버라이드 초기화 → 디폴트 적용
   saveStaffSettings();
   renderAll();
 }
@@ -3098,9 +3097,9 @@ function openHourLimitEdit(hour){
     btn.addEventListener('click', ()=>{
       const parts = btn.dataset.hlBtn.split('_');
       const field = parts[0]+'_'+parts[1];
-      const delta = parseInt(parts[2]);
+      const delta = parseFloat(parts[2]) * 0.5; // 0.5 단위
       const inp = overlay.querySelector('[data-hl="'+field+'"]');
-      if(inp) inp.value = Math.max(0, Math.min(9, parseInt(inp.value||'0')+delta));
+      if(inp) inp.value = Math.max(0, Math.min(9, parseFloat(inp.value||'0')+delta));
     });
   });
   // 빠른시간 선택
@@ -3115,7 +3114,7 @@ function openHourLimitEdit(hour){
   overlay.querySelector('#hlSave').addEventListener('click', ()=>{
     const fromIdx = parseInt(overlay.querySelector('#hlFrom').value);
     const toIdx = parseInt(overlay.querySelector('#hlTo').value);
-    const g = (k) => parseInt(overlay.querySelector('[data-hl="'+k+'"]')?.value||'0');
+    const g = (k) => parseFloat(overlay.querySelector('[data-hl="'+k+'"]')?.value||'0');
     const val = {
       kitchen:{min:g('kitchen_min'),max:g('kitchen_max')},
       bike:{min:g('bike_min'),max:g('bike_max')},
