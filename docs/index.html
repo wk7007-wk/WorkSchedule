@@ -1904,11 +1904,8 @@ function renderBriefing(){
     const s = staffing[hStr];
     totalCheckHours++;
     const kitchenOk = !s.kitchenOver && !s.kitchenUnder;
-    // 배달: 대행 포함해서 차+오토바이 min 충족, 대행시간 밖(6~9시)은 배달 불필요
-    const hNum = parseInt(hStr);
-    const noDeliveryNeeded = !s.daAvail && s.delivery === 0 && hNum >= 6 && hNum < 10;
-    const deliveryOk = noDeliveryNeeded || !s.carOver && !s.bikeOver;
-    if(kitchenOk && deliveryOk && !s.carOver && !s.bikeOver) okHours++;
+    const deliveryOk = !s.deliveryUnder && !s.carOver && !s.bikeOver;
+    if(kitchenOk && deliveryOk) okHours++;
   }
   const complianceRate = totalCheckHours > 0 ? Math.round((okHours/totalCheckHours)*100) : 0;
 
@@ -2285,7 +2282,7 @@ function renderTimeline(){
     const hStr = pad(h)+':00';
     const s = staffing[hStr];
     const total = s ? s.total : 0;
-    const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver);
+    const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver || s.deliveryUnder);
     html += '<div style="flex:1;background:'+(anyConflict?'#E74C3C22':'#2ECC7115')+';display:flex;align-items:center;justify-content:center;font-size:.5rem;color:'+(anyConflict?'#E74C3C':'#2ECC71')+';font-weight:700;border-radius:1px;">';
     html += total > 0 ? total : '';
     html += '</div>';
@@ -2355,28 +2352,27 @@ function calcStaffing(empKeys, dk){
     }
 
     const delivery = carFinal + bikeFinal;
-    // 배달대행 = 배달 부족분 충족 (10~01시 영업)
+    // 배달대행 = 바이크만 (차 안 탐), 10~01시 영업
     const DA_START = timeToMinutesFrom6(pad(preset.daStart||10)+':00');
     const DA_END = timeToMinutesFrom6(pad(preset.daEnd||1)+':00');
     const daAvail = hMin >= DA_START && hMin < DA_END;
-    // 대행 영업시간: 바이크 min=1 (대행이 최소 1명 역할), 바이크 실인원=0 가능
-    const effBikeMin = daAvail ? 1 : limits['오토바이'].min;
-    const bikeNeed = Math.max(0, Math.max(effBikeMin, limits['오토바이'].max) - bikeFinal);
-    const carNeed = Math.max(0, limits['차배달'].max - carFinal);
-    const daFill = daAvail ? bikeNeed + carNeed : 0;
+    const bikeNeed = Math.max(0, limits['오토바이'].max - bikeFinal);
+    const daFill = daAvail ? bikeNeed : 0; // 대행 = 바이크 부족분만
     const deliveryWithDA = delivery + daFill;
 
-    // 충돌 체크: 주방 min/max = 총 인원 기준 (가게에 주방 공백 없음)
-    // 배달은 대행이 커버
-    const carOver = carFinal > limits['차배달'].max;
-    const bikeOver = bikeFinal > limits['오토바이'].max;
+    // 충돌 체크
     const kitchenOver = total > limits['주방'].max;
     const kitchenUnder = total < limits['주방'].min;
+    const carOver = carFinal > limits['차배달'].max;
+    const bikeOver = bikeFinal > limits['오토바이'].max;
+    // 01~03시 (대행 마감 후): 배달 합산(차+바이크) min1 max1 필요
+    const lateNight = (h >= 1 && h <= 3);
+    const deliveryUnder = lateNight && !daAvail && delivery < 1;
 
     result[hStr] = {
       kitchen: kitchenFinal, carDel: carFinal, bikeDel: bikeFinal,
       delivery, deliveryWithDA, daFill, total, daAvail, hasBikeWorker,
-      carOver, bikeOver, kitchenOver, kitchenUnder
+      carOver, bikeOver, kitchenOver, kitchenUnder, deliveryUnder
     };
   }
   return result;
@@ -4493,7 +4489,7 @@ function renderTimebarView(){
     const hStr = pad(h)+':00';
     const s = staffing[hStr];
     const t = s ? s.total : 0;
-    const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver);
+    const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver || s.deliveryUnder);
     html += '<div data-action="gaugeEdit" data-hour="'+h+'" style="flex:1;background:'+(anyConflict?C_OFF+'22':t>0?'#3498DB15':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:'+(anyConflict?C_OFF:t>0?'#3498DB':'#707088')+';font-weight:700;border-radius:1px;cursor:pointer;">';
     html += t > 0 ? t : '';
     html += '</div>';
