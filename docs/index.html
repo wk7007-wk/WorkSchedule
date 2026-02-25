@@ -1449,7 +1449,7 @@ function connectScheduleSSE(gen){
           }
         }
         lsSaveSchedule(dateKey(currentDate), daySchedule);
-        renderTimeline();
+        renderAll();
       }catch(err){ console.error('SSE sched parse',err); }
     });
     sseSchedule.addEventListener('patch', function(e){
@@ -1464,7 +1464,7 @@ function connectScheduleSSE(gen){
         } else if(parts.length === 1 && d.data){
           daySchedule[parts[0]] = Object.assign(daySchedule[parts[0]]||{}, d.data);
         }
-        renderTimeline();
+        renderAll();
       }catch(err){ console.error('SSE sched patch parse',err); }
     });
     sseSchedule.onerror = function(){
@@ -2249,7 +2249,7 @@ function onDragEnd(e){
   const data = {start: startTime, end: endTime, role: defaultRole};
   daySchedule[ds.empId] = data;
   lsSaveSchedule(dk, daySchedule);
-  renderTimeline();
+  renderAll();
   fbPut(FB_SCHEDULES+'/'+dk+'/'+ds.empId, data).then(ok => {
     if(ok){
       showToast(employees[ds.empId].name+' '+startTime+'~'+endTime);
@@ -2649,7 +2649,7 @@ $('shiftDelete').addEventListener('click', async()=>{
   // Optimistic — localStorage first
   delete daySchedule[shiftSelectedEmpId];
   lsSaveSchedule(dk, daySchedule);
-  renderTimeline();
+  renderAll();
 
   const ok = await fbDelete(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId);
   if(ok){
@@ -3058,7 +3058,7 @@ async function addDayOff(empId, dk){
   if(dk === schedKey){
     daySchedule[empId] = {start:'', end:'', role:'휴무', dayoff:true};
     lsSaveSchedule(schedKey, daySchedule);
-    renderTimeline();
+    renderAll();
   }
   fbPut(FB_DAYOFFS+'/'+empId+'/'+dk, true);
 }
@@ -3070,7 +3070,7 @@ async function removeDayOff(empId, dk){
   if(dk === schedKey && daySchedule[empId] && daySchedule[empId].dayoff){
     delete daySchedule[empId];
     lsSaveSchedule(schedKey, daySchedule);
-    renderTimeline();
+    renderAll();
   }
   fbDelete(FB_DAYOFFS+'/'+empId+'/'+dk);
 }
@@ -3520,46 +3520,47 @@ function renderListView(){
   });
   working.sort((a,b) => timeToMinutesFrom6(a.shift.start) - timeToMinutesFrom6(b.shift.start));
 
+  // 색상 통일: 초록=확정, 회색=보정/기본, 빨강=휴무/충돌
+  const C_OK = '#2ECC71';  // 확정
+  const C_DEF = '#9090A8'; // 보정(기본)
+  const C_OFF = '#E74C3C'; // 휴무/충돌
+  const C_BG = '#1A1A30';
+
   let html = '<div style="padding:6px 8px;">';
 
-  // === 헤더 ===
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid #2E2E52;">';
+  // === 헤더 (확정일은 초록 표시) ===
+  const hdrBorder = confirmed ? 'border-bottom:2px solid '+C_OK+';' : 'border-bottom:1px solid #2E2E52;';
+  const hdrDateC = confirmed ? C_OK : '#FFF';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding-bottom:5px;'+hdrBorder+'">';
   html += '<div>';
-  html += '<span style="font-size:1rem;font-weight:800;color:#FFF;">'+m+'/'+d+' '+dow+'</span>';
-  html += ' <span style="font-size:.6rem;color:#707088;">근무표</span>';
+  html += '<span style="font-size:1rem;font-weight:800;color:'+hdrDateC+';">'+m+'/'+d+' '+dow+'</span>';
+  if(confirmed) html += ' <span style="font-size:.6rem;color:'+C_OK+';">확정</span>';
   html += '</div>';
   html += '<div style="display:flex;gap:4px;align-items:center;">';
-  // 전체확정/전체보정 버튼
   if(working.length > 0 && confirmedCount < working.length){
-    html += '<span onclick="confirmAllShifts()" style="font-size:.55rem;padding:3px 6px;border-radius:4px;background:#2ECC7122;color:#2ECC71;cursor:pointer;font-weight:700;">전체확정</span>';
+    html += '<span onclick="confirmAllShifts()" style="font-size:.55rem;padding:3px 6px;border-radius:4px;background:'+C_OK+'22;color:'+C_OK+';cursor:pointer;font-weight:700;">전체확정</span>';
   }
   if(confirmedCount > 0){
-    html += '<span onclick="resetAllShifts()" style="font-size:.55rem;padding:3px 6px;border-radius:4px;background:#E67E2222;color:#E67E22;cursor:pointer;font-weight:700;">전체보정</span>';
+    html += '<span onclick="resetAllShifts()" style="font-size:.55rem;padding:3px 6px;border-radius:4px;background:#33333388;color:'+C_DEF+';cursor:pointer;font-weight:700;">초기화</span>';
   }
-  html += '<span style="padding:3px 8px;border-radius:10px;font-size:.6rem;font-weight:700;background:'+(confirmed?'#2ECC7122':'#E67E2222')+';color:'+(confirmed?'#2ECC71':'#E67E22')+';">'+(confirmed?'확정':'작업중')+'</span>';
   html += '</div></div>';
 
-  // === 보정 진행률 게이지 ===
+  // === 진행률 게이지 (초록+회색 2톤) ===
   const total = working.length + empty.length;
   const pctConfirmed = total > 0 ? Math.round(confirmedCount/total*100) : 0;
-  const pctAuto = total > 0 ? Math.round(autoCount/total*100) : 0;
-  const pctPending = total > 0 ? Math.round(pendingCount/total*100) : 0;
-  const pctEmpty = total > 0 ? Math.round(empty.length/total*100) : 0;
+  const pctRest = 100 - pctConfirmed;
 
   html += '<div style="margin-bottom:6px;">';
-  html += '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:#1A1A30;">';
-  if(pctConfirmed > 0) html += '<div style="width:'+pctConfirmed+'%;background:#2ECC71;"></div>';
-  if(pctAuto > 0) html += '<div style="width:'+pctAuto+'%;background:#FFD700;"></div>';
-  if(pctPending > 0) html += '<div style="width:'+pctPending+'%;background:#E67E22;"></div>';
-  if(pctEmpty > 0) html += '<div style="width:'+pctEmpty+'%;background:#E74C3C40;"></div>';
+  html += '<div style="display:flex;height:5px;border-radius:3px;overflow:hidden;background:'+C_BG+';">';
+  if(pctConfirmed > 0) html += '<div style="width:'+pctConfirmed+'%;background:'+C_OK+';"></div>';
+  if(pctRest > 0) html += '<div style="width:'+pctRest+'%;background:#2E2E52;"></div>';
   html += '</div>';
   html += '<div style="display:flex;gap:8px;margin-top:3px;font-size:.55rem;">';
-  html += '<span style="color:#2ECC71;font-weight:700;">확정 '+confirmedCount+'</span>';
-  html += '<span style="color:#FFD700;font-weight:700;">보정 '+autoCount+'</span>';
-  if(pendingCount) html += '<span style="color:#E67E22;font-weight:700;">미정 '+pendingCount+'</span>';
-  if(empty.length) html += '<span style="color:#E74C3C;font-weight:700;">미입력 '+empty.length+'</span>';
-  html += '<span style="color:#9090A8;margin-left:auto;">'+working.length+'명 '+totalHours.toFixed(1).replace('.0','')+'h</span>';
-  if(offList.length) html += '<span style="color:#E74C3C;">휴'+offList.length+'</span>';
+  html += '<span style="color:'+C_OK+';font-weight:700;">확정 '+confirmedCount+'</span>';
+  if(autoCount+pendingCount) html += '<span style="color:'+C_DEF+';font-weight:700;">미확정 '+(autoCount+pendingCount)+'</span>';
+  if(empty.length) html += '<span style="color:#707088;">미입력 '+empty.length+'</span>';
+  html += '<span style="color:#707088;margin-left:auto;">'+working.length+'명 '+totalHours.toFixed(1).replace('.0','')+'h</span>';
+  if(offList.length) html += '<span style="color:'+C_OFF+';">휴'+offList.length+'</span>';
   html += '</div></div>';
 
   // === 근무자 리스트 (게이지 + 출퇴근 텍스트 + 상태 버튼) ===
@@ -3581,11 +3582,11 @@ function renderListView(){
     const endPct = Math.min(100, ((eH + eM/60) - GAUGE_START) / GAUGE_RANGE * 100);
     const widthPct = Math.max(1, endPct - startPct);
 
-    // 상태 색상
-    const stColor = w.status==='confirmed' ? '#2ECC71' : w.status==='pending' ? '#E67E22' : '#FFD700';
-    const stLabel = w.status==='confirmed' ? '확정' : w.status==='pending' ? '미정' : '보정';
-    const stBg = w.status==='confirmed' ? '#2ECC7110' : w.status==='pending' ? '#E67E2210' : '#FFD70008';
-    const borderC = hasConflict ? '#E74C3C' : stColor;
+    // 상태 색상 (3색 체계: 확정=초록, 보정/미정=회색, 충돌/휴무=빨강)
+    const stColor = w.status==='confirmed' ? C_OK : C_DEF;
+    const stLabel = w.status==='confirmed' ? '확정' : '미확정';
+    const stBg = w.status==='confirmed' ? C_OK+'10' : C_DEF+'08';
+    const borderC = hasConflict ? C_OFF : stColor;
 
     // 패턴 제안
     const pattern = getPatternSuggestion(w.id, dk);
@@ -3599,13 +3600,13 @@ function renderListView(){
     html += '<span style="font-size:.75rem;font-weight:600;color:#E0E0EC;">출근 '+w.shift.start+'</span>';
     html += '<span style="font-size:.6rem;color:#707088;">~</span>';
     html += '<span style="font-size:.75rem;font-weight:600;color:#E0E0EC;">퇴근 '+w.shift.end+'</span>';
-    html += '<span style="font-size:.65rem;color:#FFD700;font-weight:700;">'+w.hours+'h</span>';
+    html += '<span style="font-size:.65rem;color:'+C_DEF+';font-weight:700;">'+w.hours+'h</span>';
     html += '<span style="margin-left:auto;display:flex;gap:2px;">';
     // 상태 토글 버튼
-    const cfBg = w.status==='confirmed' ? 'background:#2ECC71;color:#fff;' : 'background:#333;color:#707088;';
-    const pdBg = w.status==='pending' ? 'background:#E67E22;color:#fff;' : 'background:#333;color:#707088;';
+    const cfBg = w.status==='confirmed' ? 'background:'+C_OK+';color:#fff;' : 'background:#333;color:#707088;';
+    const pdBg = (w.status==='pending'||w.status==='auto'&&w.status!=='confirmed') ? 'background:#333;color:'+C_DEF+';' : 'background:#333;color:#707088;';
     html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;'+cfBg+'font-weight:700;">확</span>';
-    html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'pending\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;'+pdBg+'font-weight:700;">미</span>';
+    html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'pending\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;'+pdBg+'font-weight:700;">미확정</span>';
     html += '<span onclick="event.stopPropagation();toggleDayOffFromList(\''+w.id+'\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:#E74C3C;font-weight:700;">휴</span>';
     html += '</span></div>';
 
@@ -3627,7 +3628,7 @@ function renderListView(){
     if(w.isFixed) html += '<span style="font-size:.5rem;color:#707088;background:#707088222;padding:1px 4px;border-radius:3px;">고정</span>';
     if(hasConflict) html += '<span style="font-size:.5rem;color:#E74C3C;background:#E74C3C22;padding:1px 4px;border-radius:3px;">충돌</span>';
     html += '<span style="font-size:.5rem;color:'+stColor+';background:'+stColor+'22;padding:1px 4px;border-radius:3px;">'+stLabel+'</span>';
-    if(patternMatch && w.status!=='confirmed') html += '<span style="font-size:.5rem;color:#9B59B6;background:#9B59B622;padding:1px 4px;border-radius:3px;">패턴일치</span>';
+    if(patternMatch && w.status!=='confirmed') html += '<span style="font-size:.5rem;color:'+C_DEF+';background:'+C_DEF+'22;padding:1px 4px;border-radius:3px;">패턴일치</span>';
     html += '</div>';
 
     html += '</div>';
@@ -3636,14 +3637,14 @@ function renderListView(){
   // === 미입력 직원 ===
   if(empty.length > 0){
     html += '<div style="margin-top:4px;padding-top:4px;border-top:1px solid #2E2E5240;">';
-    html += '<div style="font-size:.6rem;color:#E67E22;font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid #E67E22;">미입력 ('+empty.length+'명)</div>';
+    html += '<div style="font-size:.6rem;color:'+C_DEF+';font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid '+C_DEF+';">미입력 ('+empty.length+'명)</div>';
     empty.forEach(e => {
       const pattern = getPatternSuggestion(e.id, dk);
       html += '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:2px;background:#1A1A30;border-radius:6px;border-left:3px solid #707088;cursor:pointer;" data-empid="'+e.id+'">';
       html += '<span style="font-size:.85rem;font-weight:800;color:#707088;min-width:44px;">'+e.emp.name+'</span>';
       if(pattern){
-        html += '<span style="font-size:.65rem;color:#9B59B6;">AI추천 '+pattern.start+'~'+pattern.end+'</span>';
-        html += '<span onclick="event.stopPropagation();applyPatternSuggestion(\''+e.id+'\',\''+dk+'\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:#9B59B633;color:#9B59B6;cursor:pointer;font-weight:700;">적용</span>';
+        html += '<span style="font-size:.65rem;color:'+C_OK+';">AI추천 '+pattern.start+'~'+pattern.end+'</span>';
+        html += '<span onclick="event.stopPropagation();applyPatternSuggestion(\''+e.id+'\',\''+dk+'\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:'+C_OK+'33;color:'+C_OK+';cursor:pointer;font-weight:700;">적용</span>';
       } else {
         html += '<span style="font-size:.7rem;color:#707088;">미입력</span>';
       }
@@ -4348,7 +4349,7 @@ window.applyAiSchedule = async function(data){
     const ok = await fbPut(FB_SCHEDULES+'/'+s.date+'/'+s.empId, shiftData);
     if(ok) applied++;
   }
-  renderTimeline();
+  renderAll();
   loadWeekSchedules();
   showToast(applied+'건 적용 완료');
 };
@@ -4498,7 +4499,7 @@ function init(){
   loadData().then(()=>{
     // Load weather after data + key ready
     setTimeout(()=>{
-      loadHourlyWeather().then(()=> renderTimeline());
+      loadHourlyWeather().then(()=> renderAll());
       loadWeatherAndSports();
     }, 1500);
   });
