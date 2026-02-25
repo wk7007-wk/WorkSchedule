@@ -64,7 +64,7 @@ body{
   display:flex;
   background:#121225;
   border-bottom:2px solid #2E2E52;
-  position:sticky;top:46px;z-index:99;
+  position:sticky;top:66px;z-index:99;
 }
 .layout-tab{
   flex:1;padding:8px 0;text-align:center;
@@ -685,24 +685,26 @@ select.form-input{
 </head>
 <body>
 
-<!-- Header -->
-<div class="header">
-  <div class="header-left">
-    <h1>근무표</h1>
-    <button class="btn emp-mgr-btn" id="empMgrBtn">직원</button>
-    <button class="btn emp-mgr-btn" id="dayoffMgrBtn" style="color:#E74C3C;border-color:#E74C3C55;">휴무</button>
+<!-- Header (2행 구조: 날짜 네비 + 기능 버튼) -->
+<div style="position:sticky;top:0;z-index:100;background:#1A1A30;border-bottom:1px solid #2E2E52;">
+  <div style="display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:4px;">
+    <button class="btn nav-btn" id="prevDay" aria-label="3일 전" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">◀◀</button>
+    <button class="btn nav-btn" id="prevDay1" aria-label="이전 날" style="font-size:.8rem;min-width:32px;min-height:32px;padding:4px;">◀</button>
+    <span class="date-display" id="dateDisplay" style="cursor:pointer;min-width:90px;"></span>
+    <button class="btn nav-btn" id="nextDay1" aria-label="다음 날" style="font-size:.8rem;min-width:32px;min-height:32px;padding:4px;">▶</button>
+    <button class="btn nav-btn" id="nextDay" aria-label="3일 후" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">▶▶</button>
   </div>
-  <div class="header-center">
-    <button class="btn nav-btn" id="prevDay" aria-label="3일 전" style="font-size:.8rem;">◀◀</button>
-    <button class="btn nav-btn" id="prevDay1" aria-label="이전 날" style="font-size:.9rem;">◀</button>
-    <span class="date-display" id="dateDisplay" style="cursor:pointer;"></span>
-    <button class="btn nav-btn" id="nextDay1" aria-label="다음 날" style="font-size:.9rem;">▶</button>
-    <button class="btn nav-btn" id="nextDay" aria-label="3일 후" style="font-size:.8rem;">▶▶</button>
-  </div>
-  <div class="header-right">
-    <button class="btn btn-sm" id="resetFixedBtn" style="font-size:.65rem;padding:3px 6px;min-width:auto;min-height:28px;color:#9090A8;border-color:#2E2E52;">재배치</button>
-    <button class="btn btn-sm" id="confirmDayBtn" style="font-size:.7rem;padding:4px 8px;min-width:auto;min-height:30px;color:#707088;border-color:#2E2E52;">작업중</button>
-    <button class="btn btn-sm" id="refreshBtn" aria-label="새로고침" style="font-size:.8rem;padding:3px 6px;min-width:auto;min-height:28px;color:#707088;border-color:#2E2E52;">↻</button>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px 4px;gap:4px;">
+    <div style="display:flex;gap:4px;">
+      <button class="btn emp-mgr-btn" id="empMgrBtn">직원</button>
+      <button class="btn emp-mgr-btn" id="dayoffMgrBtn" style="color:#E74C3C;border-color:#E74C3C55;">휴무</button>
+    </div>
+    <div style="display:flex;gap:4px;">
+      <button class="btn btn-sm" id="refreshBtn" aria-label="새로고침" style="font-size:.75rem;padding:2px 6px;min-width:auto;min-height:26px;color:#707088;border-color:#2E2E52;">↻</button>
+    </div>
+    <!-- 재배치/작업중 버튼 숨김 (기능 불명확, 보정 시스템으로 대체) -->
+    <button class="btn btn-sm" id="resetFixedBtn" style="display:none;">재배치</button>
+    <button class="btn btn-sm" id="confirmDayBtn" style="display:none;">작업중</button>
   </div>
 </div>
 
@@ -871,8 +873,9 @@ select.form-input{
         <button class="preset-btn" data-start="10:00" data-end="03:00">풀</button>
       </div>
     </div>
-    <div class="modal-footer">
+    <div class="modal-footer" style="flex-wrap:wrap;">
       <button class="btn btn-danger" id="shiftDelete" style="display:none;">삭제</button>
+      <button class="btn btn-gold btn-sm" id="shiftSaveFixed" style="font-size:.7rem;">고정으로 저장</button>
       <button class="btn" id="shiftCancel">취소</button>
       <button class="btn btn-accent" id="shiftSave">저장</button>
     </div>
@@ -1051,7 +1054,8 @@ function shortName(empName){ return SHORT_NAMES[empName] || empName?.charAt(0) |
 // ============================================================
 // 직원이름 → {start, end, role, type}
 // type: 'fixed'=매일 고정, 'variable'=변칙(수동)
-const FIXED_SCHEDULES = {
+// 고정 스케줄 기본값 (수정 팝업 "고정으로 저장"으로 변경 가능)
+let FIXED_SCHEDULES = {
   '이원규': {start:'06:00', end:'20:00', role:'주방,오토바이', type:'fixed'},
   '히오':   {start:'18:00', end:'03:00', role:'주방', type:'fixed'},
   '리':     {start:'18:00', end:'03:00', role:'주방', type:'fixed'},
@@ -1059,6 +1063,16 @@ const FIXED_SCHEDULES = {
   '전묘정': {start:'17:00', end:'03:00', role:'주방', type:'fixed'},
   '대유':   {start:null, end:null, role:'', type:'variable'}, // 변칙 — 수동 입력
 };
+// localStorage/Firebase 저장된 고정값 덮어쓰기
+try{
+  const saved=JSON.parse(localStorage.getItem('ws_fixed_schedules'));
+  if(saved) Object.assign(FIXED_SCHEDULES, saved);
+}catch(e){}
+// Firebase에서도 로드 (비동기)
+(async()=>{try{
+  const fb=await fbGet('/workschedule/fixed_schedules');
+  if(fb){Object.assign(FIXED_SCHEDULES,fb);localStorage.setItem('ws_fixed_schedules',JSON.stringify(FIXED_SCHEDULES));}
+}catch(e){}})();
 
 // 직원별 가능 역할 (능력)
 const EMP_CAPABILITIES = {
@@ -2559,7 +2573,22 @@ function openShiftModal(empId){
   const m = currentDate.getMonth()+1;
   const d = currentDate.getDate();
   const dow = DOW_KR[currentDate.getDay()];
+  const empName = empId ? (employees[empId]?.name||'') : '';
   $('shiftTitle').textContent = '근무 ' + (shiftEditMode ? '수정' : '추가') + ' - ' + m+'/'+d+' ('+dow+')';
+
+  // 고정값 정보 + "고정으로 저장" 버튼 표시
+  const fix = empName ? getFixedSchedule(empName) : null;
+  const fixBtn = $('shiftSaveFixed');
+  if(empId){
+    fixBtn.style.display = '';
+    if(fix && fix.type==='fixed'){
+      fixBtn.textContent = '고정변경 (현재 '+fix.start+'~'+fix.end+')';
+    } else {
+      fixBtn.textContent = '고정으로 저장';
+    }
+  } else {
+    fixBtn.style.display = 'none';
+  }
 
   openModal($shiftModal);
 }
@@ -2636,6 +2665,37 @@ $('shiftDelete').addEventListener('click', async()=>{
     showToast('삭제됨');
     loadWeekSchedules();
   }
+});
+
+// "고정으로 저장" — FIXED_SCHEDULES 업데이트 + Firebase 저장
+$('shiftSaveFixed').addEventListener('click', async()=>{
+  if(!shiftSelectedEmpId || !shiftSelectedStart || !shiftSelectedEnd){
+    showToast('시간을 선택해주세요');
+    return;
+  }
+  const empName = employees[shiftSelectedEmpId]?.name;
+  if(!empName){ showToast('직원 오류'); return; }
+
+  const newFixed = {start:shiftSelectedStart, end:shiftSelectedEnd, role:shiftSelectedRoles.join(','), type:'fixed'};
+  // 로컬 FIXED_SCHEDULES 업데이트
+  FIXED_SCHEDULES[empName] = newFixed;
+  // Firebase에 저장 (고정값 영구 보존)
+  fbPut('/workschedule/fixed_schedules/'+encodeURIComponent(empName), newFixed);
+  // localStorage 캐시
+  try{ localStorage.setItem('ws_fixed_schedules', JSON.stringify(FIXED_SCHEDULES)); }catch(e){}
+
+  // 당일 스케줄에도 적용
+  const dk = dateKey(currentDate);
+  const data = {start:shiftSelectedStart, end:shiftSelectedEnd, role:shiftSelectedRoles.join(',')};
+  daySchedule[shiftSelectedEmpId] = data;
+  lsSaveSchedule(dk, daySchedule);
+  setShiftStatus(dk, shiftSelectedEmpId, 'confirmed');
+
+  closeModal($shiftModal);
+  await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId, data);
+  showToast(empName+' 고정값 변경됨');
+  renderAll();
+  loadWeekSchedules();
 });
 
 $('shiftCancel').addEventListener('click',()=> closeModal($shiftModal));
@@ -3537,6 +3597,7 @@ function renderListView(){
     const pdBg = w.status==='pending' ? 'background:#E67E22;color:#fff;' : 'background:#333;color:#707088;';
     html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;'+cfBg+'font-weight:700;">확</span>';
     html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'pending\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;'+pdBg+'font-weight:700;">미</span>';
+    html += '<span onclick="event.stopPropagation();toggleDayOffFromList(\''+w.id+'\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:#E74C3C;font-weight:700;">휴</span>';
     html += '</span></div>';
 
     // 행2: 타임라인 게이지
@@ -3577,7 +3638,10 @@ function renderListView(){
       } else {
         html += '<span style="font-size:.7rem;color:#707088;">미입력</span>';
       }
-      html += '<span style="margin-left:auto;cursor:pointer;" data-empid="'+e.id+'"><span style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:#242444;color:#9090A8;cursor:pointer;">입력</span></span>';
+      html += '<span style="margin-left:auto;display:flex;gap:3px;">';
+      html += '<span data-empid="'+e.id+'" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:#242444;color:#9090A8;cursor:pointer;">입력</span>';
+      html += '<span onclick="event.stopPropagation();toggleDayOffFromList(\''+e.id+'\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:#333;color:#E74C3C;cursor:pointer;font-weight:700;">휴</span>';
+      html += '</span>';
       html += '</div>';
     });
     html += '</div>';
@@ -3591,6 +3655,7 @@ function renderListView(){
       html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:2px;background:#E74C3C08;border-radius:6px;border-left:3px solid #E74C3C;">';
       html += '<span style="font-size:.8rem;font-weight:800;color:#E74C3C;">'+o.emp.name+'</span>';
       html += '<span style="font-size:.65rem;color:#E74C3C;">휴무</span>';
+      html += '<span onclick="event.stopPropagation();toggleDayOffFromList(\''+o.id+'\')" style="margin-left:auto;font-size:.55rem;padding:2px 6px;border-radius:3px;background:#333;color:#9090A8;cursor:pointer;font-weight:700;">해제</span>';
       html += '</div>';
     });
     html += '</div>';
@@ -3606,6 +3671,28 @@ function renderListView(){
       openShiftModal(row.dataset.empid);
     });
   });
+}
+
+// 당일 휴무 토글 (리스트에서 직접)
+function toggleDayOffFromList(empId){
+  const dk = dateKey(currentDate);
+  if(!dayoffs[empId]) dayoffs[empId] = {};
+  if(dayoffs[empId][dk]){
+    delete dayoffs[empId][dk];
+    showToast('휴무 해제');
+  } else {
+    dayoffs[empId][dk] = true;
+    // 기존 스케줄 삭제
+    if(daySchedule[empId]){
+      delete daySchedule[empId];
+      lsSaveSchedule(dk, daySchedule);
+      fbDelete(FB_SCHEDULES+'/'+dk+'/'+empId);
+    }
+    showToast('휴무 지정');
+  }
+  lsSaveDayoffs();
+  fbPut(FB_DAYOFFS+'/'+empId+'/'+dk, dayoffs[empId][dk]||null);
+  renderAll();
 }
 
 // 전체 확정
