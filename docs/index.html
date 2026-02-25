@@ -1830,11 +1830,11 @@ function renderRevenueBar(){
     btn.addEventListener('click', ()=> setDailyRevenue(key));
     bar.appendChild(btn);
   }
-  // 설정 버튼
+  // 시간별 인원설정 버튼
   const editBtn = document.createElement('div');
-  editBtn.textContent = '⚙';
-  editBtn.style.cssText = 'padding:5px 6px;border-radius:5px;cursor:pointer;font-size:.6rem;color:#707088;background:#242444;border:1px solid #2E2E52;';
-  editBtn.addEventListener('click', ()=> openRevenueEditModal());
+  editBtn.textContent = '인원';
+  editBtn.style.cssText = 'padding:5px 6px;border-radius:5px;cursor:pointer;font-size:.55rem;font-weight:700;color:#FFD700;background:#242444;border:1px solid #2E2E52;';
+  editBtn.addEventListener('click', ()=> openHourLimitEdit(17));
   bar.appendChild(editBtn);
 }
 
