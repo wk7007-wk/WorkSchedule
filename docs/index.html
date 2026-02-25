@@ -5232,7 +5232,7 @@ async function sharePerEmployee(empId){
     if(!proceed) return;
 
     if(window.NativeBridge && window.NativeBridge.shareSchedule){
-      window.NativeBridge.shareSchedule(imgBase64, ics);
+      window.NativeBridge.shareSchedule(imgBase64, ics, emp.name);
     } else {
       const link = document.createElement('a');
       link.download = emp.name+'_근무표.png';

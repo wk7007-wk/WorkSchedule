@@ -170,7 +170,7 @@ class MainActivity : AppCompatActivity() {
                 val bytes = Base64.decode(cleanBase64, Base64.DEFAULT)
                 val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
 
-                val file = File(cacheDir, "share_image_${System.currentTimeMillis()}.png")
+                val file = File(cacheDir, "근무표_확정.png")
                 FileOutputStream(file).use { out ->
                     bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, out)
                 }
@@ -206,17 +206,17 @@ class MainActivity : AppCompatActivity() {
         }
 
         @JavascriptInterface
-        fun shareSchedule(imageBase64: String, icsContent: String) {
+        fun shareSchedule(imageBase64: String, icsContent: String, empName: String) {
             try {
                 val cleanBase64 = if (imageBase64.contains(",")) imageBase64.substringAfter(",") else imageBase64
                 val imgBytes = Base64.decode(cleanBase64, Base64.DEFAULT)
                 val bitmap = BitmapFactory.decodeByteArray(imgBytes, 0, imgBytes.size)
-                val ts = System.currentTimeMillis()
+                val safeName = if (empName.isNotBlank()) empName else "근무표"
 
-                val imgFile = File(cacheDir, "schedule_$ts.png")
+                val imgFile = File(cacheDir, "${safeName}_근무표.png")
                 FileOutputStream(imgFile).use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
 
-                val icsFile = File(cacheDir, "schedule_$ts.ics")
+                val icsFile = File(cacheDir, "${safeName}_근무표.ics")
                 icsFile.writeText(icsContent)
 
                 val imgUri = FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", imgFile)
