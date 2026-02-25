@@ -1794,7 +1794,8 @@ function renderBriefing(){
     const s = staffing[hStr];
     totalCheckHours++;
     const kitchenOk = !s.kitchenOver && !s.kitchenUnder;
-    const deliveryOk = s.deliveryWithDA >= 1;
+    // 배달대행 가용 시간 or 배달 1명 이상이면 OK, 대행 시간 밖(6~9시)이면 배달 불필요
+    const deliveryOk = s.deliveryWithDA >= 1 || !s.daAvail && s.delivery === 0 && parseInt(hStr) < 10;
     if(kitchenOk && deliveryOk && !s.carOver && !s.bikeOver) okHours++;
   }
   const complianceRate = totalCheckHours > 0 ? Math.round((okHours/totalCheckHours)*100) : 0;
