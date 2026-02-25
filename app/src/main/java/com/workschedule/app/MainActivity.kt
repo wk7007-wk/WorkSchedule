@@ -204,5 +204,33 @@ class MainActivity : AppCompatActivity() {
                 Log.e(TAG, "shareText error: ${e.message}")
             }
         }
+
+        @JavascriptInterface
+        fun shareSchedule(imageBase64: String, icsContent: String) {
+            try {
+                val cleanBase64 = if (imageBase64.contains(",")) imageBase64.substringAfter(",") else imageBase64
+                val imgBytes = Base64.decode(cleanBase64, Base64.DEFAULT)
+                val bitmap = BitmapFactory.decodeByteArray(imgBytes, 0, imgBytes.size)
+                val ts = System.currentTimeMillis()
+
+                val imgFile = File(cacheDir, "schedule_$ts.png")
+                FileOutputStream(imgFile).use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+
+                val icsFile = File(cacheDir, "schedule_$ts.ics")
+                icsFile.writeText(icsContent)
+
+                val imgUri = FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", imgFile)
+                val icsUri = FileProvider.getUriForFile(this@MainActivity, "${packageName}.fileprovider", icsFile)
+
+                val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = "*/*"
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(imgUri, icsUri))
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(intent, "근무표 공유"))
+            } catch (e: Exception) {
+                Log.e(TAG, "shareSchedule error: ${e.message}")
+            }
+        }
     }
 }

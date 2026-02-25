@@ -823,6 +823,7 @@ select.form-input{
   </div>
   <div class="share-body" id="shareBody">
     <div class="share-btns">
+      <button class="btn" style="background:#FFE812;color:#3C1E1E;font-weight:700;" id="shareKakaoBtn">카톡 공유 (확정+캘린더)</button>
       <button class="btn btn-accent" id="shareImageBtn">이미지 공유</button>
       <button class="btn" id="shareTextBtn">텍스트 공유</button>
       <button class="btn" id="copyUrlBtn">URL 복사</button>
@@ -4945,6 +4946,111 @@ $('copyUrlBtn').addEventListener('click', ()=>{
     document.execCommand('copy');
     document.body.removeChild(ta);
     showToast('URL 복사됨');
+  }
+});
+
+// ============================================================
+// 카톡 공유 (확정 근무표 이미지 + .ics 캘린더)
+// ============================================================
+$('shareKakaoBtn').addEventListener('click', async()=>{
+  showToast('확정 근무표 생성 중...');
+  try{
+    // 오늘부터 7일간 확정된 스케줄 수집
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const events = [];
+    const dayTexts = [];
+    // 연락처 매칭
+    let contacts = [];
+    if(window.NativeBridge && window.NativeBridge.getContacts){
+      try{ contacts = JSON.parse(window.NativeBridge.getContacts()); }catch(e){}
+    }
+    const contactMap = {};
+    const empKeys = Object.keys(employees);
+    empKeys.forEach(eid=>{
+      const name = employees[eid]?.name||'';
+      const match = contacts.find(c=> c.name && c.name.includes(name));
+      if(match) contactMap[eid] = match.phone;
+    });
+
+    for(let i=0;i<7;i++){
+      const d = new Date(today); d.setDate(d.getDate()+i);
+      const dk = dateKey(d);
+      const sched = lsLoadSchedule(dk) || {};
+      const dow = DOW_KR[d.getDay()];
+      let dayLine = (d.getMonth()+1)+'/'+d.getDate()+'('+dow+') ';
+      let hasShift = false;
+      empKeys.forEach(eid=>{
+        const st = getShiftStatus(dk, eid);
+        if(st !== 'confirmed') return;
+        const shift = sched[eid];
+        if(!shift || !shift.start) return;
+        hasShift = true;
+        const emp = employees[eid];
+        dayLine += emp.name+' '+shift.start+'~'+shift.end+' ';
+        events.push({
+          date:dk, empId:eid,
+          start:shift.start, end:shift.end,
+          summary:'근무 - '+emp.name,
+          description:'역할: '+(shift.role||'미지정')+', '+shift.start+'~'+shift.end
+        });
+      });
+      if(hasShift) dayTexts.push(dayLine.trim());
+    }
+
+    if(events.length === 0){ showToast('확정된 근무가 없습니다'); return; }
+
+    // 임시 div로 이미지 생성 (확정 근무표 요약)
+    const tmpDiv = document.createElement('div');
+    tmpDiv.style.cssText = 'position:absolute;left:-9999px;top:0;width:400px;padding:16px;background:#1A1A30;color:#E0E0EC;font-family:sans-serif;font-size:14px;';
+    tmpDiv.innerHTML = '<div style="font-size:18px;font-weight:700;color:#FFD700;margin-bottom:12px;">근무표 (확정)</div>'
+      + dayTexts.map(t=>{
+        const parts = t.split(') ');
+        const dateP = parts[0]+')';
+        const rest = parts.slice(1).join(') ');
+        return '<div style="margin-bottom:8px;"><span style="color:#2ECC71;font-weight:700;">'+dateP+'</span> <span style="color:#E0E0EC;">'+rest+'</span></div>';
+      }).join('')
+      + '<div style="margin-top:8px;font-size:10px;color:#707088;">'+events.length+'건 · '+(contactMap[empKeys[0]]?'연락처 매칭됨':'')+'</div>';
+    document.body.appendChild(tmpDiv);
+
+    const canvas = await html2canvas(tmpDiv,{backgroundColor:'#1A1A30',scale:2,logging:false});
+    document.body.removeChild(tmpDiv);
+    const imgBase64 = canvas.toDataURL('image/png');
+
+    // .ics 생성
+    let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
+    events.forEach(ev=>{
+      const [y,mo,dd] = ev.date.split('-');
+      const [sh,sm] = ev.start.split(':').map(Number);
+      const [eh,em] = ev.end.split(':').map(Number);
+      let endDate = ev.date;
+      if(eh < sh || (eh===sh && em < sm)){
+        const nd = new Date(parseInt(y),parseInt(mo)-1,parseInt(dd));
+        nd.setDate(nd.getDate()+1);
+        endDate = dateStr(nd);
+      }
+      const [ey,emo,ed] = endDate.split('-');
+      ics += 'BEGIN:VEVENT\r\nUID:'+ev.date+'-'+ev.empId+'-'+(+new Date()+Math.random())+'@ws\r\n';
+      ics += 'DTSTART;TZID=Asia/Seoul:'+y+mo+dd+'T'+pad(sh)+pad(sm)+'00\r\n';
+      ics += 'DTEND;TZID=Asia/Seoul:'+ey+emo+ed+'T'+pad(eh)+pad(em)+'00\r\n';
+      ics += 'SUMMARY:'+ev.summary+'\r\nDESCRIPTION:'+ev.description+'\r\nEND:VEVENT\r\n';
+    });
+    ics += 'END:VCALENDAR\r\n';
+
+    if(window.NativeBridge && window.NativeBridge.shareSchedule){
+      window.NativeBridge.shareSchedule(imgBase64, ics);
+    } else {
+      // 웹 폴백: 이미지 다운로드 + ics 다운로드
+      const link = document.createElement('a');
+      link.download = '근무표_확정.png';
+      link.href = imgBase64;
+      link.click();
+      downloadBlob(ics, '근무표_확정.ics', 'text/calendar;charset=utf-8');
+      showToast('이미지+캘린더 다운로드');
+    }
+  }catch(e){
+    console.error('카톡 공유 에러',e);
+    showToast('공유 실패: '+e.message);
   }
 });
 
