@@ -1013,13 +1013,13 @@ const TL_TOTAL_HOURS = 22; // 06:00 ~ 03:00(+1) = 21h span, but 22 columns (incl
 // Default employees
 // ============================================================
 const DEFAULT_EMPLOYEES = {
-  emp1: {name:'이원규', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp2: {name:'권연옥', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp3: {name:'리', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp4: {name:'히오', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp5: {name:'박준모', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp6: {name:'전묘정', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp7: {name:'대유', phone:'', role:'', hourlyRate:9860, maxHours:40}
+  emp1: {name:'이원규', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방','차배달','오토바이']},
+  emp2: {name:'권연옥', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방']},
+  emp3: {name:'리', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방']},
+  emp4: {name:'히오', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방']},
+  emp5: {name:'박준모', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방','차배달']},
+  emp6: {name:'전묘정', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방']},
+  emp7: {name:'대유', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방','차배달']}
 };
 
 // ============================================================
@@ -1613,9 +1613,12 @@ async function loadData(){
   const localSched = lsLoadSchedule(dk);
   if(localEmp && Object.keys(localEmp).length > 0){
     employees = localEmp;
-    // hourlyRate 마이그레이션 (기존 데이터에 없으면 최저시급 적용)
     Object.keys(employees).forEach(id => {
       if(!employees[id].hourlyRate) employees[id].hourlyRate = 9860;
+      // capabilities 없으면 DEFAULT에서 보충
+      if(!employees[id].capabilities && DEFAULT_EMPLOYEES[id]){
+        employees[id].capabilities = DEFAULT_EMPLOYEES[id].capabilities;
+      }
     });
   }
   if(localSched){
