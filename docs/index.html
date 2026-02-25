@@ -1863,14 +1863,13 @@ function renderBriefing(){
 
   gaugeRows.forEach(row => {
     html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;">';
-    html += '<span style="font-size:.5rem;font-weight:700;color:'+row.color+';min-width:28px;">'+row.label+'</span>';
-    html += '<div style="flex:1;display:flex;gap:1px;height:16px;">';
+    html += '<span onclick="openStaffSettingsModal()" style="font-size:.5rem;font-weight:700;color:'+row.color+';min-width:28px;cursor:pointer;">'+row.label+'</span>';
+    html += '<div onclick="openStaffSettingsModal()" style="flex:1;display:flex;gap:1px;height:16px;cursor:pointer;">';
     hmHours.forEach(h => {
       const hStr = pad(h)+':00';
       const s = staffing[hStr];
       const val = s ? row.getVal(s) : 0;
       const lim = row.getLimits(h);
-      // 오토바이 공백 + 배달대행 가용 → 대행 표시
       const isBikeDA = row.key==='bikeDel' && val===0 && s && s.daAvail;
       let bg = '#1A1A30', tc = '#707088', txt = '';
       if(isBikeDA){
