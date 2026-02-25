@@ -12,6 +12,7 @@ body{
   background:#1A1A30;
   color:#E0E0EC;
   min-height:100vh;
+  padding:0;margin:0;
 }
 ::-webkit-scrollbar{height:6px;width:6px;}
 ::-webkit-scrollbar-track{background:#1A1A30;}
@@ -23,9 +24,9 @@ body{
   position:sticky;top:0;
   background:#1A1A30;
   border-bottom:1px solid #2E2E52;
-  padding:8px 12px;
+  padding:6px 6px;
   display:flex;align-items:center;justify-content:space-between;
-  gap:6px;
+  gap:4px;
 }
 .header-left{display:flex;align-items:center;gap:6px;}
 .header h1{font-size:1.2rem;font-weight:700;color:#E0E0EC;white-space:nowrap;}
@@ -148,9 +149,7 @@ body{
 
 .vt-wrapper{
   position:relative;
-  height:70vh;
-  overflow-y:auto;
-  -webkit-overflow-scrolling:touch;
+  min-height:500px;
 }
 .vt-body{
   display:flex;
@@ -233,9 +232,9 @@ body{
 
 /* ===== Week Overview ===== */
 .week-section{
-  margin:8px;
+  margin:4px 2px;
   border:1px solid #2E2E52;
-  border-radius:10px;
+  border-radius:8px;
   overflow:hidden;
   background:#242444;
 }
@@ -301,9 +300,9 @@ body{
 
 /* ===== Info Bar ===== */
 .info-section-inner{
-  margin:8px;
+  margin:4px 2px;
   border:1px solid #2E2E52;
-  border-radius:10px;
+  border-radius:8px;
   overflow:hidden;
   background:#242444;
 }
@@ -556,9 +555,9 @@ select.form-input{
 
 /* ===== AI Section ===== */
 .ai-section{
-  margin:8px;
+  margin:4px 2px;
   border:1px solid #2E2E52;
-  border-radius:10px;
+  border-radius:8px;
   overflow:hidden;
   background:#242444;
 }
@@ -640,6 +639,37 @@ select.form-input{
   display:flex;align-items:center;justify-content:center;gap:6px;
 }
 
+/* ===== Date Picker Dropdown ===== */
+.date-picker-overlay{
+  display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.5);
+}
+.date-picker-overlay.open{display:block;}
+.date-picker-list{
+  position:absolute;top:44px;left:50%;transform:translateX(-50%);
+  width:90%;max-width:360px;max-height:70vh;overflow-y:auto;
+  background:#242444;border:1px solid #2E2E52;border-radius:10px;
+  padding:6px;-webkit-overflow-scrolling:touch;
+}
+.dp-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 10px;border-radius:6px;cursor:pointer;
+  border-bottom:1px solid #2E2E5220;
+}
+.dp-item:active{background:#2E2E52;}
+.dp-item.today{background:#FFD70010;border:1px solid #FFD70044;}
+.dp-item.selected{background:#2ECC7115;border:1px solid #2ECC7144;}
+.dp-item .dp-date{font-size:.85rem;font-weight:700;color:#E0E0EC;min-width:70px;}
+.dp-item .dp-dow{font-size:.7rem;color:#9090A8;min-width:24px;}
+.dp-item .dp-summary{font-size:.6rem;color:#707088;flex:1;text-align:right;}
+.dp-jump{
+  display:flex;gap:4px;padding:6px;border-bottom:1px solid #2E2E52;margin-bottom:4px;
+}
+.dp-jump button{
+  flex:1;padding:6px;border:1px solid #2E2E52;background:#1A1A30;
+  color:#E0E0EC;border-radius:6px;font-size:.75rem;font-weight:600;cursor:pointer;
+}
+.dp-jump button:active{background:#2E2E52;}
+
 /* ===== Responsive ===== */
 @media(max-width:400px){
   .header h1{font-size:1rem;}
@@ -663,9 +693,11 @@ select.form-input{
     <button class="btn emp-mgr-btn" id="dayoffMgrBtn" style="color:#E74C3C;border-color:#E74C3C55;">휴무</button>
   </div>
   <div class="header-center">
-    <button class="btn nav-btn" id="prevDay" aria-label="이전 날">◀</button>
-    <span class="date-display" id="dateDisplay"></span>
-    <button class="btn nav-btn" id="nextDay" aria-label="다음 날">▶</button>
+    <button class="btn nav-btn" id="prevDay" aria-label="3일 전" style="font-size:.8rem;">◀◀</button>
+    <button class="btn nav-btn" id="prevDay1" aria-label="이전 날" style="font-size:.9rem;">◀</button>
+    <span class="date-display" id="dateDisplay" style="cursor:pointer;"></span>
+    <button class="btn nav-btn" id="nextDay1" aria-label="다음 날" style="font-size:.9rem;">▶</button>
+    <button class="btn nav-btn" id="nextDay" aria-label="3일 후" style="font-size:.8rem;">▶▶</button>
   </div>
   <div class="header-right">
     <button class="btn btn-sm" id="resetFixedBtn" style="font-size:.65rem;padding:3px 6px;min-width:auto;min-height:28px;color:#9090A8;border-color:#2E2E52;">재배치</button>
@@ -675,14 +707,13 @@ select.form-input{
 </div>
 
 <!-- 당일 브리핑 패널 -->
-<div id="briefingPanel" style="background:#1e1e3a;border-bottom:1px solid #2E2E52;padding:6px 10px;font-size:.75rem;"></div>
+<div id="briefingPanel" style="background:#1e1e3a;border-bottom:1px solid #2E2E52;padding:6px 4px;font-size:.75rem;"></div>
 
 <!-- 레이아웃 탭 -->
 <div class="layout-tabs" id="layoutTabs">
   <button class="layout-tab active" data-tab="vertical">세로</button>
-  <button class="layout-tab" data-tab="calendar">달력</button>
   <button class="layout-tab" data-tab="horizontal">가로</button>
-  <button class="layout-tab" data-tab="list">리스트</button>
+  <button class="layout-tab" data-tab="calendar">달력</button>
 </div>
 
 <!-- 탭 컨텐츠 -->
@@ -699,9 +730,11 @@ select.form-input{
   <div class="tab-panel" id="panelHorizontal">
     <div id="horizontalContent"></div>
   </div>
-  <div class="tab-panel" id="panelList">
-    <div id="listContent"></div>
   </div>
+
+<!-- Date Picker Overlay (30일 리스트) -->
+<div class="date-picker-overlay" id="datePickerOverlay">
+  <div class="date-picker-list" id="datePickerList"></div>
 </div>
 
 <!-- Week Overview -->
@@ -733,11 +766,6 @@ select.form-input{
         <span class="info-icon">⚽</span>
         <span class="info-label">경기</span>
         <span class="info-value" id="sportsInfo"><span class="info-placeholder">로딩중...</span></span>
-      </div>
-      <div class="info-row">
-        <span class="info-icon">🚚</span>
-        <span class="info-label">물류</span>
-        <span class="info-value" id="logisticsInfo"><span class="info-placeholder">체크중...</span></span>
       </div>
     </div>
   </div>
@@ -962,14 +990,57 @@ const TL_TOTAL_HOURS = 22; // 06:00 ~ 03:00(+1) = 21h span, but 22 columns (incl
 // Default employees
 // ============================================================
 const DEFAULT_EMPLOYEES = {
-  emp1: {name:'이원규', color:'#FF6B6B', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp2: {name:'권연옥', color:'#4ECDC4', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp3: {name:'리', color:'#45B7D1', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp4: {name:'히오', color:'#96CEB4', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp5: {name:'박준모', color:'#FFEAA7', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp6: {name:'전묘정', color:'#DDA0DD', phone:'', role:'', hourlyRate:9860, maxHours:40},
-  emp7: {name:'대유', color:'#F0A500', phone:'', role:'', hourlyRate:9860, maxHours:40}
+  emp1: {name:'이원규', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp2: {name:'권연옥', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp3: {name:'리', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp4: {name:'히오', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp5: {name:'박준모', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp6: {name:'전묘정', phone:'', role:'', hourlyRate:9860, maxHours:40},
+  emp7: {name:'대유', phone:'', role:'', hourlyRate:9860, maxHours:40}
 };
+
+// ============================================================
+// 근무형태(Shift Type) 색상 시스템 — Material Design 200 tone
+// ============================================================
+const SHIFT_TYPES = {
+  '오전':   {color:'#81D4FA', bg:'rgba(129,212,250,0.15)', label:'오전', order:0},
+  '피크':   {color:'#FFD180', bg:'rgba(255,209,128,0.15)', label:'피크', order:1},
+  '마감':   {color:'#FFAB91', bg:'rgba(255,171,145,0.15)', label:'마감', order:2},
+  '풀타임': {color:'#80CBC4', bg:'rgba(128,203,196,0.15)', label:'풀타임', order:3},
+  '야간':   {color:'#B39DDB', bg:'rgba(179,157,219,0.15)', label:'야간', order:4},
+  '휴무':   {color:'#E74C3C', bg:'rgba(231,76,60,0.10)', label:'휴무', order:5},
+  '미입력': {color:'#707088', bg:'transparent', label:'미입력', order:6},
+};
+
+function getShiftType(startStr, endStr){
+  if(!startStr || !endStr) return SHIFT_TYPES['미입력'];
+  const sh = parseInt(startStr.split(':')[0]);
+  const eh = parseInt(endStr.split(':')[0]);
+  const hours = calcHours(startStr, endStr);
+  if(hours >= 12) return SHIFT_TYPES['풀타임'];
+  if(sh >= 5 && sh < 12) return SHIFT_TYPES['오전'];
+  if(sh >= 12 && sh < 18) return SHIFT_TYPES['피크'];
+  if(sh >= 18 || sh < 5) return SHIFT_TYPES['마감'];
+  return SHIFT_TYPES['오전'];
+}
+
+// 짧은 이름 (한 글자, 중복 없게)
+const SHORT_NAMES = {};
+function buildShortNames(){
+  const names = Object.values(employees).map(e => e.name);
+  const used = new Set();
+  names.forEach(name => {
+    // 성(첫 글자) 시도
+    let short = name.charAt(0);
+    if(!used.has(short)){ used.add(short); SHORT_NAMES[name] = short; return; }
+    // 둘째 글자 시도
+    if(name.length > 1){ short = name.charAt(1); if(!used.has(short)){ used.add(short); SHORT_NAMES[name] = short; return; } }
+    // 두 글자
+    short = name.substring(0,2);
+    used.add(short); SHORT_NAMES[name] = short;
+  });
+}
+function shortName(empName){ return SHORT_NAMES[empName] || empName?.charAt(0) || '?'; }
 
 // ============================================================
 // 고정 스케줄 (자동 입력)
@@ -1394,13 +1465,15 @@ async function loadData(){
   dataLoaded = true;
 
   try {
+    // 짧은 이름 빌드
+    buildShortNames();
     // 자동 휴무 생성 + 고정 스케줄 적용
     generateAutoDayoffs();
     autoApplyFixed(dk);
 
     // 첫 실행 시 전 데이터 삭제 후 고정값 초기화
     const initVer = localStorage.getItem('ws_init_ver');
-    if(initVer !== 'v3'){
+    if(initVer !== 'v4'){
       // 기존 스케줄 전부 클리어
       for(let i=0; i<localStorage.length; i++){
         const key = localStorage.key(i);
@@ -1411,7 +1484,7 @@ async function loadData(){
       }
       daySchedule = {};
       autoApplyFixed(dk);
-      localStorage.setItem('ws_init_ver', 'v3');
+      localStorage.setItem('ws_init_ver', 'v4');
     }
   } catch(e) { console.error('loadData init error:', e); }
 
@@ -1695,7 +1768,9 @@ function renderTimeline(){
     const off = isDayOff(empId, dk);
     const hdr = document.createElement('div');
     hdr.className = 'vt-emp-hdr';
-    hdr.innerHTML = '<div class="vt-dot" style="background:'+(off?'#E74C3C':(emp.color||'#9090A8'))+'"></div><div class="vt-name">'+(off?'<span style="color:#E74C3C;">휴</span> ':'')+emp.name+'</div>';
+    const empShift = daySchedule[empId];
+    const dotColor = off ? '#E74C3C' : (empShift && empShift.start ? getShiftType(empShift.start, empShift.end).color : '#707088');
+    hdr.innerHTML = '<div class="vt-dot" style="background:'+dotColor+'"></div><div class="vt-name">'+(off?'<span style="color:#E74C3C;">휴</span> ':'')+emp.name+'</div>';
     if(off) hdr.style.opacity = '.5';
     header.appendChild(hdr);
   });
@@ -1770,16 +1845,17 @@ function renderTimeline(){
       block.style.top = topPct + '%';
       block.style.height = Math.min(heightPct, 100 - topPct) + '%';
 
-      // 충돌 시 빨간 음영
+      // 근무형태 색상
+      const shiftType = getShiftType(shift.start, shift.end);
       if(hasConflict){
         block.style.background = '#E74C3C44';
         block.style.borderLeft = '3px solid #E74C3C';
         block.style.borderTop = '1px solid #E74C3Caa';
         block.style.boxShadow = 'inset 0 0 8px #E74C3C33';
       } else {
-        block.style.background = (emp.color||'#9090A8') + '55';
-        block.style.borderLeft = '3px solid '+(emp.color||'#9090A8');
-        block.style.borderTop = '1px solid '+(emp.color||'#9090A8')+'88';
+        block.style.background = shiftType.bg;
+        block.style.borderLeft = '3px solid '+shiftType.color;
+        block.style.borderTop = '1px solid '+shiftType.color+'55';
       }
 
       const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
@@ -3058,14 +3134,89 @@ $('dayoffBulkBtn').addEventListener('click', async ()=>{
 // ============================================================
 // Day Navigation
 // ============================================================
-$('prevDay').addEventListener('click', ()=>{
+// 1일 이동
+$('prevDay1').addEventListener('click', ()=>{
   currentDate.setDate(currentDate.getDate()-1);
   onDateChange();
 });
-$('nextDay').addEventListener('click', ()=>{
+$('nextDay1').addEventListener('click', ()=>{
   currentDate.setDate(currentDate.getDate()+1);
   onDateChange();
 });
+// 3일 이동
+$('prevDay').addEventListener('click', ()=>{
+  currentDate.setDate(currentDate.getDate()-3);
+  onDateChange();
+});
+$('nextDay').addEventListener('click', ()=>{
+  currentDate.setDate(currentDate.getDate()+3);
+  onDateChange();
+});
+// 날짜 터치 → 30일 리스트 피커
+$dateDisplay.addEventListener('click', ()=> openDatePicker());
+
+function openDatePicker(){
+  const overlay = $('datePickerOverlay');
+  const list = $('datePickerList');
+  const today = new Date(); today.setHours(0,0,0,0);
+  const selectedDk = dateKey(currentDate);
+  const todayDk = dateKey(today);
+  const empKeys = Object.keys(employees);
+
+  let html = '<div class="dp-jump">';
+  html += '<button onclick="jumpDate(-7)">◀ 1주</button>';
+  html += '<button onclick="jumpDate(0)">오늘</button>';
+  html += '<button onclick="jumpDate(7)">1주 ▶</button>';
+  html += '</div>';
+
+  for(let i=0; i<30; i++){
+    const d = new Date(today); d.setDate(d.getDate()+i);
+    const dk = dateKey(d);
+    const dow = DOW_KR[d.getDay()];
+    const isToday = dk === todayDk;
+    const isSelected = dk === selectedDk;
+    const m = d.getMonth()+1, dd = d.getDate();
+    // 요약: 근무자수 / 휴무수
+    let workCount=0, offCount=0;
+    empKeys.forEach(id => {
+      if(isDayOff(id, dk)) offCount++;
+      else {
+        const s = weekSchedules[dk]?.[id] || (dk===dateKey(currentDate)?daySchedule[id]:null);
+        if(s && s.start) workCount++;
+      }
+    });
+    const cls = isToday ? 'dp-item today' : isSelected ? 'dp-item selected' : 'dp-item';
+    const dowColor = d.getDay()===0?'#E74C3C':d.getDay()===6?'#45B7D1':'#9090A8';
+    html += '<div class="'+cls+'" data-dk="'+dk+'">';
+    html += '<span class="dp-dow" style="color:'+dowColor+';">'+dow+'</span>';
+    html += '<span class="dp-date">'+m+'/'+dd+'</span>';
+    html += '<span class="dp-summary">';
+    if(workCount>0) html += '<span style="color:#2ECC71;">'+workCount+'명</span> ';
+    if(offCount>0) html += '<span style="color:#E74C3C;">휴'+offCount+'</span>';
+    if(isToday) html += ' <span style="color:#FFD700;font-weight:700;">오늘</span>';
+    html += '</span></div>';
+  }
+  list.innerHTML = html;
+  overlay.classList.add('open');
+
+  list.querySelectorAll('.dp-item').forEach(item => {
+    item.addEventListener('click', ()=>{
+      const parts = item.dataset.dk.split('-');
+      currentDate = new Date(+parts[0], +parts[1]-1, +parts[2]);
+      overlay.classList.remove('open');
+      onDateChange();
+    });
+  });
+  overlay.addEventListener('click', (e)=>{
+    if(e.target === overlay) overlay.classList.remove('open');
+  }, {once:true});
+}
+function jumpDate(days){
+  if(days === 0){ currentDate = new Date(); }
+  else { currentDate.setDate(currentDate.getDate()+days); }
+  $('datePickerOverlay').classList.remove('open');
+  onDateChange();
+}
 
 // 고정 스케줄 재배치 버튼
 $('resetFixedBtn').addEventListener('click', ()=>{
@@ -3109,22 +3260,39 @@ function updateConfirmBtn(){
 // ============================================================
 // Layout Tab Switching
 // ============================================================
+const TAB_ORDER = ['vertical','horizontal','calendar'];
+function switchTab(tabName){
+  currentTab = tabName;
+  document.querySelectorAll('.layout-tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tabName));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const panelMap = {vertical:'panelVertical',calendar:'panelCalendar',horizontal:'panelHorizontal'};
+  const panel = $(panelMap[tabName]);
+  if(panel) panel.classList.add('active');
+  renderCurrentTab();
+}
 document.querySelectorAll('.layout-tab').forEach(tab => {
-  tab.addEventListener('click', ()=>{
-    currentTab = tab.dataset.tab;
-    document.querySelectorAll('.layout-tab').forEach(t => t.classList.toggle('active', t===tab));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    const panelId = currentTab==='vertical'?'panelVertical':currentTab==='calendar'?'panelCalendar':'panelHorizontal';
-    $(panelId).classList.add('active');
-    renderCurrentTab();
-  });
+  tab.addEventListener('click', ()=> switchTab(tab.dataset.tab));
 });
+
+// 스와이프 탭 전환
+let swipeStartX=0, swipeStartY=0;
+$('tabContent').addEventListener('touchstart', (e)=>{
+  swipeStartX = e.touches[0].clientX;
+  swipeStartY = e.touches[0].clientY;
+}, {passive:true});
+$('tabContent').addEventListener('touchend', (e)=>{
+  const dx = e.changedTouches[0].clientX - swipeStartX;
+  const dy = e.changedTouches[0].clientY - swipeStartY;
+  if(Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)*0.7) return; // 수직 스크롤 무시
+  const idx = TAB_ORDER.indexOf(currentTab);
+  if(dx < 0 && idx < TAB_ORDER.length-1) switchTab(TAB_ORDER[idx+1]); // 좌→우
+  else if(dx > 0 && idx > 0) switchTab(TAB_ORDER[idx-1]); // 우→좌
+}, {passive:true});
 
 function renderCurrentTab(){
   if(currentTab==='vertical') renderTimeline();
   else if(currentTab==='calendar') renderCalendarView();
   else if(currentTab==='horizontal') renderHorizontalView();
-  else if(currentTab==='list') renderListView();
 }
 
 // Calendar view renderer (미래 날짜만 표시)
@@ -3164,10 +3332,11 @@ function renderCalendarView(){
       const sched = weekSchedules[cdk]?.[id] || (cdk===dk ? daySchedule[id] : null);
       if(off){
         offCount++;
-        html+='<div style="color:#E74C3C;font-size:.55rem;font-weight:600;">'+employees[id].name.substring(0,2)+' 휴</div>';
+        html+='<div style="color:#E74C3C;font-size:.5rem;font-weight:600;">'+shortName(employees[id].name)+' 휴</div>';
       } else if(sched && sched.start){
         empCount++;
-        html+='<div style="color:'+(employees[id].color||'#E0E0EC')+';font-size:.55rem;font-weight:600;">'+employees[id].name.substring(0,2)+' '+sched.start.replace(/^0/,'').replace(':00','')+'</div>';
+        const st = getShiftType(sched.start, sched.end);
+        html+='<div style="color:'+st.color+';font-size:.5rem;font-weight:600;">'+shortName(employees[id].name)+' '+sched.start.replace(/^0/,'')+'-'+sched.end.replace(/^0/,'')+'</div>';
       }
     });
     if(empCount===0 && offCount===0){
@@ -3268,7 +3437,8 @@ function renderListView(){
       const isFixed = fix && fix.type==='fixed' && w.shift.start===fix.start && w.shift.end===fix.end;
       const hasConflict = !!detectConflicts(empKeys, dk)[w.id];
 
-      html += '<div style="display:flex;align-items:center;gap:6px;padding:7px 8px;margin-bottom:2px;background:'+(hasConflict?'#E74C3C15':'#242444')+';border-radius:6px;border-left:3px solid '+(hasConflict?'#E74C3C':(w.emp.color||'#9090A8'))+';cursor:pointer;" data-empid="'+w.id+'">';
+      const listSt = getShiftType(w.shift.start, w.shift.end);
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:7px 8px;margin-bottom:2px;background:'+(hasConflict?'#E74C3C15':listSt.bg)+';border-radius:6px;border-left:3px solid '+(hasConflict?'#E74C3C':listSt.color)+';cursor:pointer;" data-empid="'+w.id+'">';
       html += '<span style="font-size:.85rem;font-weight:800;color:#FFFFFF;min-width:48px;">'+w.emp.name+'</span>';
       html += '<span style="font-size:.75rem;font-weight:600;color:#E0E0EC;min-width:90px;">'+w.shift.start+' ~ '+w.shift.end+'</span>';
       html += '<span>'+roleHtml+'</span>';
@@ -3371,7 +3541,8 @@ function renderHorizontalView(){
       const shift = m.shift;
       const hasConflict = shift && shift.start ? !!detectConflicts(empKeys, dk)[m.id] : false;
       html += '<div class="ht-row" data-empid="'+m.id+'">';
-      html += '<div class="ht-name" style="color:'+(m.emp.color||'#FFFFFF')+';">'+m.emp.name+'</div>';
+      const htSt = m.shift && m.shift.start ? getShiftType(m.shift.start, m.shift.end) : SHIFT_TYPES['미입력'];
+      html += '<div class="ht-name" style="color:'+htSt.color+';">'+m.emp.name+'</div>';
       html += '<div class="ht-bar">';
       html += '<div class="ht-hours">';
       for(let h=6;h<=27;h++) html+='<span></span>';
@@ -3383,7 +3554,8 @@ function renderHorizontalView(){
         if(width<=0) width+=100;
         const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
         const roleHtml = roles.map(r => '<span style="color:'+(ROLE_COLORS[r]||'#fff')+';">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
-        const barBg = hasConflict ? '#E74C3C66' : (m.emp.color||'#9090A8')+'88';
+        const stBar = getShiftType(shift.start, shift.end);
+        const barBg = hasConflict ? '#E74C3C66' : stBar.color+'44';
         const barBorder = hasConflict ? 'border:1px solid #E74C3C;' : '';
         html += '<div class="ht-fill" style="left:'+left+'%;width:'+Math.min(width,100-left)+'%;background:'+barBg+';'+barBorder+'">';
         html += '<span style="font-size:.55rem;">'+shift.start.replace(/^0/,'')+'-'+shift.end.replace(/^0/,'')+'</span>';
@@ -3750,43 +3922,7 @@ async function loadWeatherAndSports(){
 // Logistics Check (min 2 people, 3 after 16:30)
 // ============================================================
 function checkLogistics(){
-  const $log = $('logisticsInfo');
-  const empKeys = Object.keys(employees);
-  if(empKeys.length === 0){
-    $log.innerHTML = '<span class="info-placeholder">직원 데이터 없음</span>';
-    return;
-  }
-
-  const issues = [];
-  // Check each hour from 10:00 to 03:00
-  const checkHours = [10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3];
-  let hasShifts = false;
-  checkHours.forEach(hour => {
-    let count = 0;
-    empKeys.forEach(empId => {
-      const shift = daySchedule[empId];
-      if(shift && shift.start && shift.end){
-        hasShifts = true;
-        if(isHourInShift(hour, shift.start, shift.end)) count++;
-      }
-    });
-    if(!hasShifts) return;
-    const hLabel = pad(hour)+':00';
-    // After 16:30 need 3 people (check 16,17,...23,0,1,2,3)
-    const isEvening = (hour >= 16 && hour <= 23) || hour < 4;
-    const minRequired = isEvening ? 3 : 2;
-    if(count < minRequired && count >= 0){
-      issues.push(hLabel+' '+count+'명(최소'+minRequired+')');
-    }
-  });
-
-  if(!hasShifts){
-    $log.innerHTML = '<span class="info-placeholder">오늘 근무 없음</span>';
-  } else if(issues.length === 0){
-    $log.innerHTML = '<span class="logistics-ok">인원 충족</span>';
-  } else {
-    $log.innerHTML = '<span class="logistics-warn">부족: '+issues.slice(0,4).join(', ')+(issues.length>4?' 외 '+(issues.length-4)+'건':'')+'</span>';
-  }
+  // 물류 체크 → 역할별 커버리지 뷰에 통합됨
 }
 
 // ============================================================
