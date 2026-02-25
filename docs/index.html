@@ -711,7 +711,8 @@ select.form-input{
 
 <!-- 레이아웃 탭 -->
 <div class="layout-tabs" id="layoutTabs">
-  <button class="layout-tab active" data-tab="vertical">세로</button>
+  <button class="layout-tab active" data-tab="list">리스트</button>
+  <button class="layout-tab" data-tab="vertical">세로</button>
   <button class="layout-tab" data-tab="horizontal">가로</button>
   <button class="layout-tab" data-tab="calendar">달력</button>
 </div>
@@ -719,7 +720,10 @@ select.form-input{
 <!-- 탭 컨텐츠 -->
 <div class="loading" id="loadingIndicator"><div class="spinner"></div>불러오는 중...</div>
 <div id="tabContent" style="display:none;">
-  <div class="tab-panel active" id="panelVertical">
+  <div class="tab-panel active" id="panelList">
+    <div id="listContent"></div>
+  </div>
+  <div class="tab-panel" id="panelVertical">
     <div class="timeline-section" id="timelineSection">
       <div id="timelineContent"></div>
     </div>
@@ -1143,7 +1147,7 @@ function findEmpIdByName(name){
 // ============================================================
 // State
 // ============================================================
-let currentTab = 'vertical'; // 'vertical' | 'calendar' | 'horizontal'
+let currentTab = 'list'; // 'list' | 'vertical' | 'calendar' | 'horizontal'
 let currentDate = new Date();
 let employees = {};
 let daySchedule = {}; // schedule for currentDate
@@ -1155,11 +1159,63 @@ let sseGeneration = 0;
 let monthViewYear, monthViewMonth;
 let dataLoaded = false;
 let confirmedDays = {}; // { 'yyyy-MM-dd': true } — 확정된 날짜
+let shiftStatus = {}; // { 'yyyy-MM-dd_empId': 'auto'|'confirmed'|'pending' } — 보정 상태
 
 const LS_CONFIRMED = 'ws_confirmed';
+const LS_SHIFT_STATUS = 'ws_shift_status';
+const LS_PATTERNS = 'ws_patterns'; // AI 학습용 확정 패턴
 function lsLoadConfirmed(){ try{ return JSON.parse(localStorage.getItem(LS_CONFIRMED)) || {}; }catch(e){ return {}; } }
 function lsSaveConfirmed(data){ localStorage.setItem(LS_CONFIRMED, JSON.stringify(data)); }
 function isConfirmed(dk){ return !!confirmedDays[dk]; }
+function lsLoadShiftStatus(){ try{ return JSON.parse(localStorage.getItem(LS_SHIFT_STATUS)) || {}; }catch(e){ return {}; } }
+function lsSaveShiftStatus(){ localStorage.setItem(LS_SHIFT_STATUS, JSON.stringify(shiftStatus)); }
+function getShiftStatus(dk, empId){ return shiftStatus[dk+'_'+empId] || 'auto'; }
+function setShiftStatus(dk, empId, st){
+  const key = dk+'_'+empId;
+  if(st==='auto') delete shiftStatus[key]; else shiftStatus[key]=st;
+  lsSaveShiftStatus();
+  // 확정 시 패턴 기록 (AI 학습)
+  if(st==='confirmed'){
+    const shift = daySchedule[empId];
+    if(shift && shift.start) recordPattern(empId, dk, shift);
+  }
+  renderAll();
+}
+function recordPattern(empId, dk, shift){
+  try{
+    const patterns = JSON.parse(localStorage.getItem(LS_PATTERNS)||'{}');
+    const d = new Date(dk+'T00:00:00+09:00');
+    const dow = d.getDay();
+    const empName = employees[empId]?.name||empId;
+    const key = empName+'_'+dow;
+    if(!patterns[key]) patterns[key]={count:0,times:{}};
+    const timeKey = shift.start+'~'+shift.end;
+    patterns[key].count = (patterns[key].count||0)+1;
+    patterns[key].times[timeKey] = (patterns[key].times[timeKey]||0)+1;
+    patterns[key].lastRole = shift.role||'';
+    patterns[key].lastDate = dk;
+    localStorage.setItem(LS_PATTERNS, JSON.stringify(patterns));
+    // Firebase 백업
+    fbPut('/workschedule/patterns/'+encodeURIComponent(key), patterns[key]);
+  }catch(e){}
+}
+function getPatternSuggestion(empId, dk){
+  try{
+    const patterns = JSON.parse(localStorage.getItem(LS_PATTERNS)||'{}');
+    const d = new Date(dk+'T00:00:00+09:00');
+    const dow = d.getDay();
+    const empName = employees[empId]?.name||empId;
+    const key = empName+'_'+dow;
+    const p = patterns[key];
+    if(!p || p.count < 2) return null;
+    // 가장 빈번한 시간대 추천
+    let bestTime=null, bestCount=0;
+    for(const t in p.times){ if(p.times[t]>bestCount){bestCount=p.times[t];bestTime=t;} }
+    if(!bestTime) return null;
+    const [start,end] = bestTime.split('~');
+    return {start, end, role:p.lastRole||'', confidence:Math.min(100,Math.round(bestCount/p.count*100)), count:p.count};
+  }catch(e){ return null; }
+}
 
 // ============================================================
 // DOM refs
@@ -1413,6 +1469,7 @@ async function loadData(){
 
   // 1) localStorage 즉시 로드 (데이터 유실 방지)
   confirmedDays = lsLoadConfirmed();
+  shiftStatus = lsLoadShiftStatus();
   const localEmp = lsLoadEmployees();
   const localSched = lsLoadSchedule(dk);
   if(localEmp && Object.keys(localEmp).length > 0){
@@ -2549,11 +2606,13 @@ $('shiftSave').addEventListener('click', async()=>{
   // Optimistic update — localStorage first
   daySchedule[shiftSelectedEmpId] = data;
   lsSaveSchedule(dk, daySchedule);
-  renderTimeline();
+  // 수동 저장 = 확정 처리
+  setShiftStatus(dk, shiftSelectedEmpId, 'confirmed');
+  renderAll();
 
   const ok = await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId, data);
   if(ok){
-    showToast('저장됨');
+    showToast('저장 확정');
     loadWeekSchedules();
   } else {
     showToast('로컬 저장됨 (서버 동기화 대기)');
@@ -3260,12 +3319,12 @@ function updateConfirmBtn(){
 // ============================================================
 // Layout Tab Switching
 // ============================================================
-const TAB_ORDER = ['vertical','horizontal','calendar'];
+const TAB_ORDER = ['list','vertical','horizontal','calendar'];
 function switchTab(tabName){
   currentTab = tabName;
   document.querySelectorAll('.layout-tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tabName));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  const panelMap = {vertical:'panelVertical',calendar:'panelCalendar',horizontal:'panelHorizontal'};
+  const panelMap = {list:'panelList',vertical:'panelVertical',calendar:'panelCalendar',horizontal:'panelHorizontal'};
   const panel = $(panelMap[tabName]);
   if(panel) panel.classList.add('active');
   renderCurrentTab();
@@ -3290,7 +3349,8 @@ $('tabContent').addEventListener('touchend', (e)=>{
 }, {passive:true});
 
 function renderCurrentTab(){
-  if(currentTab==='vertical') renderTimeline();
+  if(currentTab==='list') renderListView();
+  else if(currentTab==='vertical') renderTimeline();
   else if(currentTab==='calendar') renderCalendarView();
   else if(currentTab==='horizontal') renderHorizontalView();
 }
@@ -3352,12 +3412,12 @@ function renderCalendarView(){
       const parts = cell.dataset.date.split('-');
       currentDate = new Date(+parts[0], +parts[1]-1, +parts[2]);
       onDateChange();
-      document.querySelector('.layout-tab[data-tab="vertical"]').click();
+      document.querySelector('.layout-tab[data-tab="list"]').click();
     });
   });
 }
 
-// List view renderer (리스트 형식: 이름/시간/역할)
+// List view renderer — 보정 기반 리스트 (메인 뷰)
 function renderListView(){
   const con = $('listContent');
   if(!con) return;
@@ -3367,110 +3427,170 @@ function renderListView(){
   const dow = DOW_KR[currentDate.getDay()];
   const confirmed = isConfirmed(dk);
 
-  let html = '<div style="padding:8px 12px;">';
-  // 보고서 헤더
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #2E2E52;">';
-  html += '<div>';
-  html += '<div style="font-size:.95rem;font-weight:800;color:#FFFFFF;">'+m+'월 '+d+'일 ('+dow+')</div>';
-  html += '<div style="font-size:.6rem;color:#9090A8;">근무표</div>';
-  html += '</div>';
-  html += '<div style="padding:3px 8px;border-radius:10px;font-size:.6rem;font-weight:700;background:'+(confirmed?'#2ECC7122':'#E67E2222')+';color:'+(confirmed?'#2ECC71':'#E67E22')+';">'+(confirmed?'확정':'작업중')+'</div>';
-  html += '</div>';
-
-  // 근무자/휴무/미입력 분류
+  // 분류
   const working = [], offList = [], empty = [];
+  let totalHours = 0, confirmedCount = 0, autoCount = 0, pendingCount = 0;
   empKeys.forEach(id => {
     const emp = employees[id];
     const off = isDayOff(id, dk);
     const shift = daySchedule[id];
-    if(off) offList.push({id, emp});
-    else if(shift && shift.start) working.push({id, emp, shift});
-    else empty.push({id, emp});
+    if(off){ offList.push({id, emp}); return; }
+    if(shift && shift.start){
+      const st = getShiftStatus(dk, id);
+      const fix = getFixedSchedule(emp.name);
+      const isFixed = fix && fix.type==='fixed' && shift.start===fix.start && shift.end===fix.end;
+      const hours = calcHours(shift.start, shift.end);
+      totalHours += hours;
+      if(st==='confirmed') confirmedCount++;
+      else if(st==='pending') pendingCount++;
+      else autoCount++;
+      working.push({id, emp, shift, status:st, isFixed, hours});
+    } else {
+      empty.push({id, emp});
+    }
   });
+  working.sort((a,b) => timeToMinutesFrom6(a.shift.start) - timeToMinutesFrom6(b.shift.start));
 
-  // 시간순 정렬
-  working.sort((a,b) => {
-    const am = timeToMinutesFrom6(a.shift.start);
-    const bm = timeToMinutesFrom6(b.shift.start);
-    return am - bm;
-  });
+  let html = '<div style="padding:6px 8px;">';
 
-  // 시간대 그룹핑
-  function getTimeGroup(startTime){
-    const h = parseInt(startTime.split(':')[0]);
-    if(h >= 5 && h < 10) return {label:'조조', color:'#45B7D1', order:0};
-    if(h >= 10 && h < 15) return {label:'주간', color:'#2ECC71', order:1};
-    if(h >= 15 && h < 20) return {label:'저녁', color:'#E67E22', order:2};
-    return {label:'야간', color:'#9B59B6', order:3};
-  }
-
-  // 그룹별 분류
-  const timeGroups = {};
-  working.forEach(w => {
-    const g = getTimeGroup(w.shift.start);
-    if(!timeGroups[g.label]) timeGroups[g.label] = {info:g, members:[]};
-    timeGroups[g.label].members.push(w);
-  });
-
-  // 요약 수치
-  let totalHours = 0;
-  working.forEach(w => totalHours += calcHours(w.shift.start, w.shift.end));
-  html += '<div style="display:flex;gap:10px;margin-bottom:8px;font-size:.65rem;">';
-  html += '<span style="color:#2ECC71;font-weight:700;">출근 '+working.length+'명</span>';
-  html += '<span style="color:#FFD700;font-weight:700;">총 '+totalHours.toFixed(1).replace('.0','')+'시간</span>';
-  if(offList.length > 0) html += '<span style="color:#E74C3C;font-weight:700;">휴무 '+offList.length+'명</span>';
-  if(empty.length > 0) html += '<span style="color:#E67E22;font-weight:700;">미입력 '+empty.length+'명</span>';
+  // === 헤더 ===
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid #2E2E52;">';
+  html += '<div>';
+  html += '<span style="font-size:1rem;font-weight:800;color:#FFF;">'+m+'/'+d+' '+dow+'</span>';
+  html += ' <span style="font-size:.6rem;color:#707088;">근무표</span>';
   html += '</div>';
+  html += '<div style="display:flex;gap:4px;align-items:center;">';
+  // 전체확정/전체보정 버튼
+  if(working.length > 0 && confirmedCount < working.length){
+    html += '<span onclick="confirmAllShifts()" style="font-size:.55rem;padding:3px 6px;border-radius:4px;background:#2ECC7122;color:#2ECC71;cursor:pointer;font-weight:700;">전체확정</span>';
+  }
+  if(confirmedCount > 0){
+    html += '<span onclick="resetAllShifts()" style="font-size:.55rem;padding:3px 6px;border-radius:4px;background:#E67E2222;color:#E67E22;cursor:pointer;font-weight:700;">전체보정</span>';
+  }
+  html += '<span style="padding:3px 8px;border-radius:10px;font-size:.6rem;font-weight:700;background:'+(confirmed?'#2ECC7122':'#E67E2222')+';color:'+(confirmed?'#2ECC71':'#E67E22')+';">'+(confirmed?'확정':'작업중')+'</span>';
+  html += '</div></div>';
 
-  // 시간대 그룹별 렌더
-  const groupOrder = ['조조','주간','저녁','야간'];
-  groupOrder.forEach(gName => {
-    const group = timeGroups[gName];
-    if(!group) return;
-    html += '<div style="margin-bottom:6px;">';
-    html += '<div style="font-size:.6rem;color:'+group.info.color+';font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid '+group.info.color+';">'+gName+' ('+group.members.length+'명)</div>';
-    group.members.forEach(w => {
-      const roles = w.shift.role ? w.shift.role.split(',').filter(Boolean) : [];
-      const roleHtml = roles.map(r => '<span style="display:inline-block;padding:1px 5px;border-radius:8px;font-size:.55rem;font-weight:700;color:#fff;background:'+(ROLE_COLORS[r]||'#9090A8')+'88;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
-      const hours = calcHours(w.shift.start, w.shift.end);
-      const fix = getFixedSchedule(w.emp.name);
-      const isFixed = fix && fix.type==='fixed' && w.shift.start===fix.start && w.shift.end===fix.end;
-      const hasConflict = !!detectConflicts(empKeys, dk)[w.id];
+  // === 보정 진행률 게이지 ===
+  const total = working.length + empty.length;
+  const pctConfirmed = total > 0 ? Math.round(confirmedCount/total*100) : 0;
+  const pctAuto = total > 0 ? Math.round(autoCount/total*100) : 0;
+  const pctPending = total > 0 ? Math.round(pendingCount/total*100) : 0;
+  const pctEmpty = total > 0 ? Math.round(empty.length/total*100) : 0;
 
-      const listSt = getShiftType(w.shift.start, w.shift.end);
-      html += '<div style="display:flex;align-items:center;gap:6px;padding:7px 8px;margin-bottom:2px;background:'+(hasConflict?'#E74C3C15':listSt.bg)+';border-radius:6px;border-left:3px solid '+(hasConflict?'#E74C3C':listSt.color)+';cursor:pointer;" data-empid="'+w.id+'">';
-      html += '<span style="font-size:.85rem;font-weight:800;color:#FFFFFF;min-width:48px;">'+w.emp.name+'</span>';
-      html += '<span style="font-size:.75rem;font-weight:600;color:#E0E0EC;min-width:90px;">'+w.shift.start+' ~ '+w.shift.end+'</span>';
-      html += '<span>'+roleHtml+'</span>';
-      html += '<span style="font-size:.7rem;color:#FFD700;font-weight:700;margin-left:auto;">'+hours+'h</span>';
-      if(isFixed) html += '<span style="font-size:.5rem;color:#707088;margin-left:2px;">고정</span>';
-      if(hasConflict) html += '<span style="font-size:.5rem;color:#E74C3C;margin-left:2px;">충돌</span>';
-      html += '</div>';
-    });
+  html += '<div style="margin-bottom:6px;">';
+  html += '<div style="display:flex;height:6px;border-radius:3px;overflow:hidden;background:#1A1A30;">';
+  if(pctConfirmed > 0) html += '<div style="width:'+pctConfirmed+'%;background:#2ECC71;"></div>';
+  if(pctAuto > 0) html += '<div style="width:'+pctAuto+'%;background:#FFD700;"></div>';
+  if(pctPending > 0) html += '<div style="width:'+pctPending+'%;background:#E67E22;"></div>';
+  if(pctEmpty > 0) html += '<div style="width:'+pctEmpty+'%;background:#E74C3C40;"></div>';
+  html += '</div>';
+  html += '<div style="display:flex;gap:8px;margin-top:3px;font-size:.55rem;">';
+  html += '<span style="color:#2ECC71;font-weight:700;">확정 '+confirmedCount+'</span>';
+  html += '<span style="color:#FFD700;font-weight:700;">보정 '+autoCount+'</span>';
+  if(pendingCount) html += '<span style="color:#E67E22;font-weight:700;">미정 '+pendingCount+'</span>';
+  if(empty.length) html += '<span style="color:#E74C3C;font-weight:700;">미입력 '+empty.length+'</span>';
+  html += '<span style="color:#9090A8;margin-left:auto;">'+working.length+'명 '+totalHours.toFixed(1).replace('.0','')+'h</span>';
+  if(offList.length) html += '<span style="color:#E74C3C;">휴'+offList.length+'</span>';
+  html += '</div></div>';
+
+  // === 근무자 리스트 (게이지 + 출퇴근 텍스트 + 상태 버튼) ===
+  const GAUGE_START = 6; // 06:00
+  const GAUGE_END = 27; // 03:00 (27h 기준)
+  const GAUGE_RANGE = GAUGE_END - GAUGE_START; // 21시간
+
+  working.forEach(w => {
+    const hasConflict = !!detectConflicts(empKeys, dk)[w.id];
+    const roles = w.shift.role ? w.shift.role.split(',').filter(Boolean) : [];
+    const roleHtml = roles.map(r => '<span style="color:'+(ROLE_COLORS[r]||'#9090A8')+';font-size:.6rem;font-weight:700;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
+
+    // 게이지 위치 계산
+    let sH = parseInt(w.shift.start.split(':')[0]), sM = parseInt(w.shift.start.split(':')[1]||0);
+    let eH = parseInt(w.shift.end.split(':')[0]), eM = parseInt(w.shift.end.split(':')[1]||0);
+    if(sH < 6) sH += 24;
+    if(eH < 6) eH += 24;
+    const startPct = Math.max(0, ((sH + sM/60) - GAUGE_START) / GAUGE_RANGE * 100);
+    const endPct = Math.min(100, ((eH + eM/60) - GAUGE_START) / GAUGE_RANGE * 100);
+    const widthPct = Math.max(1, endPct - startPct);
+
+    // 상태 색상
+    const stColor = w.status==='confirmed' ? '#2ECC71' : w.status==='pending' ? '#E67E22' : '#FFD700';
+    const stLabel = w.status==='confirmed' ? '확정' : w.status==='pending' ? '미정' : '보정';
+    const stBg = w.status==='confirmed' ? '#2ECC7110' : w.status==='pending' ? '#E67E2210' : '#FFD70008';
+    const borderC = hasConflict ? '#E74C3C' : stColor;
+
+    // 패턴 제안
+    const pattern = getPatternSuggestion(w.id, dk);
+    const patternMatch = pattern && w.shift.start===pattern.start && w.shift.end===pattern.end;
+
+    html += '<div style="background:'+stBg+';border-left:3px solid '+borderC+';border-radius:6px;margin-bottom:3px;padding:5px 8px;">';
+
+    // 행1: 이름 + 출퇴근 텍스트 + 상태버튼
+    html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:3px;">';
+    html += '<span style="font-size:.85rem;font-weight:800;color:#FFF;min-width:44px;">'+w.emp.name+'</span>';
+    html += '<span style="font-size:.75rem;font-weight:600;color:#E0E0EC;">출근 '+w.shift.start+'</span>';
+    html += '<span style="font-size:.6rem;color:#707088;">~</span>';
+    html += '<span style="font-size:.75rem;font-weight:600;color:#E0E0EC;">퇴근 '+w.shift.end+'</span>';
+    html += '<span style="font-size:.65rem;color:#FFD700;font-weight:700;">'+w.hours+'h</span>';
+    html += '<span style="margin-left:auto;display:flex;gap:2px;">';
+    // 상태 토글 버튼
+    const cfBg = w.status==='confirmed' ? 'background:#2ECC71;color:#fff;' : 'background:#333;color:#707088;';
+    const pdBg = w.status==='pending' ? 'background:#E67E22;color:#fff;' : 'background:#333;color:#707088;';
+    html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;'+cfBg+'font-weight:700;">확</span>';
+    html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'pending\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;'+pdBg+'font-weight:700;">미</span>';
+    html += '</span></div>';
+
+    // 행2: 타임라인 게이지
+    html += '<div style="position:relative;height:16px;background:#1A1A30;border-radius:3px;overflow:hidden;cursor:pointer;" data-empid="'+w.id+'">';
+    // 시간 눈금
+    for(let h=6;h<=27;h+=3){
+      const pct = ((h-GAUGE_START)/GAUGE_RANGE*100);
+      html += '<div style="position:absolute;left:'+pct+'%;top:0;bottom:0;width:1px;background:#2E2E5240;"></div>';
+    }
+    // 근무 바
+    const barC = hasConflict ? '#E74C3C' : stColor;
+    html += '<div style="position:absolute;left:'+startPct+'%;width:'+widthPct+'%;top:1px;bottom:1px;background:'+barC+'40;border-radius:2px;border-left:2px solid '+barC+';border-right:2px solid '+barC+'66;"></div>';
+    html += '</div>';
+
+    // 행3: 역할 + 태그
+    html += '<div style="display:flex;align-items:center;gap:4px;margin-top:2px;">';
+    html += roleHtml;
+    if(w.isFixed) html += '<span style="font-size:.5rem;color:#707088;background:#707088222;padding:1px 4px;border-radius:3px;">고정</span>';
+    if(hasConflict) html += '<span style="font-size:.5rem;color:#E74C3C;background:#E74C3C22;padding:1px 4px;border-radius:3px;">충돌</span>';
+    html += '<span style="font-size:.5rem;color:'+stColor+';background:'+stColor+'22;padding:1px 4px;border-radius:3px;">'+stLabel+'</span>';
+    if(patternMatch && w.status!=='confirmed') html += '<span style="font-size:.5rem;color:#9B59B6;background:#9B59B622;padding:1px 4px;border-radius:3px;">패턴일치</span>';
+    html += '</div>';
+
     html += '</div>';
   });
 
-  // 휴무
-  if(offList.length > 0){
-    html += '<div style="margin-bottom:6px;">';
-    html += '<div style="font-size:.6rem;color:#E74C3C;font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid #E74C3C;">휴무 ('+offList.length+'명)</div>';
-    offList.forEach(o => {
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin-bottom:2px;background:#E74C3C10;border-radius:6px;border-left:3px solid #E74C3C;">';
-      html += '<span style="font-size:.85rem;font-weight:800;color:#E74C3C;">'+o.emp.name+'</span>';
-      html += '<span style="font-size:.7rem;color:#E74C3C;">휴무</span>';
-      html += '</div>';
-    });
-    html += '</div>';
-  }
-
-  // 미입력
+  // === 미입력 직원 ===
   if(empty.length > 0){
-    html += '<div style="margin-bottom:6px;">';
+    html += '<div style="margin-top:4px;padding-top:4px;border-top:1px solid #2E2E5240;">';
     html += '<div style="font-size:.6rem;color:#E67E22;font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid #E67E22;">미입력 ('+empty.length+'명)</div>';
     empty.forEach(e => {
-      html += '<div style="display:flex;align-items:center;gap:8px;padding:7px 8px;margin-bottom:2px;background:#1A1A30;border-radius:6px;border-left:3px solid #707088;cursor:pointer;" data-empid="'+e.id+'">';
-      html += '<span style="font-size:.85rem;font-weight:800;color:#707088;">'+e.emp.name+'</span>';
-      html += '<span style="font-size:.7rem;color:#707088;">미입력</span>';
+      const pattern = getPatternSuggestion(e.id, dk);
+      html += '<div style="display:flex;align-items:center;gap:6px;padding:6px 8px;margin-bottom:2px;background:#1A1A30;border-radius:6px;border-left:3px solid #707088;">';
+      html += '<span style="font-size:.85rem;font-weight:800;color:#707088;min-width:44px;">'+e.emp.name+'</span>';
+      if(pattern){
+        html += '<span style="font-size:.65rem;color:#9B59B6;">AI추천 '+pattern.start+'~'+pattern.end+'</span>';
+        html += '<span onclick="event.stopPropagation();applyPatternSuggestion(\''+e.id+'\',\''+dk+'\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:#9B59B633;color:#9B59B6;cursor:pointer;font-weight:700;">적용</span>';
+      } else {
+        html += '<span style="font-size:.7rem;color:#707088;">미입력</span>';
+      }
+      html += '<span style="margin-left:auto;cursor:pointer;" data-empid="'+e.id+'"><span style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:#242444;color:#9090A8;cursor:pointer;">입력</span></span>';
+      html += '</div>';
+    });
+    html += '</div>';
+  }
+
+  // === 휴무 ===
+  if(offList.length > 0){
+    html += '<div style="margin-top:4px;padding-top:4px;border-top:1px solid #2E2E5240;">';
+    html += '<div style="font-size:.6rem;color:#E74C3C;font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid #E74C3C;">휴무 ('+offList.length+'명)</div>';
+    offList.forEach(o => {
+      html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:2px;background:#E74C3C08;border-radius:6px;border-left:3px solid #E74C3C;">';
+      html += '<span style="font-size:.8rem;font-weight:800;color:#E74C3C;">'+o.emp.name+'</span>';
+      html += '<span style="font-size:.65rem;color:#E74C3C;">휴무</span>';
       html += '</div>';
     });
     html += '</div>';
@@ -3481,8 +3601,44 @@ function renderListView(){
 
   // 터치 → 수정창
   con.querySelectorAll('[data-empid]').forEach(row => {
-    row.addEventListener('click', ()=> openShiftModal(row.dataset.empid));
+    row.addEventListener('click', (e)=>{
+      if(e.target.closest('[onclick]')) return; // 버튼 클릭 무시
+      openShiftModal(row.dataset.empid);
+    });
   });
+}
+
+// 전체 확정
+function confirmAllShifts(){
+  const dk = dateKey(currentDate);
+  Object.keys(employees).forEach(id => {
+    if(daySchedule[id] && daySchedule[id].start && !isDayOff(id, dk)){
+      shiftStatus[dk+'_'+id] = 'confirmed';
+      recordPattern(id, dk, daySchedule[id]);
+    }
+  });
+  lsSaveShiftStatus();
+  renderAll();
+}
+// 전체 보정(리셋)
+function resetAllShifts(){
+  const dk = dateKey(currentDate);
+  Object.keys(employees).forEach(id => {
+    delete shiftStatus[dk+'_'+id];
+  });
+  lsSaveShiftStatus();
+  renderAll();
+}
+// AI 패턴 추천 적용
+function applyPatternSuggestion(empId, dk){
+  const pattern = getPatternSuggestion(empId, dk);
+  if(!pattern) return;
+  const data = {start:pattern.start, end:pattern.end, role:pattern.role||''};
+  daySchedule[empId] = data;
+  lsSaveSchedule(dk, daySchedule);
+  fbPut(FB_SCHEDULES+'/'+dk+'/'+empId, data);
+  showToast('AI 추천 적용');
+  renderAll();
 }
 
 // Horizontal view renderer
