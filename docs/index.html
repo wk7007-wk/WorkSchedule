@@ -1907,7 +1907,7 @@ function renderBriefing(){
   gaugeRows.forEach(row => {
     html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;">';
     html += '<span style="font-size:.5rem;font-weight:700;color:'+row.color+';min-width:28px;">'+row.label+'</span>';
-    html += '<div style="flex:1;display:flex;gap:1px;height:16px;">';
+    html += '<div style="flex:1;display:flex;gap:1px;height:20px;">';
     hmHours.forEach(h => {
       const hStr = pad(h)+':00';
       const s = staffing[hStr];
@@ -1926,7 +1926,7 @@ function renderBriefing(){
       } else if(lim.min > 0){
         bg = C_OFF+'22'; tc = C_OFF; txt = '!';
       }
-      html += '<div onclick="openHourLimitEdit('+h+')" style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+tc+';font-weight:700;border-radius:1px;cursor:pointer;'+(hasOverride?'border-bottom:1px solid #FFD700;':'')+'">';
+      html += '<div data-gauge-hour="'+h+'" style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+tc+';font-weight:700;border-radius:1px;cursor:pointer;'+(hasOverride?'border-bottom:2px solid #FFD700;':'')+'">';
       html += txt;
       html += '</div>';
     });
@@ -1940,6 +1940,14 @@ function renderBriefing(){
   html += '</div></div>';
 
   panel.innerHTML = html;
+
+  // 게이지 셀 터치 → 시간별 수정 팝업 (이벤트 위임)
+  panel.querySelectorAll('[data-gauge-hour]').forEach(cell => {
+    cell.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openHourLimitEdit(parseInt(cell.dataset.gaugeHour));
+    });
+  });
 }
 
 // ============================================================
