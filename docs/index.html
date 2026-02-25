@@ -2817,10 +2817,11 @@ $('shiftDayoff').addEventListener('click', ()=>{
   const dk = dateKey(currentDate);
   const isOff = isDayOff(shiftSelectedEmpId, dk);
   if(isOff){
-    // 휴무 해제
-    if(dayoffs[shiftSelectedEmpId]) delete dayoffs[shiftSelectedEmpId][dk];
+    // 휴무 해제 (false = 수동해제 표시, 자동생성 방지)
+    if(!dayoffs[shiftSelectedEmpId]) dayoffs[shiftSelectedEmpId] = {};
+    dayoffs[shiftSelectedEmpId][dk] = false;
     lsSaveDayoffs();
-    fbDelete(FB_DAYOFFS+'/'+shiftSelectedEmpId+'/'+dk);
+    fbPut(FB_DAYOFFS+'/'+shiftSelectedEmpId+'/'+dk, false);
     // dayoff 플래그 스케줄 삭제
     if(daySchedule[shiftSelectedEmpId] && daySchedule[shiftSelectedEmpId].dayoff){
       delete daySchedule[shiftSelectedEmpId];
@@ -3149,13 +3150,13 @@ function generateAutoDayoffs(){
     const dk = dateKey(d);
     const dow = d.getDay();
 
-    // 매주 반복 휴무
+    // 매주 반복 휴무 (수동 해제=false 표시된 건 건드리지 않음)
     for(const empName in WEEKLY_DAYOFFS){
       if(WEEKLY_DAYOFFS[empName].includes(dow)){
         const empId = findEmpIdByName(empName);
         if(empId){
           if(!dayoffs[empId]) dayoffs[empId] = {};
-          if(!dayoffs[empId][dk]){
+          if(dayoffs[empId][dk] === undefined){
             dayoffs[empId][dk] = true;
             changed = true;
           }
@@ -3172,7 +3173,7 @@ function generateAutoDayoffs(){
     const from = new Date(pd.from), to = new Date(pd.to);
     for(let d = new Date(from); d <= to; d.setDate(d.getDate()+1)){
       const dk = dateKey(d);
-      if(!dayoffs[empId][dk]){
+      if(dayoffs[empId][dk] === undefined){
         dayoffs[empId][dk] = true;
         changed = true;
       }
@@ -3184,7 +3185,7 @@ function generateAutoDayoffs(){
     const empId = findEmpIdByName(sd.name);
     if(!empId) return;
     if(!dayoffs[empId]) dayoffs[empId] = {};
-    if(!dayoffs[empId][sd.date]){
+    if(dayoffs[empId][sd.date] === undefined){
       dayoffs[empId][sd.date] = true;
       changed = true;
     }
@@ -3802,9 +3803,9 @@ function renderListView(){
 function toggleDayOffFromList(empId){
   const dk = dateKey(currentDate);
   if(!dayoffs[empId]) dayoffs[empId] = {};
-  if(dayoffs[empId][dk]){
-    // 휴무 해제 → 고정스케줄 재적용
-    delete dayoffs[empId][dk];
+  if(dayoffs[empId][dk] === true){
+    // 휴무 해제 (false = 수동해제, 자동생성 방지)
+    dayoffs[empId][dk] = false;
     if(daySchedule[empId] && daySchedule[empId].dayoff) delete daySchedule[empId];
     const empName = employees[empId]?.name || '';
     const fix = FIXED_SCHEDULES[empName];
@@ -3825,7 +3826,8 @@ function toggleDayOffFromList(empId){
     showToast('휴무 지정');
   }
   lsSaveDayoffs();
-  fbPut(FB_DAYOFFS+'/'+empId+'/'+dk, dayoffs[empId][dk]||null);
+  const dval = dayoffs[empId]?.[dk];
+  fbPut(FB_DAYOFFS+'/'+empId+'/'+dk, dval === undefined ? null : dval);
   renderAll();
 }
 
