@@ -1148,15 +1148,44 @@ const STAFF_PRESETS = {
 };
 let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'null') || {
   preset: '250',
-  presetOverrides: {} // {구간키: {시간: {kitchen:{min,max},bike:{min,max},car:{min,max}}}}
+  presetOverrides: {} // {구간키: {h6: {kitchen,bike,car}, h7: ...}}
 };
-// 마이그레이션: hourlyOverrides(글로벌) → presetOverrides(구간별)
-if(staffSettings.custom || staffSettings.dailyRevenue !== undefined){
-  const old = staffSettings.hourlyOverrides;
-  staffSettings = {preset: staffSettings.preset||'250', presetOverrides: {}};
-  if(old){ staffSettings.presetOverrides[staffSettings.preset] = old; }
-}
-if(!staffSettings.presetOverrides) staffSettings.presetOverrides = {};
+// 마이그레이션: hourlyOverrides → presetOverrides, 숫자키→문자키(h6,h7...)
+(function migrateStaffSettings(){
+  let changed = false;
+  // 구 형식(custom/dailyRevenue/hourlyOverrides) 마이그레이션
+  if(staffSettings.custom || staffSettings.hourlyOverrides || staffSettings.dailyRevenue != null){
+    const old = staffSettings.hourlyOverrides;
+    staffSettings = {preset: staffSettings.preset||'250', presetOverrides: {}};
+    if(old){
+      const converted = {};
+      for(const k in old){ if(old[k]) converted['h'+k] = old[k]; }
+      staffSettings.presetOverrides[staffSettings.preset] = converted;
+    }
+    changed = true;
+  }
+  if(!staffSettings.presetOverrides) staffSettings.presetOverrides = {};
+  // 숫자키→문자키(h접두어) 변환 (Firebase 배열 변환 방지)
+  for(const pk in staffSettings.presetOverrides){
+    const ov = staffSettings.presetOverrides[pk];
+    if(!ov) continue;
+    // 배열이면 객체로 변환
+    if(Array.isArray(ov)){
+      const converted = {};
+      ov.forEach((v,i) => { if(v) converted['h'+i] = v; });
+      staffSettings.presetOverrides[pk] = converted;
+      changed = true;
+    } else {
+      // 숫자키 있으면 h접두어 추가
+      for(const k of Object.keys(ov)){
+        if(!k.startsWith('h')){ ov['h'+k] = ov[k]; delete ov[k]; changed = true; }
+      }
+    }
+  }
+  if(changed){
+    localStorage.setItem('ws_staff_settings', JSON.stringify(staffSettings));
+  }
+})();
 function saveStaffSettings(){ localStorage.setItem('ws_staff_settings', JSON.stringify(staffSettings)); fbPut(FB_WS+'/staff_settings', staffSettings); }
 
 // 날짜별 매출구간 맵
@@ -1171,15 +1200,16 @@ function getActivePresetKey(){
 }
 function getActivePreset(){ return STAFF_PRESETS[getActivePresetKey()] || STAFF_PRESETS['250']; }
 
-// 시간대별 역할 제한 — 구간별 오버라이드 우선
+// 시간대별 역할 제한 — 구간별 오버라이드 우선 (키: h6, h7, ...)
 function getRoleLimits(hour){
   const pk = getActivePresetKey();
   const ov = staffSettings.presetOverrides[pk];
-  if(ov && ov[hour]){
+  const hk = 'h'+hour;
+  if(ov && ov[hk]){
     return {
-      '주방': ov[hour].kitchen,
-      '오토바이': ov[hour].bike,
-      '차배달': ov[hour].car,
+      '주방': ov[hk].kitchen,
+      '오토바이': ov[hk].bike,
+      '차배달': ov[hk].car,
     };
   }
   const preset = getActivePreset();
@@ -3051,7 +3081,7 @@ function openHourLimitEdit(hour){
     const ov = staffSettings.presetOverrides[presetKey] || {};
     const preset = STAFF_PRESETS[presetKey] || STAFF_PRESETS['250'];
     const hr = hour;
-    const src = ov[hr] || preset.hourly[hr] || {kitchen:{min:0,max:0},bike:{min:0,max:0},car:{min:0,max:0}};
+    const src = ov['h'+hr] || preset.hourly[hr] || {kitchen:{min:0,max:0},bike:{min:0,max:0},car:{min:0,max:0}};
     overlay.querySelector('[data-hl="kitchen_min"]').value = src.kitchen.min;
     overlay.querySelector('[data-hl="kitchen_max"]').value = src.kitchen.max;
     overlay.querySelector('[data-hl="bike_min"]').value = src.bike.min;
@@ -3098,7 +3128,7 @@ function openHourLimitEdit(hour){
     };
     if(!staffSettings.presetOverrides[editingPreset]) staffSettings.presetOverrides[editingPreset] = {};
     for(let i=fromIdx; i!==(toIdx+1)%allH.length || i===fromIdx; i=(i+1)%allH.length){
-      staffSettings.presetOverrides[editingPreset][allH[i]] = JSON.parse(JSON.stringify(val));
+      staffSettings.presetOverrides[editingPreset]['h'+allH[i]] = JSON.parse(JSON.stringify(val));
       if(i===toIdx) break;
     }
     saveStaffSettings();
@@ -3112,7 +3142,7 @@ function openHourLimitEdit(hour){
     const ov = staffSettings.presetOverrides[editingPreset];
     if(ov){
       for(let i=fromIdx; i!==(toIdx+1)%allH.length || i===fromIdx; i=(i+1)%allH.length){
-        delete ov[allH[i]];
+        delete ov['h'+allH[i]];
         if(i===toIdx) break;
       }
       if(!Object.keys(ov).length) delete staffSettings.presetOverrides[editingPreset];
