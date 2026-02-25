@@ -2329,10 +2329,11 @@ function calcStaffing(empKeys, dk){
       if(hMin >= sMin && hMin < eMin){
         total++;
         const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
-        const weight = roles.length > 1 ? 0.5 : 1; // 멀티역할 0.5명
-        if(roles.includes('주방')) kitchen += weight;
-        if(roles.includes('차배달')) carDel += weight;
-        if(roles.includes('오토바이')){ bikeDel += weight; hasBikeWorker = true; }
+        const dlvWeight = roles.length > 1 ? 0.5 : 1; // 멀티역할 배달 0.5
+        // 주방은 항상 1명 (가게에 있으면 주방 공백 없음)
+        if(roles.includes('주방')) kitchen += 1;
+        if(roles.includes('차배달')) carDel += dlvWeight;
+        if(roles.includes('오토바이')){ bikeDel += dlvWeight; hasBikeWorker = true; }
         if(roles.length === 0) kitchen += 1; // 미지정 → 주방
       }
     });
