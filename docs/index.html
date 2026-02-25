@@ -1108,14 +1108,37 @@ const EMP_CAPABILITIES = {
 const ROLE_LABELS = {'주방':'주방','차배달':'차','오토바이':'바이크'};
 const ROLE_COLORS = {'주방':'#E67E22','차배달':'#4ECDC4','오토바이':'#FFD700'};
 
+// ========== 인원 기준 설정 (예상매출 기반) ==========
+const STAFF_PRESETS = {
+  '보통': { label:'보통(~150만)', kitchen17before:{max:1,min:1}, kitchenPeak:{max:3,min:2}, kitchenNight:{max:3,min:2}, kitchenOther:{max:2,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
+  '바쁨': { label:'바쁨(150~250만)', kitchen17before:{max:2,min:1}, kitchenPeak:{max:4,min:2}, kitchenNight:{max:3,min:2}, kitchenOther:{max:3,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
+  '매우바쁨': { label:'매우바쁨(250만~)', kitchen17before:{max:2,min:1}, kitchenPeak:{max:5,min:3}, kitchenNight:{max:4,min:2}, kitchenOther:{max:3,min:1}, car:{max:1,min:0}, bike:{max:1,min:0}, daStart:10, daEnd:1 },
+};
+let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'null') || {
+  preset: '보통',
+  custom: null // null이면 프리셋 사용, 아니면 커스텀
+};
+function saveStaffSettings(){ localStorage.setItem('ws_staff_settings', JSON.stringify(staffSettings)); fbPut('/workschedule/staff_settings', staffSettings); }
+function getActiveStaffConfig(){
+  if(staffSettings.custom) return staffSettings.custom;
+  return STAFF_PRESETS[staffSettings.preset] || STAFF_PRESETS['보통'];
+}
+
 // 시간대별 역할 제한
 function getRoleLimits(hour){
-  const isPeak = hour >= 17 && hour <= 19; // 17~19시 (피크)
-  const isNight = (hour >= 17 || hour < 3); // 17~03시
+  const cfg = getActiveStaffConfig();
+  const isBefore17 = hour >= 6 && hour < 17;
+  const isPeak = hour >= 17 && hour <= 19;
+  const isNight = (hour >= 17 || hour < 3);
+  let kitchenLimits;
+  if(isBefore17) kitchenLimits = cfg.kitchen17before;
+  else if(isPeak) kitchenLimits = cfg.kitchenPeak;
+  else if(isNight) kitchenLimits = cfg.kitchenNight;
+  else kitchenLimits = cfg.kitchenOther;
   return {
-    '차배달': {max:1, min:0},
-    '오토바이': {max:1, min:0},
-    '주방': {max: isPeak ? 4 : 3, min: isNight ? 2 : 1},
+    '차배달': cfg.car,
+    '오토바이': cfg.bike,
+    '주방': kitchenLimits,
   };
 }
 
@@ -1771,7 +1794,7 @@ function renderBriefing(){
     const s = staffing[hStr];
     totalCheckHours++;
     const kitchenOk = !s.kitchenOver && !s.kitchenUnder;
-    const deliveryOk = s.delivery >= 1 || s.daAvail;
+    const deliveryOk = s.deliveryWithDA >= 1;
     if(kitchenOk && deliveryOk && !s.carOver && !s.bikeOver) okHours++;
   }
   const complianceRate = totalCheckHours > 0 ? Math.round((okHours/totalCheckHours)*100) : 0;
@@ -1823,31 +1846,50 @@ function renderBriefing(){
   }
   html += '</div>';
 
-  // ===== 커버리지 히트맵 (시간대별 인원 밀도) =====
-  html += '<div style="display:flex;gap:1px;border-radius:4px;overflow:hidden;">';
+  // ===== 3줄 인원 게이지 (주방/오토바이/차) =====
   const hmHours = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
-  hmHours.forEach(h => {
-    const hStr = pad(h)+':00';
-    const s = staffing[hStr];
-    let count = s ? s.total : 0;
-    // 색상: 0=어두운, 1-2=주황, 3+=녹색, 충돌=빨강
-    let bg = '#1A1A30';
-    let txtColor = '#E0E0EC';
-    if(s){
-      const isOver = s.kitchenOver || s.carOver || s.bikeOver;
-      const isUnder = s.kitchenUnder;
-      if(isOver || isUnder){ bg = '#E74C3C'; txtColor = '#fff'; }
-      else if(count >= 1){ bg = '#3498DB40'; }
-    }
-    const isPeak = h >= 17 && h <= 19;
-    html += '<div style="flex:1;height:18px;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.5rem;color:'+txtColor+';font-weight:600;'+(isPeak?'border-bottom:2px solid #FFD700;':'')+'">';
-    html += count > 0 ? count : '';
-    html += '</div>';
+  const gaugeRows = [
+    {key:'kitchen', label:'주방', color:'#E67E22', getVal:s=>s.kitchen, getLimits:h=>getRoleLimits(h)['주방']},
+    {key:'bikeDel', label:'바이크', color:'#FFD700', getVal:s=>s.bikeDel, getLimits:h=>getRoleLimits(h)['오토바이']},
+    {key:'carDel', label:'차', color:'#4ECDC4', getVal:s=>s.carDel, getLimits:h=>getRoleLimits(h)['차배달']},
+  ];
+  // 설정 버튼 + 프리셋 라벨
+  const activeCfg = getActiveStaffConfig();
+  const presetLabel = staffSettings.custom ? '커스텀' : (activeCfg.label || staffSettings.preset);
+  html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;">';
+  html += '<span style="font-size:.5rem;color:#707088;">인원기준</span>';
+  html += '<span onclick="openStaffSettingsModal()" style="font-size:.55rem;padding:1px 6px;border-radius:3px;background:#242444;border:1px solid #2E2E52;color:#FFD700;cursor:pointer;font-weight:600;">'+presetLabel+' ▼</span>';
+  html += '</div>';
+
+  gaugeRows.forEach(row => {
+    html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;">';
+    html += '<span style="font-size:.5rem;font-weight:700;color:'+row.color+';min-width:28px;">'+row.label+'</span>';
+    html += '<div style="flex:1;display:flex;gap:1px;height:16px;">';
+    hmHours.forEach(h => {
+      const hStr = pad(h)+':00';
+      const s = staffing[hStr];
+      const val = s ? row.getVal(s) : 0;
+      const lim = row.getLimits(h);
+      let bg = '#1A1A30', tc = '#707088';
+      if(val > 0){
+        if(val > lim.max){ bg = C_OFF; tc = '#fff'; }       // 초과=빨강
+        else if(val < lim.min){ bg = C_OFF+'55'; tc = C_OFF; } // 부족=빨강연하게
+        else { bg = '#3498DB40'; tc = '#E0E0EC'; }           // 정상=파랑
+      } else if(lim.min > 0){
+        bg = C_OFF+'22'; tc = C_OFF; // 빈칸인데 최소필요=빨강어둡게
+      }
+      html += '<div style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+tc+';font-weight:700;border-radius:1px;">';
+      html += val > 0 ? (val%1===0?val:val.toFixed(1)) : (lim.min>0?'!':'');
+      html += '</div>';
+    });
+    html += '</div></div>';
   });
-  html += '</div>';
-  html += '<div style="display:flex;justify-content:space-between;font-size:.45rem;color:#707088;margin-top:1px;">';
-  html += '<span>6</span><span>10</span><span>14</span><span>18</span><span>22</span><span>02</span>';
-  html += '</div>';
+  // 시간 레이블
+  html += '<div style="display:flex;align-items:center;gap:2px;">';
+  html += '<span style="min-width:28px;"></span>';
+  html += '<div style="flex:1;display:flex;gap:1px;">';
+  hmHours.forEach(h => { html += '<div style="flex:1;text-align:center;font-size:.4rem;color:#707088;">'+h+'</div>'; });
+  html += '</div></div>';
 
   panel.innerHTML = html;
 }
@@ -2054,35 +2096,31 @@ function renderTimeline(){
 
   // === 역할별 수평 바 ===
   const roles = [
-    {key:'kitchen', label:'주방', color:'#E67E22', getVal:(s)=>s.kitchen, getMax:(h)=>getRoleLimits(h)['주방'].max, getMin:(h)=>getRoleLimits(h)['주방'].min},
-    {key:'carDel', label:'차배달', color:'#4ECDC4', getVal:(s)=>s.carDel, getMax:(h)=>getRoleLimits(h)['차배달'].max, getMin:(h)=>0},
-    {key:'bikeDel', label:'바이크', color:'#FFD700', getVal:(s)=>s.bikeDel, getMax:(h)=>getRoleLimits(h)['오토바이'].max, getMin:(h)=>0},
+    {key:'kitchen', label:'주방', color:'#E67E22', getVal:(s)=>s.kitchen, getLimits:(h)=>getRoleLimits(h)['주방']},
+    {key:'bikeDel', label:'바이크', color:'#FFD700', getVal:(s)=>s.bikeDel, getLimits:(h)=>getRoleLimits(h)['오토바이']},
+    {key:'carDel', label:'차', color:'#4ECDC4', getVal:(s)=>s.carDel, getLimits:(h)=>getRoleLimits(h)['차배달']},
   ];
 
   roles.forEach(role => {
     html += '<div style="margin-bottom:4px;">';
     html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:1px;">';
     html += '<span style="font-size:.6rem;font-weight:700;color:'+role.color+';min-width:38px;">'+role.label+'</span>';
-    // 각 시간대 셀
     html += '<div style="flex:1;display:flex;gap:1px;height:16px;">';
     checkHours.forEach(h => {
       const hStr = pad(h)+':00';
       const s = staffing[hStr];
       const val = s ? role.getVal(s) : 0;
-      const max = role.getMax(h);
-      const min = role.getMin(h);
-      // 색상 결정
-      let bg = '#1A1A30';
-      let textColor = '#707088';
+      const lim = role.getLimits(h);
+      let bg = '#1A1A30', textColor = '#707088';
       if(val > 0){
-        if(val > max){ bg = '#E74C3C55'; textColor = '#E74C3C'; }
-        else if(val < min){ bg = '#E67E2244'; textColor = '#E67E22'; }
-        else { bg = role.color+'33'; textColor = role.color; }
-      } else if(min > 0){
-        bg = '#E67E2218'; textColor = '#E67E22';
+        if(val > lim.max){ bg = C_OFF; textColor = '#fff'; }
+        else if(val < lim.min){ bg = C_OFF+'55'; textColor = C_OFF; }
+        else { bg = '#3498DB40'; textColor = '#E0E0EC'; }
+      } else if(lim.min > 0){
+        bg = C_OFF+'22'; textColor = C_OFF;
       }
       html += '<div style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+textColor+';font-weight:700;border-radius:1px;">';
-      html += val > 0 ? (val % 1 === 0 ? val : val.toFixed(1)) : (min > 0 ? '!' : '');
+      html += val > 0 ? (val%1===0?val:val.toFixed(1)) : (lim.min>0?'!':'');
       html += '</div>';
     });
     html += '</div></div></div>';
@@ -2142,15 +2180,17 @@ function renderTimeline(){
   container.appendChild(staffDiv);
 }
 
-// Staffing calculation
+// Staffing calculation (편입 로직 포함)
 function calcStaffing(empKeys, dk){
   const result = {};
-  const checkHours = [10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
+  const checkHours = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
+  const cfg = getActiveStaffConfig();
 
   for(const h of checkHours){
     const hStr = pad(h)+':00';
     const hMin = timeToMinutesFrom6(hStr);
     let kitchen = 0, carDel = 0, bikeDel = 0, total = 0;
+    let hasBikeWorker = false; // 오토바이 출근자 존재 여부
 
     empKeys.forEach(empId => {
       if(isDayOff(empId, dk)) return;
@@ -2164,29 +2204,68 @@ function calcStaffing(empKeys, dk){
       if(hMin >= sMin && hMin < eMin){
         total++;
         const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
-        const weight = roles.length > 1 ? 0.5 : 1;
+        const weight = roles.length > 1 ? 0.5 : 1; // 멀티역할 0.5명
         if(roles.includes('주방')) kitchen += weight;
         if(roles.includes('차배달')) carDel += weight;
-        if(roles.includes('오토바이')) bikeDel += weight;
-        // 역할 미지정 → 주방으로 카운트
-        if(roles.length === 0) kitchen += 1;
+        if(roles.includes('오토바이')){ bikeDel += weight; hasBikeWorker = true; }
+        if(roles.length === 0) kitchen += 1; // 미지정 → 주방
       }
     });
 
-    const delivery = carDel + bikeDel;
-    // 배달대행 가용 여부 (10:00~01:00)
-    const DA_START = timeToMinutesFrom6('10:00');
-    const DA_END = timeToMinutesFrom6('01:00');
-    const daAvail = hMin >= DA_START && hMin < DA_END;
-
-    // 충돌 체크
     const limits = getRoleLimits(h);
-    const carOver = carDel > limits['차배달'].max;
-    const bikeOver = bikeDel > limits['오토바이'].max;
-    const kitchenOver = kitchen > limits['주방'].max;
-    const kitchenUnder = kitchen < limits['주방'].min;
 
-    result[hStr] = {kitchen, carDel, bikeDel, delivery, total, daAvail, carOver, bikeOver, kitchenOver, kitchenUnder};
+    // === 편입 로직: 주방 초과 시 배달로 편입 ===
+    // 오토바이 우선, 차 차순. 오토바이 출근자 있으면 차로 편입.
+    let kitchenFinal = kitchen, carFinal = carDel, bikeFinal = bikeDel;
+    const kitchenMax = limits['주방'].max;
+    if(kitchenFinal > kitchenMax){
+      let overflow = kitchenFinal - kitchenMax;
+      // 오토바이 출근자가 이미 있으면 → 차로 편입
+      if(hasBikeWorker && bikeFinal >= limits['오토바이'].max){
+        // 오토바이 풀 → 차로 편입
+        const carSpace = limits['차배달'].max - carFinal;
+        if(carSpace > 0){
+          const move = Math.min(overflow, carSpace);
+          carFinal += move; kitchenFinal -= move; overflow -= move;
+        }
+        if(overflow > 0){
+          const bikeSpace = limits['오토바이'].max - bikeFinal;
+          if(bikeSpace > 0){ const move = Math.min(overflow, bikeSpace); bikeFinal += move; kitchenFinal -= move; overflow -= move; }
+        }
+      } else {
+        // 오토바이 우선 편입
+        const bikeSpace = limits['오토바이'].max - bikeFinal;
+        if(bikeSpace > 0){
+          const move = Math.min(overflow, bikeSpace);
+          bikeFinal += move; kitchenFinal -= move; overflow -= move;
+        }
+        if(overflow > 0){
+          const carSpace = limits['차배달'].max - carFinal;
+          if(carSpace > 0){ const move = Math.min(overflow, carSpace); carFinal += move; kitchenFinal -= move; overflow -= move; }
+        }
+      }
+    }
+
+    const delivery = carFinal + bikeFinal;
+    // 배달대행 가용 여부
+    const DA_START = timeToMinutesFrom6(pad(cfg.daStart)+':00');
+    const DA_END = timeToMinutesFrom6(pad(cfg.daEnd)+':00');
+    const daAvail = hMin >= DA_START && hMin < DA_END;
+    // 배달대행 포함 합산
+    const deliveryWithDA = delivery + (daAvail && delivery < 1 ? 1 : 0);
+
+    // 충돌 체크 (편입 후 기준)
+    const carOver = carFinal > limits['차배달'].max;
+    const bikeOver = bikeFinal > limits['오토바이'].max;
+    const kitchenOver = kitchenFinal > limits['주방'].max;
+    const kitchenUnder = kitchenFinal < limits['주방'].min;
+
+    result[hStr] = {
+      kitchen: kitchenFinal, carDel: carFinal, bikeDel: bikeFinal,
+      kitchenRaw: kitchen, carRaw: carDel, bikeRaw: bikeDel,
+      delivery, deliveryWithDA, total, daAvail, hasBikeWorker,
+      carOver, bikeOver, kitchenOver, kitchenUnder
+    };
   }
   return result;
 }
@@ -2671,6 +2750,114 @@ function updateRolePills(){
   });
   // 능력 안내 표시
   $('shiftRoleNote').textContent = empName ? '('+empName+': '+caps.map(c=>ROLE_LABELS[c]||c).join('+')+' 가능)' : '';
+}
+
+// ========== 인원 기준 설정 모달 ==========
+function openStaffSettingsModal(){
+  let overlay = document.getElementById('staffSettingsOverlay');
+  if(overlay){ overlay.remove(); }
+  overlay = document.createElement('div');
+  overlay.id = 'staffSettingsOverlay';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center;';
+  const cfg = getActiveStaffConfig();
+  const isCustom = !!staffSettings.custom;
+
+  let h = '<div style="background:#1E1E3A;border-radius:12px;padding:16px;width:90%;max-width:360px;max-height:80vh;overflow-y:auto;">';
+  h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
+  h += '<span style="font-size:.9rem;font-weight:800;color:#FFD700;">인원 기준 설정</span>';
+  h += '<span id="ssClose" style="font-size:1.2rem;color:#707088;cursor:pointer;">&times;</span>';
+  h += '</div>';
+
+  // 프리셋 선택
+  h += '<div style="font-size:.65rem;color:#9090A8;margin-bottom:4px;">예상매출 기준 프리셋</div>';
+  h += '<div style="display:flex;gap:4px;margin-bottom:10px;">';
+  for(const [key, pre] of Object.entries(STAFF_PRESETS)){
+    const sel = !isCustom && staffSettings.preset === key;
+    h += '<div onclick="applyStaffPreset(\''+key+'\')" style="flex:1;padding:6px 4px;border-radius:6px;text-align:center;cursor:pointer;font-size:.6rem;font-weight:700;'
+      +(sel?'background:#FFD70033;border:2px solid #FFD700;color:#FFD700;':'background:#242444;border:2px solid #2E2E52;color:#9090A8;')
+      +'">'+pre.label+'</div>';
+  }
+  h += '</div>';
+
+  // 커스텀 상세 (현재 적용값 표시)
+  h += '<div style="font-size:.65rem;color:#9090A8;margin-bottom:4px;">현재 적용값 (터치하여 커스텀 수정)</div>';
+  const sections = [
+    {id:'k17b', label:'주방 17시전', val:cfg.kitchen17before},
+    {id:'kpeak', label:'주방 피크(17~19)', val:cfg.kitchenPeak},
+    {id:'knight', label:'주방 야간(20~03)', val:cfg.kitchenNight},
+    {id:'kother', label:'주방 기타', val:cfg.kitchenOther},
+    {id:'bike', label:'오토바이', val:cfg.bike},
+    {id:'car', label:'차배달', val:cfg.car},
+  ];
+  sections.forEach(s => {
+    h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;padding:4px 8px;background:#242444;border-radius:6px;">';
+    h += '<span style="font-size:.6rem;color:#E0E0EC;min-width:90px;">'+s.label+'</span>';
+    h += '<span style="font-size:.55rem;color:#707088;">최소</span>';
+    h += '<input type="number" value="'+s.val.min+'" min="0" max="9" data-ss="'+s.id+'_min" style="width:32px;background:#1A1A30;border:1px solid #2E2E52;color:#FFD700;text-align:center;font-size:.7rem;border-radius:3px;padding:2px;">';
+    h += '<span style="font-size:.55rem;color:#707088;">최대</span>';
+    h += '<input type="number" value="'+s.val.max+'" min="0" max="9" data-ss="'+s.id+'_max" style="width:32px;background:#1A1A30;border:1px solid #2E2E52;color:#FFD700;text-align:center;font-size:.7rem;border-radius:3px;padding:2px;">';
+    h += '</div>';
+  });
+
+  // 배달대행 시간
+  h += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;padding:4px 8px;background:#242444;border-radius:6px;">';
+  h += '<span style="font-size:.6rem;color:#E67E22;min-width:90px;">배달대행</span>';
+  h += '<span style="font-size:.55rem;color:#707088;">시작</span>';
+  h += '<input type="number" value="'+cfg.daStart+'" min="0" max="23" data-ss="daStart" style="width:32px;background:#1A1A30;border:1px solid #2E2E52;color:#FFD700;text-align:center;font-size:.7rem;border-radius:3px;padding:2px;">';
+  h += '<span style="font-size:.55rem;color:#707088;">~종료</span>';
+  h += '<input type="number" value="'+cfg.daEnd+'" min="0" max="23" data-ss="daEnd" style="width:32px;background:#1A1A30;border:1px solid #2E2E52;color:#FFD700;text-align:center;font-size:.7rem;border-radius:3px;padding:2px;">';
+  h += '<span style="font-size:.5rem;color:#707088;">시</span>';
+  h += '</div>';
+
+  // 버튼
+  h += '<div style="display:flex;gap:6px;">';
+  h += '<div onclick="saveCustomStaffSettings()" style="flex:1;padding:8px;border-radius:6px;text-align:center;cursor:pointer;font-size:.7rem;font-weight:700;background:#FFD70033;border:1px solid #FFD700;color:#FFD700;">커스텀 저장</div>';
+  h += '<div onclick="resetStaffToPreset()" style="flex:1;padding:8px;border-radius:6px;text-align:center;cursor:pointer;font-size:.7rem;font-weight:700;background:#24244480;border:1px solid #2E2E52;color:#9090A8;">프리셋 복귀</div>';
+  h += '</div>';
+
+  // 편입 규칙 안내
+  h += '<div style="margin-top:8px;padding:6px 8px;background:#1A1A30;border-radius:6px;font-size:.5rem;color:#707088;line-height:1.5;">';
+  h += '• 멀티역할 = 0.5명 간주<br>';
+  h += '• 주방초과 → 오토바이 우선편입 → 차 편입<br>';
+  h += '• 오토바이 출근자 있으면 → 차로 편입<br>';
+  h += '• 배달대행 시간 내 배달 부족 → 대행 합산';
+  h += '</div>';
+
+  h += '</div>';
+  overlay.innerHTML = h;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#ssClose').onclick = ()=> overlay.remove();
+  overlay.addEventListener('click', e=>{ if(e.target===overlay) overlay.remove(); });
+}
+
+function applyStaffPreset(key){
+  staffSettings.preset = key;
+  staffSettings.custom = null;
+  saveStaffSettings();
+  document.getElementById('staffSettingsOverlay')?.remove();
+  renderAll();
+}
+function saveCustomStaffSettings(){
+  const g = (id) => parseInt(document.querySelector('[data-ss="'+id+'"]')?.value||'0');
+  staffSettings.custom = {
+    label:'커스텀',
+    kitchen17before:{max:g('k17b_max'),min:g('k17b_min')},
+    kitchenPeak:{max:g('kpeak_max'),min:g('kpeak_min')},
+    kitchenNight:{max:g('knight_max'),min:g('knight_min')},
+    kitchenOther:{max:g('kother_max'),min:g('kother_min')},
+    car:{max:g('car_max'),min:g('car_min')},
+    bike:{max:g('bike_max'),min:g('bike_min')},
+    daStart:g('daStart'), daEnd:g('daEnd'),
+  };
+  saveStaffSettings();
+  document.getElementById('staffSettingsOverlay')?.remove();
+  renderAll();
+}
+function resetStaffToPreset(){
+  staffSettings.custom = null;
+  saveStaffSettings();
+  document.getElementById('staffSettingsOverlay')?.remove();
+  renderAll();
 }
 
 function openShiftModal(empId){
