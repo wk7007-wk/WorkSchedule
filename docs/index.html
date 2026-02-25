@@ -4124,7 +4124,10 @@ function renderListView(){
   });
   working.sort((a,b) => timeToMinutesFrom6(a.shift.start) - timeToMinutesFrom6(b.shift.start));
 
-  let html = '<div style="padding:6px 8px;">';
+  // 전원확정 시 리스트 보드 통으로 초록 테두리
+  const allCf = working.length > 0 && unconfirmedCount === 0;
+  const boardBorder = allCf ? 'border:2px solid '+C_OK+';border-radius:12px;' : '';
+  let html = '<div style="padding:6px 8px;'+boardBorder+'">';
 
   // === 헤더 (확정일은 초록 표시) ===
   const hdrBorder = confirmed ? 'border-bottom:2px solid '+C_OK+';' : 'border-bottom:1px solid #2E2E52;';
