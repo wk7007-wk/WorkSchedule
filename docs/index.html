@@ -2326,11 +2326,9 @@ function calcStaffing(empKeys, dk){
       if(hMin >= sMin && hMin < eMin){
         total++;
         const caps = employees[empId]?.capabilities || [];
-        const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
-        const isMulti = roles.length > 1;
-        // 멀티역할 = 0.5명 배달 가능 (두 업무 겸하면서 공백)
-        if(caps.includes('오토바이')){ bikeCapable += isMulti ? 0.5 : 1; hasBikeWorker = true; }
-        if(caps.includes('차배달')) carCapable += isMulti ? 0.5 : 1;
+        // 편입 = 배달 전담 → 가능하면 1명으로 편입 (기존 인력 우선, 대행은 추가비용)
+        if(caps.includes('오토바이')){ bikeCapable += 1; hasBikeWorker = true; }
+        if(caps.includes('차배달')) carCapable += 1;
       }
     });
 
