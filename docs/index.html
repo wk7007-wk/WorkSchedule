@@ -1137,9 +1137,14 @@ function getRoleLimits(hour){
   else if(isLateNight) kitchenLimits = cfg.kitchenLateNight || cfg.kitchenNight;
   else if(isNight) kitchenLimits = cfg.kitchenNight;
   else kitchenLimits = cfg.kitchenOther;
+  // 배달대행 종료 후(1시~) → 배달 최소 1명 (오토바이 우선)
+  const daEnd = cfg.daEnd || 1;
+  const afterDA = (hour >= daEnd && hour < 6); // 대행 종료 ~ 영업종료
+  let bikeLimits = {...cfg.bike};
+  if(afterDA) bikeLimits = {max: cfg.bike.max, min: 1};
   return {
     '차배달': cfg.car,
-    '오토바이': cfg.bike,
+    '오토바이': bikeLimits,
     '주방': kitchenLimits,
   };
 }
