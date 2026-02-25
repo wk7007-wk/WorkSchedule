@@ -736,6 +736,9 @@ select.form-input{
 <!-- Date Strip (60일 스크롤) -->
 <div class="date-strip" id="dateStrip"></div>
 
+<!-- 매출구간 선택 바 -->
+<div id="revenueBar" style="display:flex;gap:3px;padding:4px 6px;background:#1A1A30;border-bottom:1px solid #2E2E52;"></div>
+
 <!-- 탭 컨텐츠 -->
 <div class="loading" id="loadingIndicator"><div class="spinner"></div>불러오는 중...</div>
 <div id="tabContent" style="display:none;">
@@ -1114,51 +1117,56 @@ function makeHourlyPreset(label, rules){
   return {label, hourly, daStart:10, daEnd:1};
 }
 const STAFF_PRESETS = {
-  '한가': makeHourlyPreset('한가(~80만)', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:1}, bike:{min:0,max:1}, car:{min:0,max:0}},
-    {hours:[17,18,19], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[20,21], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[22,23,0], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[1,2], kitchen:{min:1,max:1}, bike:{min:1,max:1}, car:{min:0,max:1}},
-  ]),
-  '보통': makeHourlyPreset('보통(80~150만)', [
+  '250': makeHourlyPreset('~250만', [
     {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:1}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[17,18,19], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[20,21], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[22,23,0], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[1,2], kitchen:{min:1,max:2}, bike:{min:1,max:1}, car:{min:0,max:1}},
   ]),
-  '바쁨': makeHourlyPreset('바쁨(150~250만)', [
+  '300': makeHourlyPreset('~300만', [
     {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[17,18,19], kitchen:{min:2,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[20,21], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[22,23,0], kitchen:{min:1,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[1,2], kitchen:{min:1,max:2}, bike:{min:1,max:1}, car:{min:0,max:1}},
   ]),
-  '매우바쁨': makeHourlyPreset('매우바쁨(250만~)', [
+  '350': makeHourlyPreset('~350만', [
     {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[17,18,19], kitchen:{min:3,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[20,21], kitchen:{min:2,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[22,23,0], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[1,2], kitchen:{min:1,max:2}, bike:{min:1,max:1}, car:{min:0,max:1}},
   ]),
+  '맥스': makeHourlyPreset('350만~', [
+    {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[17,18,19], kitchen:{min:3,max:5}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21], kitchen:{min:3,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[22,23,0], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[1,2], kitchen:{min:1,max:2}, bike:{min:1,max:1}, car:{min:0,max:1}},
+  ]),
 };
 let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'null') || {
-  preset: '보통',
+  preset: '250',
   hourlyOverrides: null, // {hour: {kitchen:{min,max},bike:{min,max},car:{min,max}}}
   dailyRevenue: null // 당일 매출 예상 구간 키 (null이면 preset 사용)
 };
 // 기존 형태 마이그레이션 (custom 필드 있으면 리셋)
-if(staffSettings.custom){ staffSettings = {preset:'보통', hourlyOverrides:null, dailyRevenue:null}; }
+if(staffSettings.custom){ staffSettings = {preset:'250', hourlyOverrides:null, dailyRevenue:null}; }
 function saveStaffSettings(){ localStorage.setItem('ws_staff_settings', JSON.stringify(staffSettings)); fbPut('/workschedule/staff_settings', staffSettings); }
 
 // 날짜별 매출구간 맵
 let dailyRevenueMap = JSON.parse(localStorage.getItem('ws_daily_revenue') || '{}');
+// 요일별 기본 매출구간 (0=일,1=월,...6=토)
+const WEEKDAY_REVENUE_DEFAULTS = { 0:'350', 1:'350', 2:'250', 3:'250', 4:'250', 5:'300', 6:'300' };
 function getActivePresetKey(){
   const dk = dateKey(currentDate);
-  return dailyRevenueMap[dk] || staffSettings.preset || '보통';
+  if(dailyRevenueMap[dk]) return dailyRevenueMap[dk];
+  // 요일 기본값
+  const d = new Date(dk); const dow = d.getDay();
+  return WEEKDAY_REVENUE_DEFAULTS[dow] || staffSettings.preset || '250';
 }
-function getActivePreset(){ return STAFF_PRESETS[getActivePresetKey()] || STAFF_PRESETS['보통']; }
+function getActivePreset(){ return STAFF_PRESETS[getActivePresetKey()] || STAFF_PRESETS['250']; }
 
 // 시간대별 역할 제한 (per-hour)
 function getRoleLimits(hour){
@@ -1784,6 +1792,7 @@ function updateDateDisplay(){
 function renderAll(){
   try {
     updateDateDisplay();
+    renderRevenueBar();
     renderBriefing();
     renderCurrentTab();
     renderDateStrip();
@@ -1791,6 +1800,38 @@ function renderAll(){
     checkLogistics();
     buildCalButtons();
   } catch(e) { console.error('renderAll error:', e); }
+}
+
+// ============================================================
+// 매출구간 선택 바
+// ============================================================
+function renderRevenueBar(){
+  const bar = $('revenueBar');
+  if(!bar) return;
+  const dk = dateKey(currentDate);
+  const activeKey = getActivePresetKey();
+  const isManual = !!dailyRevenueMap[dk]; // 수동 지정 여부
+  const presetLabels = JSON.parse(localStorage.getItem('ws_preset_labels') || '{}');
+  bar.innerHTML = '';
+  for(const [key, pre] of Object.entries(STAFF_PRESETS)){
+    const sel = activeKey === key;
+    const label = presetLabels[key] || pre.label;
+    const btn = document.createElement('div');
+    btn.textContent = label;
+    const selBorder = isManual ? '#E67E22' : '#FFD700'; // 수동=주황, 기본=노랑
+    const selBg = isManual ? '#E67E2233' : '#FFD70033';
+    const selColor = isManual ? '#E67E22' : '#FFD700';
+    btn.style.cssText = 'flex:1;padding:5px 2px;border-radius:5px;text-align:center;cursor:pointer;font-size:.6rem;font-weight:700;'
+      +(sel?'background:'+selBg+';border:1.5px solid '+selBorder+';color:'+selColor+';':'background:#242444;border:1.5px solid #2E2E52;color:#707088;');
+    btn.addEventListener('click', ()=> setDailyRevenue(key));
+    bar.appendChild(btn);
+  }
+  // 설정 버튼
+  const editBtn = document.createElement('div');
+  editBtn.textContent = '⚙';
+  editBtn.style.cssText = 'padding:5px 6px;border-radius:5px;cursor:pointer;font-size:.6rem;color:#707088;background:#242444;border:1px solid #2E2E52;';
+  editBtn.addEventListener('click', ()=> openRevenueEditModal());
+  bar.appendChild(editBtn);
 }
 
 // ============================================================
@@ -1891,19 +1932,7 @@ function renderBriefing(){
     {key:'bikeDel', roleKey:'오토바이', label:'바이크', color:'#FFD700', getVal:s=>s.bikeDel},
     {key:'carDel', roleKey:'차배달', label:'차', color:'#4ECDC4', getVal:s=>s.carDel},
   ];
-  // 매출 구간 선택 버튼 (4구간) + 설정 버튼
-  const activeKey = getActivePresetKey();
-  const presetLabels = JSON.parse(localStorage.getItem('ws_preset_labels') || '{}');
-  html += '<div style="display:flex;gap:3px;margin-bottom:3px;align-items:center;">';
-  for(const [key, pre] of Object.entries(STAFF_PRESETS)){
-    const sel = activeKey === key;
-    const label = presetLabels[key] || pre.label;
-    html += '<div data-revenue-key="'+key+'" style="flex:1;padding:4px 2px;border-radius:4px;text-align:center;cursor:pointer;font-size:.5rem;font-weight:700;'
-      +(sel?'background:#FFD70033;border:1.5px solid #FFD700;color:#FFD700;':'background:#1A1A30;border:1.5px solid #2E2E52;color:#707088;')
-      +'">'+label+'</div>';
-  }
-  html += '<div data-revenue-edit style="padding:4px 5px;border-radius:4px;cursor:pointer;font-size:.5rem;color:#707088;background:#1A1A30;border:1px solid #2E2E52;">⚙</div>';
-  html += '</div>';
+  // 오버라이드 표시 (구간 버튼은 revenueBar로 이동)
   if(staffSettings.hourlyOverrides) html += '<div style="font-size:.45rem;color:#E67E22;margin-bottom:1px;">커스텀 수정 적용중 <span data-clear-overrides style="text-decoration:underline;cursor:pointer;">초기화</span></div>';
 
   gaugeRows.forEach(row => {
@@ -1943,12 +1972,7 @@ function renderBriefing(){
 
   panel.innerHTML = html;
 
-  // 이벤트 위임: 매출구간 버튼 + 게이지 셀 + 초기화
-  panel.querySelectorAll('[data-revenue-key]').forEach(btn => {
-    btn.addEventListener('click', () => setDailyRevenue(btn.dataset.revenueKey));
-  });
-  const rvEdit = panel.querySelector('[data-revenue-edit]');
-  if(rvEdit) rvEdit.addEventListener('click', () => openRevenueEditModal());
+  // 이벤트 위임: 게이지 셀 + 초기화
   const clrBtn = panel.querySelector('[data-clear-overrides]');
   if(clrBtn) clrBtn.addEventListener('click', () => clearHourlyOverrides());
   panel.querySelectorAll('[data-gauge-hour]').forEach(cell => {
@@ -2873,7 +2897,14 @@ function saveDailyRevenueMap(){ localStorage.setItem('ws_daily_revenue', JSON.st
 
 function setDailyRevenue(key){
   const dk = dateKey(currentDate);
-  dailyRevenueMap[dk] = key;
+  const d = new Date(dk); const dow = d.getDay();
+  const weekdayDefault = WEEKDAY_REVENUE_DEFAULTS[dow] || '250';
+  if(key === weekdayDefault){
+    // 요일 기본값과 같으면 명시 지정 제거 (디폴트로 복원)
+    delete dailyRevenueMap[dk];
+  } else {
+    dailyRevenueMap[dk] = key;
+  }
   saveDailyRevenueMap();
   staffSettings.hourlyOverrides = null;
   saveStaffSettings();
