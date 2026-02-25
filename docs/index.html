@@ -1238,6 +1238,7 @@ function detectConflicts(empKeys, dk){
     const hMin = timeToMinutesFrom6(hStr);
     const roleEmps = {'주방':[],'차배달':[],'오토바이':[]};
 
+    const roleWeights = {'주방':0,'차배달':0,'오토바이':0};
     empKeys.forEach(empId => {
       if(isDayOff(empId, dk)) return;
       const shift = daySchedule[empId];
@@ -1247,8 +1248,15 @@ function detectConflicts(empKeys, dk){
       if(eMin <= sMin) eMin += 24*60;
       if(hMin >= sMin && hMin < eMin){
         const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
-        if(roles.length === 0) roleEmps['주방'].push(empId);
-        roles.forEach(r => { if(roleEmps[r]) roleEmps[r].push(empId); });
+        if(roles.length === 0){
+          roleEmps['주방'].push(empId);
+          roleWeights['주방'] += 1;
+        } else {
+          const w = roles.length > 1 ? 0.5 : 1;
+          roles.forEach(r => {
+            if(roleEmps[r]){ roleEmps[r].push(empId); roleWeights[r] += w; }
+          });
+        }
       }
     });
 
@@ -1256,19 +1264,21 @@ function detectConflicts(empKeys, dk){
 
     for(const role in limits){
       const emps = roleEmps[role] || [];
+      const weight = roleWeights[role] || 0;
       const lim = limits[role];
-      // max 초과 → 뒤쪽 직원 충돌
-      if(emps.length > lim.max){
-        for(let i = lim.max; i < emps.length; i++){
+      // max 초과 (가중치 기준)
+      if(weight > lim.max){
+        // 뒤쪽 직원에 충돌 표시
+        const maxInt = Math.ceil(lim.max);
+        for(let i = maxInt; i < emps.length; i++){
           if(!conflicts[emps[i]]) conflicts[emps[i]] = [];
-          conflicts[emps[i]].push({hour:h, role, type:'over', msg:h+'시 '+role+' 초과('+emps.length+'/'+lim.max+')'});
+          conflicts[emps[i]].push({hour:h, role, type:'over', msg:h+'시 '+role+' 초과('+weight+'/'+lim.max+')'});
         }
       }
-      // min 부족 체크 (전체 해당 역할 인원 부족 시)
-      if(lim.min > 0 && emps.length < lim.min){
-        // 부족은 empId가 아닌 시간대 전체 경고 → hourConflicts에 저장
+      // min 부족 체크 (가중치 기준)
+      if(lim.min > 0 && weight < lim.min){
         if(!conflicts['_hour_'+h]) conflicts['_hour_'+h] = [];
-        conflicts['_hour_'+h].push({hour:h, role, type:'under', msg:h+'시 '+role+' 부족('+emps.length+'/'+lim.min+')'});
+        conflicts['_hour_'+h].push({hour:h, role, type:'under', msg:h+'시 '+role+' 부족('+weight+'/'+lim.min+')'});
       }
     }
   }
