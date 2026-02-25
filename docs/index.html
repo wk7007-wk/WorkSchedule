@@ -729,9 +729,8 @@ select.form-input{
 <!-- 레이아웃 탭 -->
 <div class="layout-tabs" id="layoutTabs">
   <button class="layout-tab active" data-tab="list">리스트</button>
-  <button class="layout-tab" data-tab="vertical">세로</button>
-  <button class="layout-tab" data-tab="horizontal">가로</button>
-  <button class="layout-tab" data-tab="calendar">달력</button>
+  <button class="layout-tab" data-tab="timebar">타임바</button>
+  <button class="layout-tab" data-tab="weekly">주간</button>
 </div>
 
 <!-- Date Strip (60일 스크롤) -->
@@ -743,16 +742,11 @@ select.form-input{
   <div class="tab-panel active" id="panelList">
     <div id="listContent"></div>
   </div>
-  <div class="tab-panel" id="panelVertical">
-    <div class="timeline-section" id="timelineSection">
-      <div id="timelineContent"></div>
-    </div>
+  <div class="tab-panel" id="panelTimebar">
+    <div id="timebarContent"></div>
   </div>
-  <div class="tab-panel" id="panelCalendar">
-    <div id="calendarContent"></div>
-  </div>
-  <div class="tab-panel" id="panelHorizontal">
-    <div id="horizontalContent"></div>
+  <div class="tab-panel" id="panelWeekly">
+    <div id="weeklyContent"></div>
   </div>
   </div>
 
@@ -3885,12 +3879,12 @@ function updateConfirmBtn(){
 // ============================================================
 // Layout Tab Switching
 // ============================================================
-const TAB_ORDER = ['list','vertical','horizontal','calendar'];
+const TAB_ORDER = ['list','timebar','weekly'];
 function switchTab(tabName){
   currentTab = tabName;
   document.querySelectorAll('.layout-tab').forEach(t => t.classList.toggle('active', t.dataset.tab===tabName));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-  const panelMap = {list:'panelList',vertical:'panelVertical',calendar:'panelCalendar',horizontal:'panelHorizontal'};
+  const panelMap = {list:'panelList',timebar:'panelTimebar',weekly:'panelWeekly'};
   const panel = $(panelMap[tabName]);
   if(panel) panel.classList.add('active');
   renderCurrentTab();
@@ -3915,9 +3909,8 @@ $('tabContent').addEventListener('touchend', (e)=>{
 
 function renderCurrentTab(){
   if(currentTab==='list') renderListView();
-  else if(currentTab==='vertical') renderTimeline();
-  else if(currentTab==='calendar') renderCalendarView();
-  else if(currentTab==='horizontal') renderHorizontalView();
+  else if(currentTab==='timebar') renderTimebarView();
+  else if(currentTab==='weekly') renderWeeklyView();
 }
 
 // Calendar view renderer (미래 날짜만 표시)
@@ -4225,7 +4218,223 @@ function applyPatternSuggestion(empId, dk){
   renderAll();
 }
 
-// Horizontal view renderer
+// ============================================================
+// 타임바 뷰 — 미니 간트 (직원별 수평 시간 바)
+// ============================================================
+function renderTimebarView(){
+  const con = $('timebarContent');
+  if(!con) return;
+  const dk = dateKey(currentDate);
+  const empKeys = Object.keys(employees);
+  const staffing = calcStaffing(empKeys, dk);
+
+  // 시간축: 06~03 (22시간)
+  const barStart = 6, barHours = 22; // 6시~다음날3시=27
+  function timeToPct(timeStr){
+    let [h,m] = timeStr.split(':').map(Number);
+    if(h < barStart) h += 24;
+    return Math.max(0, Math.min(100, ((h - barStart) + m/60) / barHours * 100));
+  }
+
+  let html = '';
+
+  // 현재시간 표시선
+  const nowH = new Date().getHours(), nowM = new Date().getMinutes();
+  const nowPct = timeToPct(pad(nowH)+':'+pad(nowM));
+  const isToday = dateKey(new Date()) === dk;
+
+  // 시간 헤더
+  html += '<div style="display:flex;align-items:center;padding:0 4px;margin-bottom:2px;">';
+  html += '<div style="min-width:44px;"></div>';
+  html += '<div style="flex:1;position:relative;height:14px;display:flex;">';
+  for(let h=6;h<=27;h+=2){
+    const rh = h>=24?h-24:h;
+    const pct = (h-6)/barHours*100;
+    html += '<span style="position:absolute;left:'+pct+'%;font-size:.45rem;color:#707088;transform:translateX(-50%);">'+rh+'</span>';
+  }
+  html += '</div></div>';
+
+  // 직원 바 렌더
+  empKeys.forEach(empId => {
+    const emp = employees[empId];
+    const off = isDayOff(empId, dk);
+    const shift = daySchedule[empId];
+    const hasShift = shift && shift.start && shift.end;
+    const roles = hasShift && shift.role ? shift.role.split(',').filter(Boolean) : [];
+    const primaryRole = roles[0] || '주방';
+    const roleColor = ROLE_COLORS[primaryRole] || '#9090A8';
+    const conflicts = detectConflicts(empKeys, dk);
+    const hasConflict = hasShift && !!conflicts[empId];
+    const status = getShiftStatus(dk, empId);
+    const isConfirmed = status === 'confirmed';
+
+    html += '<div data-empid="'+empId+'" style="display:flex;align-items:center;padding:1px 4px;cursor:pointer;'+(off?'opacity:.35;':'')+'">';
+
+    // 이름
+    html += '<div style="min-width:44px;font-size:.6rem;font-weight:700;color:'+(off?'#E74C3C':isConfirmed?C_OK:'#E0E0EC')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+emp.name+'</div>';
+
+    // 바 영역
+    html += '<div style="flex:1;position:relative;height:22px;background:#1A1A30;border-radius:3px;overflow:hidden;">';
+
+    // 현재시간 선
+    if(isToday) html += '<div style="position:absolute;left:'+nowPct+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:2;"></div>';
+
+    if(off){
+      html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#E74C3C;font-weight:600;">휴무</div>';
+    } else if(hasShift){
+      const left = timeToPct(shift.start);
+      let right = timeToPct(shift.end);
+      let width = right - left;
+      if(width <= 0) width += 100;
+      width = Math.min(width, 100 - left);
+
+      const barBg = hasConflict ? '#E74C3C55' : roleColor+'40';
+      const borderL = hasConflict ? C_OFF : roleColor;
+      const roleLabels = roles.map(r => '<span style="color:'+(ROLE_COLORS[r]||'#fff')+';">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
+      const hours = calcHours(shift.start, shift.end);
+
+      html += '<div style="position:absolute;left:'+left+'%;width:'+width+'%;top:1px;bottom:1px;background:'+barBg+';border-left:2px solid '+borderL+';border-radius:2px;display:flex;align-items:center;padding:0 3px;gap:3px;overflow:hidden;">';
+      html += '<span style="font-size:.5rem;color:#E0E0EC;font-weight:600;white-space:nowrap;">'+shift.start.replace(/^0/,'')+'-'+shift.end.replace(/^0/,'')+'</span>';
+      html += '<span style="font-size:.45rem;white-space:nowrap;">'+roleLabels+'</span>';
+      html += '<span style="font-size:.45rem;color:#9090A8;">('+hours+'h)</span>';
+      html += '</div>';
+    } else {
+      html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.55rem;color:#707088;">미입력</div>';
+    }
+
+    html += '</div>'; // bar
+    html += '</div>'; // row
+  });
+
+  // 합계 인원 행 (시간대별)
+  html += '<div style="display:flex;align-items:center;padding:2px 4px;margin-top:2px;border-top:1px solid #2E2E52;">';
+  html += '<div style="min-width:44px;font-size:.5rem;color:#9090A8;">인원</div>';
+  html += '<div style="flex:1;position:relative;height:16px;display:flex;gap:1px;">';
+  GAUGE_HOURS.forEach(h => {
+    const hStr = pad(h)+':00';
+    const s = staffing[hStr];
+    const total = s ? s.total : 0;
+    const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver);
+    html += '<div style="flex:1;background:'+(anyConflict?C_OFF+'22':total>0?'#3498DB15':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+(anyConflict?C_OFF:total>0?'#3498DB':'#707088')+';font-weight:700;border-radius:1px;">';
+    html += total > 0 ? total : '';
+    html += '</div>';
+  });
+  html += '</div></div>';
+
+  con.innerHTML = html;
+
+  // 터치 → 수정 팝업
+  con.querySelectorAll('[data-empid]').forEach(row => {
+    row.addEventListener('click', ()=> openShiftModal(row.dataset.empid));
+  });
+}
+
+// ============================================================
+// 주간 뷰 — 7일 카드 (직원 근무 요약)
+// ============================================================
+function renderWeeklyView(){
+  const con = $('weeklyContent');
+  if(!con) return;
+  const empKeys = Object.keys(employees);
+
+  let html = '';
+
+  // 7일 카드 (오늘 기준 -1 ~ +5)
+  for(let d = -1; d <= 5; d++){
+    const dt = new Date(currentDate);
+    dt.setDate(currentDate.getDate() + d);
+    const dk = dateKey(dt);
+    const dayNames = ['일','월','화','수','목','금','토'];
+    const dayName = dayNames[dt.getDay()];
+    const isToday = dateKey(new Date()) === dk;
+    const isSelected = dateKey(currentDate) === dk;
+    const isSun = dt.getDay() === 0;
+    const isSat = dt.getDay() === 6;
+
+    // 해당 날짜 스케줄 로드
+    const daySched = d === 0 ? daySchedule : (lsLoadSchedule(dk) || {});
+
+    let working = [], offList = [], emptyList = [];
+    empKeys.forEach(id => {
+      const emp = employees[id];
+      if(isDayOff(id, dk)){ offList.push({id, emp}); return; }
+      const s = daySched[id];
+      if(s && s.start){ working.push({id, emp, shift:s}); }
+      else { emptyList.push({id, emp}); }
+    });
+
+    // 확정 상태
+    let cfCount = 0;
+    working.forEach(w => {
+      const st = getShiftStatus(dk, w.id);
+      if(st === 'confirmed') cfCount++;
+    });
+    const totalW = working.length;
+    const cfPct = totalW > 0 ? Math.round(cfCount/totalW*100) : 0;
+
+    // 매출구간
+    const revKey = dailyRevenueMap[dk];
+    const presetLabels = JSON.parse(localStorage.getItem('ws_preset_labels') || '{}');
+    const revLabel = revKey ? (presetLabels[revKey] || revKey) : '';
+
+    // 카드
+    const cardBg = isSelected ? '#242444' : '#1A1A30';
+    const cardBorder = isSelected ? '#FFD700' : isToday ? '#2ECC71' : '#2E2E52';
+    html += '<div data-week-dk="'+dk+'" style="margin-bottom:4px;padding:8px;background:'+cardBg+';border:1.5px solid '+cardBorder+';border-radius:8px;cursor:pointer;">';
+
+    // 헤더: 날짜 + 요일 + 매출구간 + 확정률
+    html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">';
+    const dayColor = isSun ? '#E74C3C' : isSat ? '#3498DB' : '#E0E0EC';
+    html += '<span style="font-size:.75rem;font-weight:800;color:'+dayColor+';">'+(dt.getMonth()+1)+'/'+dt.getDate()+'</span>';
+    html += '<span style="font-size:.6rem;color:'+dayColor+';font-weight:600;">'+dayName+'</span>';
+    if(isToday) html += '<span style="font-size:.45rem;padding:1px 4px;border-radius:2px;background:#2ECC7133;color:#2ECC71;font-weight:700;">오늘</span>';
+    if(revLabel) html += '<span style="font-size:.45rem;padding:1px 4px;border-radius:2px;background:#FFD70022;color:#FFD700;">'+revLabel+'</span>';
+    html += '<span style="margin-left:auto;font-size:.5rem;color:'+(cfPct===100?C_OK:cfPct>0?'#E67E22':C_DEF)+';">'+working.length+'명';
+    if(totalW>0) html += ' ('+cfPct+'%)';
+    html += '</span>';
+    html += '</div>';
+
+    // 직원 바 (미니)
+    if(working.length > 0){
+      html += '<div style="display:flex;flex-wrap:wrap;gap:2px;">';
+      working.forEach(w => {
+        const roles = w.shift.role ? w.shift.role.split(',').filter(Boolean) : [];
+        const rc = ROLE_COLORS[roles[0]] || '#9090A8';
+        const st = getShiftStatus(dk, w.id);
+        const stBorder = st==='confirmed' ? C_OK : 'transparent';
+        html += '<span style="font-size:.5rem;padding:1px 4px;border-radius:3px;background:'+rc+'22;color:'+rc+';border:1px solid '+stBorder+';font-weight:600;">';
+        html += w.emp.name+' '+w.shift.start.replace(/^0/,'')+'-'+w.shift.end.replace(/^0/,'');
+        html += '</span>';
+      });
+      html += '</div>';
+    }
+
+    // 휴무 + 미입력
+    if(offList.length > 0 || emptyList.length > 0){
+      html += '<div style="display:flex;gap:4px;margin-top:2px;font-size:.45rem;">';
+      if(offList.length > 0) html += '<span style="color:#E74C3C;">휴:'+offList.map(o=>o.emp.name).join(',')+'</span>';
+      if(emptyList.length > 0) html += '<span style="color:#707088;">미입력:'+emptyList.map(e=>e.emp.name).join(',')+'</span>';
+      html += '</div>';
+    }
+
+    html += '</div>'; // card
+  }
+
+  con.innerHTML = html;
+
+  // 카드 터치 → 해당 날짜로 이동
+  con.querySelectorAll('[data-week-dk]').forEach(card => {
+    card.addEventListener('click', () => {
+      const parts = card.dataset.weekDk.split('-');
+      currentDate = new Date(parts[0], parts[1]-1, parts[2]);
+      onDateChange();
+    });
+  });
+}
+
+// ============================================================
+// (Legacy) Horizontal view renderer — 삭제됨, 호환용 빈 함수
+// ============================================================
 function renderHorizontalView(){
   const con = $('horizontalContent');
   if(!con) return;
