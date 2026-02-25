@@ -1936,10 +1936,7 @@ function renderBriefing(){
     {key:'bikeDel', roleKey:'오토바이', label:'바이크', color:'#FFD700', getVal:s=>s.bikeDel},
     {key:'carDel', roleKey:'차배달', label:'차', color:'#4ECDC4', getVal:s=>s.carDel},
   ];
-  // 오버라이드 표시
   const _pk = getActivePresetKey();
-  const _hasOv = staffSettings.presetOverrides[_pk] && Object.keys(staffSettings.presetOverrides[_pk]).length;
-  if(_hasOv) html += '<div style="font-size:.5rem;color:#E67E22;margin-bottom:1px;">커스텀 적용중 <span data-clear-overrides style="text-decoration:underline;cursor:pointer;">초기화</span></div>';
 
   gaugeRows.forEach(row => {
     html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;">';
@@ -1951,7 +1948,7 @@ function renderBriefing(){
       const val = s ? row.getVal(s) : 0;
       const lim = getRoleLimits(h)[row.roleKey];
       const isBikeDA = row.key==='bikeDel' && val===0 && s && s.daAvail;
-      const hasOverride = staffSettings.presetOverrides[_pk] && staffSettings.presetOverrides[_pk][h];
+      const hasOverride = false; // 규칙 변경은 절대치 — 커스텀 표시 불필요
       let bg = '#1A1A30', tc = '#707088', txt = '';
       if(isBikeDA){
         bg = '#E67E2230'; tc = '#E67E22'; txt = '대';
