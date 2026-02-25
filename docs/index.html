@@ -1832,14 +1832,15 @@ function renderBriefing(){
     let count = s ? s.total : 0;
     // 색상: 0=어두운, 1-2=주황, 3+=녹색, 충돌=빨강
     let bg = '#1A1A30';
+    let txtColor = '#E0E0EC';
     if(s){
-      const hasConflict = s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver;
-      if(hasConflict) bg = '#E74C3C55';
-      else if(count >= 3) bg = '#2ECC7140';
-      else if(count >= 1) bg = '#E67E2240';
+      const isOver = s.kitchenOver || s.carOver || s.bikeOver;
+      const isUnder = s.kitchenUnder;
+      if(isOver || isUnder){ bg = '#E74C3C'; txtColor = '#fff'; }
+      else if(count >= 1){ bg = '#3498DB40'; }
     }
     const isPeak = h >= 17 && h <= 19;
-    html += '<div style="flex:1;height:18px;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.5rem;color:#E0E0EC;font-weight:600;'+(isPeak?'border-bottom:2px solid #FFD700;':'')+'">';
+    html += '<div style="flex:1;height:18px;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.5rem;color:'+txtColor+';font-weight:600;'+(isPeak?'border-bottom:2px solid #FFD700;':'')+'">';
     html += count > 0 ? count : '';
     html += '</div>';
   });
@@ -3659,6 +3660,15 @@ function renderListView(){
   const dow = DOW_KR[currentDate.getDay()];
   const confirmed = isConfirmed(dk);
 
+  // 주간 휴무 누적일 계산
+  const weekOffCount = {};
+  const mon = getMonday(currentDate);
+  for(let i=0;i<7;i++){
+    const wd = new Date(mon); wd.setDate(wd.getDate()+i);
+    const wdk = dateKey(wd);
+    empKeys.forEach(id => { if(isDayOff(id,wdk)) weekOffCount[id] = (weekOffCount[id]||0)+1; });
+  }
+
   // 분류
   const working = [], offList = [], empty = [];
   let totalHours = 0, confirmedCount = 0, unconfirmedCount = 0;
@@ -3749,8 +3759,9 @@ function renderListView(){
     const timeLabel = w.shift.start.replace(/^0/,'')+'-'+w.shift.end.replace(/^0/,'');
 
     html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;padding:4px 6px;background:'+stBg+';border-left:3px solid '+borderC+';border-radius:6px;cursor:pointer;" data-empid="'+w.id+'">';
-    // 이름
-    html += '<span style="font-size:.8rem;font-weight:800;color:#FFF;min-width:38px;">'+w.emp.name+'</span>';
+    // 이름 + 주간휴무
+    const wOff = weekOffCount[w.id]||0;
+    html += '<span style="font-size:.8rem;font-weight:800;color:#FFF;min-width:38px;">'+w.emp.name+(wOff?'<span style="font-size:.45rem;color:'+C_OFF+';font-weight:600;vertical-align:super;">휴'+wOff+'</span>':'')+'</span>';
     // 역할 (색상텍스트, 있을때만)
     if(roles.length) html += '<span style="font-size:.55rem;">'+roles.map(r=>'<span style="color:'+(ROLE_COLORS[r]||C_DEF)+';font-weight:700;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ')+'</span>';
     // 게이지 (시간 내장)
@@ -3796,7 +3807,8 @@ function renderListView(){
     html += '<div style="font-size:.6rem;color:#E74C3C;font-weight:700;margin-bottom:3px;padding-left:4px;border-left:2px solid #E74C3C;">휴무 ('+offList.length+'명)</div>';
     offList.forEach(o => {
       html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:2px;background:#E74C3C08;border-radius:6px;border-left:3px solid #E74C3C;cursor:pointer;" data-empid="'+o.id+'">';
-      html += '<span style="font-size:.8rem;font-weight:800;color:#E74C3C;">'+o.emp.name+'</span>';
+      const oOff = weekOffCount[o.id]||0;
+      html += '<span style="font-size:.8rem;font-weight:800;color:#E74C3C;">'+o.emp.name+(oOff?'<span style="font-size:.45rem;font-weight:600;vertical-align:super;">주'+oOff+'</span>':'')+'</span>';
       html += '<span style="font-size:.65rem;color:#E74C3C;">휴무</span>';
       html += '<span onclick="event.stopPropagation();toggleDayOffFromList(\''+o.id+'\')" style="margin-left:auto;font-size:.55rem;padding:2px 6px;border-radius:3px;background:#333;color:#9090A8;cursor:pointer;font-weight:700;">해제</span>';
       html += '</div>';
