@@ -5120,11 +5120,11 @@ function collectAllConfirmed(){
   return {events, dayTexts};
 }
 
-// 직원 1명분 .ics 생성 (공통 헬퍼)
-function buildIcsForEmployee(empId, events){
+// 직원 1명분 .ics 생성 (공통 헬퍼, trackHistory=false면 ws_shared_ 안 건드림)
+function buildIcsForEmployee(empId, events, trackHistory){
   const seq = Math.floor(Date.now()/1000);
   const prevKey = 'ws_shared_'+empId;
-  const prevDates = JSON.parse(localStorage.getItem(prevKey)||'[]');
+  const prevDates = trackHistory ? JSON.parse(localStorage.getItem(prevKey)||'[]') : [];
   const curDates = events.map(ev=>ev.date);
 
   let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
@@ -5156,7 +5156,7 @@ function buildIcsForEmployee(empId, events){
     ics += 'SUMMARY:BBQ (취소)\r\nEND:VEVENT\r\n';
   });
   ics += 'END:VCALENDAR\r\n';
-  localStorage.setItem(prevKey, JSON.stringify(curDates));
+  if(trackHistory) localStorage.setItem(prevKey, JSON.stringify(curDates));
   return ics;
 }
 
@@ -5238,7 +5238,7 @@ $('shareKakaoBtn').addEventListener('click', async()=>{
     Object.keys(byEmp).forEach(eid=>{
       const emp = employees[eid];
       if(!emp) return;
-      const ics = buildIcsForEmployee(eid, byEmp[eid]);
+      const ics = buildIcsForEmployee(eid, byEmp[eid], false);
       perEmpIcs.push({name: emp.name, ics: ics});
     });
 
@@ -5343,7 +5343,7 @@ async function sharePerEmployee(empId, mode){
     const cancelOnly = !events.length && prevDates.length > 0;
 
     // .ics (공통 헬퍼 사용)
-    const ics = buildIcsForEmployee(empId, events);
+    const ics = buildIcsForEmployee(empId, events, true);
 
     if(cancelOnly){
       downloadBlob(ics, emp.name+'.ics', 'text/calendar;charset=utf-8');
