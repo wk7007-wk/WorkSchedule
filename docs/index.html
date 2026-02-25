@@ -2596,13 +2596,12 @@ function renderDateStrip(){
       });
     }
 
-    // 테두리: 전원확정=초록, 일부=연초록, 없음=회색
-    let borderColor = '#2E2E52';
+    // 테두리: 전원확정=초록, 일부=연초록, 미확정=테두리없음
+    let borderColor = '#2E2E5200'; // 투명 (미확정/미입력)
     let statusLabel = '';
     if(assignedCount > 0){
       if(confirmedCount === assignedCount){ borderColor = C_OK; statusLabel = '확정'; }
       else if(confirmedCount > 0){ borderColor = C_OK+'88'; statusLabel = confirmedCount+'/'+assignedCount; }
-      else { borderColor = C_DEF; statusLabel = '미확정'; }
     }
 
     const dowCls = dow===0 ? ' sun' : dow===6 ? ' sat' : '';
