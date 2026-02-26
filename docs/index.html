@@ -2672,6 +2672,7 @@ function renderWeek(){
     const cell = document.createElement('div');
     cell.className = 'week-day';
     cell.style.borderColor = borderC;
+    if(allConfirmed) cell.style.borderWidth = '2px';
     if(isCurrentDay) cell.style.background = '#2A2A45';
     if(isPast) cell.style.opacity = '.3';
 
@@ -4149,7 +4150,9 @@ function renderListView(){
   html += '</div>';
   html += '<div style="display:flex;gap:4px;align-items:center;">';
   if(unconfirmedCount > 0){
-    html += '<span onclick="confirmAllShifts()" style="font-size:.55rem;padding:3px 6px;border-radius:4px;background:'+C_OK+'22;color:'+C_OK+';cursor:pointer;font-weight:700;">전체확정</span>';
+    html += '<span onclick="confirmAllShifts()" style="font-size:.75rem;padding:5px 12px;border-radius:6px;background:'+C_OK+'44;color:'+C_OK+';cursor:pointer;font-weight:700;border:1px solid '+C_OK+'66;">전체확정</span>';
+  } else if(working.length > 0){
+    html += '<span style="font-size:.7rem;padding:4px 10px;border-radius:6px;background:'+C_OK+'22;color:'+C_OK+';font-weight:700;">확정됨</span>';
   }
   html += '</div></div>';
 
@@ -4407,7 +4410,8 @@ function renderTimebarView(){
   if(empty.length) html += '<span style="color:#707088;">미입력'+empty.length+'</span>';
   html += '<span style="color:#707088;margin-left:auto;">'+working.length+'명 '+totalHours.toFixed(1).replace('.0','')+'h</span>';
   if(offList.length) html += '<span style="color:'+C_OFF+';">휴'+offList.length+'</span>';
-  if(unconfirmedCount > 0) html += '<span data-action="confirmAll" style="color:'+C_OK+';cursor:pointer;font-weight:700;margin-left:4px;">전체확정</span>';
+  if(unconfirmedCount > 0) html += '<span data-action="confirmAll" style="color:'+C_OK+';cursor:pointer;font-weight:700;margin-left:4px;font-size:.7rem;padding:2px 8px;background:'+C_OK+'33;border-radius:4px;">전체확정</span>';
+  else if(working.length > 0) html += '<span style="color:'+C_OK+';font-weight:700;margin-left:4px;font-size:.65rem;">확정됨</span>';
   html += '</div></div>';
 
   // === 시간 헤더 ===
