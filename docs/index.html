@@ -1262,9 +1262,9 @@ function getFixedScheduleForDate(empName, dateObj) {
   }
   if(empName === '권연옥') {
     if(dow === 1) return {start:'17:30', end:'03:00', role:'주방', type:'fixed'}; // 월
-    if(dow === 4) return {start:'17:00', end:'00:00', role:'주방', type:'fixed'}; // 목
+    if(dow === 2) return {start:'12:00', end:'00:00', role:'주방', type:'fixed'}; // 화
     if(dow === 5) return {start:'17:30', end:'03:00', role:'주방', type:'fixed'}; // 금
-    return null; // 화수토일 = 휴무
+    return null; // 수목토일 = 휴무
   }
   if(empName === '대유') return {start:null, end:null, role:'', type:'variable'};
   return FIXED_SCHEDULES[empName] || null;
@@ -1901,7 +1901,7 @@ async function loadData(){
 
     // 첫 실행 시 전 데이터 삭제 후 고정값 초기화
     const initVer = localStorage.getItem('ws_init_ver');
-    if(initVer !== 'v7'){
+    if(initVer !== 'v8'){
       // 기존 스케줄 + 휴무 + 구버전 고정스케줄 캐시 전부 클리어
       localStorage.removeItem('ws_fixed_schedules');
       localStorage.removeItem('ws_dayoffs');
@@ -1916,7 +1916,7 @@ async function loadData(){
       daySchedule = {};
       generateAutoDayoffs();
       autoApplyFixed(dk);
-      localStorage.setItem('ws_init_ver', 'v7');
+      localStorage.setItem('ws_init_ver', 'v8');
     }
   } catch(e) { console.error('loadData init error:', e); }
 
@@ -3837,7 +3837,7 @@ async function loadDayoffs(){
 const WEEKLY_DAYOFFS = {
   '리': [2],       // 매주 화요일
   '히오': [1],     // 매주 월요일
-  '권연옥': [0, 2, 3, 6],  // 매주 일,화,수,토
+  '권연옥': [0, 3, 4, 6],  // 매주 일,수,목,토
 };
 
 // 특정 기간 휴무
@@ -4397,12 +4397,13 @@ function renderListView(){
   let html = '<div style="padding:6px 8px;'+boardBorder+'">';
 
   // === 헤더 (확정일은 초록 표시) ===
-  const hdrBorder = confirmed ? 'border-bottom:2px solid '+C_OK+';' : 'border-bottom:1px solid #2E2E52;';
-  const hdrDateC = confirmed ? C_OK : '#FFF';
+  const anyConfirmed = confirmed || allCf;
+  const hdrBorder = anyConfirmed ? 'border-bottom:2px solid '+C_OK+';' : 'border-bottom:1px solid #2E2E52;';
+  const hdrDateC = anyConfirmed ? C_OK : '#FFF';
   html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding-bottom:5px;'+hdrBorder+'">';
   html += '<div>';
   html += '<span style="font-size:1rem;font-weight:800;color:'+hdrDateC+';">'+m+'/'+d+' '+dow+'</span>';
-  if(confirmed) html += ' <span style="font-size:.6rem;color:'+C_OK+';">확정</span>';
+  if(anyConfirmed) html += ' <span style="font-size:.6rem;color:'+C_OK+';">확정</span>';
   html += '</div>';
   html += '<div style="display:flex;gap:4px;align-items:center;">';
   if(unconfirmedCount > 0){
@@ -4584,6 +4585,10 @@ function confirmAllShifts(){
   lsSaveShiftStatus();
   // Firebase 일괄 동기화
   fbPut(FB_WS+'/shift_status/'+dk, fbBatch);
+  // 전원 확정 시 날짜도 확정 처리
+  confirmedDays[dk] = true;
+  lsSaveConfirmed(confirmedDays);
+  fbPut(FB_WS+'/confirmed/'+dk, true);
   renderAll();
 }
 // 전체 보정(리셋)
