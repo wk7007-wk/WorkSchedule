@@ -1238,8 +1238,8 @@ let FIXED_SCHEDULES = {
   '이원규': {start:'17:00', end:'03:00', role:'주방,오토바이', type:'fixed'},
   '히오':   {start:'18:00', end:'03:00', role:'주방', type:'fixed'},
   '리':     {start:'18:00', end:'03:00', role:'주방', type:'fixed'},
-  '박준모': {start:'06:00', end:'13:00', role:'주방,차배달', type:'fixed'},
-  '전묘정': {start:'06:00', end:'13:00', role:'주방', type:'fixed'},
+  '박준모': {start:'03:00', end:'11:00', role:'주방,차배달', type:'fixed'},
+  '전묘정': {start:'03:00', end:'11:00', role:'주방', type:'fixed'},
   '권연옥': {start:null, end:null, role:'주방', type:'conditional'},
   '대유':   {start:null, end:null, role:'', type:'variable'}, // 변칙 — 수동 입력
 };
@@ -1254,11 +1254,11 @@ function getFixedScheduleForDate(empName, dateObj) {
   if(empName === '리') return {start: holiday ? '17:00' : '18:00', end:'03:00', role:'주방', type:'fixed'};
   if(empName === '박준모') {
     if(holiday) return {start:'07:00', end:'17:00', role:'주방,차배달', type:'fixed'};
-    return {start:'06:00', end:'13:00', role:'주방,차배달', type:'fixed'};
+    return {start:'03:00', end:'11:00', role:'주방,차배달', type:'fixed'};
   }
   if(empName === '전묘정') {
     if(holiday) return {start:'07:00', end:'17:00', role:'주방', type:'fixed'};
-    return {start:'06:00', end:'13:00', role:'주방', type:'fixed'};
+    return {start:'03:00', end:'11:00', role:'주방', type:'fixed'};
   }
   if(empName === '권연옥') {
     if(dow === 1) return {start:'17:30', end:'03:00', role:'주방', type:'fixed'}; // 월
@@ -1901,7 +1901,7 @@ async function loadData(){
 
     // 첫 실행 시 전 데이터 삭제 후 고정값 초기화
     const initVer = localStorage.getItem('ws_init_ver');
-    if(initVer !== 'v8'){
+    if(initVer !== 'v9'){
       // 기존 스케줄 + 휴무 + 구버전 고정스케줄 캐시 전부 클리어
       localStorage.removeItem('ws_fixed_schedules');
       localStorage.removeItem('ws_dayoffs');
@@ -1916,7 +1916,7 @@ async function loadData(){
       daySchedule = {};
       generateAutoDayoffs();
       autoApplyFixed(dk);
-      localStorage.setItem('ws_init_ver', 'v8');
+      localStorage.setItem('ws_init_ver', 'v9');
     }
   } catch(e) { console.error('loadData init error:', e); }
 
