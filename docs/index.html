@@ -1084,11 +1084,11 @@ const FB_SCHEDULES = FB_WS + '/schedules';
 const FB_SETTINGS = FB_WS + '/settings';
 
 // ============================================================
-// Timeline hours: 06~03(+1) = 22 columns
+// Timeline hours: 12~12(+1) = 25 columns
 // ============================================================
-const TL_HOURS = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3];
-const TL_START_HOUR = 6; // 06:00
-const TL_TOTAL_HOURS = 22; // 06:00 ~ 03:00(+1) = 21h span, but 22 columns (inclusive)
+const TL_HOURS = [12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7,8,9,10,11,12];
+const TL_START_HOUR = 12; // 12:00
+const TL_TOTAL_HOURS = 25; // 12:00 ~ 12:00(+1) = 24h span, 25 columns (inclusive)
 
 // ============================================================
 // Default employees
@@ -1429,11 +1429,11 @@ function getRoleLimits(hour){
 // 충돌 감지: 시간대별 역할 인원 초과/부족 체크
 function detectConflicts(empKeys, dk){
   const conflicts = {}; // empId → [{hour, role, type, msg}]
-  const checkHours = [10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2];
+  const checkHours = [12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7,8,9,10,11];
 
   for(const h of checkHours){
     const hStr = pad(h)+':00';
-    const hMin = timeToMinutesFrom6(hStr);
+    const hMin = timeToMinutesFrom12(hStr);
     const roleEmps = {'주방':[],'차배달':[],'오토바이':[]};
 
     const roleWeights = {'주방':0,'차배달':0,'오토바이':0};
@@ -1441,8 +1441,8 @@ function detectConflicts(empKeys, dk){
       if(isDayOff(empId, dk)) return;
       const shift = daySchedule[empId];
       if(!shift || !shift.start || !shift.end) return;
-      const sMin = timeToMinutesFrom6(shift.start);
-      let eMin = timeToMinutesFrom6(shift.end);
+      const sMin = timeToMinutesFrom12(shift.start);
+      let eMin = timeToMinutesFrom12(shift.end);
       if(eMin <= sMin) eMin += 24*60;
       if(hMin >= sMin && hMin < eMin){
         const roles = shift.role ? shift.role.split(',').filter(Boolean) : [];
@@ -1622,28 +1622,28 @@ function getMonday(d){
   return dt;
 }
 
-// Convert time string "HH:MM" to minutes from 06:00
-// Hours 00-05 are treated as next day (24-29)
-function timeToMinutesFrom6(timeStr){
+// Convert time string "HH:MM" to minutes from 12:00(noon)
+// Hours 00-11 are treated as next day (24-35)
+function timeToMinutesFrom12(timeStr){
   const [h,m] = timeStr.split(':').map(Number);
   let hour = h;
-  if(hour < 6) hour += 24; // next day: 00->24, 01->25, ..., 05->29
-  return (hour - 6) * 60 + m;
+  if(hour < 12) hour += 24; // next day: 00->24, 01->25, ..., 11->35
+  return (hour - 12) * 60 + m;
 }
 
 // Calculate hours between start and end
 function calcHours(start, end){
-  let sm = timeToMinutesFrom6(start);
-  let em = timeToMinutesFrom6(end);
+  let sm = timeToMinutesFrom12(start);
+  let em = timeToMinutesFrom12(end);
   if(em <= sm) em += 24*60;
   return Math.round((em - sm)/60*10)/10;
 }
 
 // Get the percentage position of a time in the timeline (0-100%)
-// Timeline spans 06:00 to 03:00(+1) = 21 hours = 1260 minutes
-const TL_TOTAL_MINUTES = 21 * 60; // 1260 minutes
+// Timeline spans 12:00 to 12:00(+1) = 24 hours = 1440 minutes
+const TL_TOTAL_MINUTES = 24 * 60; // 1440 minutes
 function timeToPercent(timeStr){
-  const mins = timeToMinutesFrom6(timeStr);
+  const mins = timeToMinutesFrom12(timeStr);
   return Math.max(0, Math.min(100, (mins / TL_TOTAL_MINUTES) * 100));
 }
 
@@ -2318,7 +2318,7 @@ function renderTimeline(){
   // Time column with weather
   const timeCol = document.createElement('div');
   timeCol.className = 'vt-time-col';
-  const SHOW_HOURS = new Set([6,9,12,15,18,21,0,3]);
+  const SHOW_HOURS = new Set([12,15,18,21,0,3,6,9]);
   TL_HOURS.forEach((h, idx) => {
     const pct = (idx / TL_HOURS.length) * 100;
     const tick = document.createElement('div');
@@ -2463,7 +2463,7 @@ function renderTimeline(){
   const staffDiv = document.createElement('div');
   staffDiv.style.cssText = 'padding:6px 8px;background:#1A1A30;border-top:1px solid #2E2E52;';
 
-  const checkHours = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3];
+  const checkHours = [12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7,8,9,10,11];
   const totalSlots = checkHours.length;
 
   let html = '<div style="font-size:.7rem;color:#FFD700;font-weight:600;margin-bottom:6px;">역할별 커버리지</div>';
@@ -2560,12 +2560,12 @@ function renderTimeline(){
 // Staffing calculation (편입 로직 포함)
 function calcStaffing(empKeys, dk){
   const result = {};
-  const checkHours = [6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3];
+  const checkHours = [12,13,14,15,16,17,18,19,20,21,22,23,0,1,2,3,4,5,6,7,8,9,10,11];
   const preset = getActivePreset();
 
   for(const h of checkHours){
     const hStr = pad(h)+':00';
-    const hMin = timeToMinutesFrom6(hStr);
+    const hMin = timeToMinutesFrom12(hStr);
     let kitchen = 0, carDel = 0, bikeDel = 0, total = 0;
     let hasBikeWorker = false; // 오토바이 출근자 존재 여부
 
@@ -2575,8 +2575,8 @@ function calcStaffing(empKeys, dk){
       if(isDayOff(empId, dk)) return;
       const shift = daySchedule[empId];
       if(!shift || !shift.start || !shift.end) return;
-      const sMin = timeToMinutesFrom6(shift.start);
-      let eMin = timeToMinutesFrom6(shift.end);
+      const sMin = timeToMinutesFrom12(shift.start);
+      let eMin = timeToMinutesFrom12(shift.end);
       if(eMin <= sMin) eMin += 24*60;
       if(hMin >= sMin && hMin < eMin){
         total++;
@@ -2609,8 +2609,8 @@ function calcStaffing(empKeys, dk){
 
     const delivery = carFinal + bikeFinal;
     // 배달대행 = 바이크만 (차 안 탐), 10~01시 영업
-    const DA_START = timeToMinutesFrom6(pad(preset.daStart||10)+':00');
-    const DA_END = timeToMinutesFrom6(pad(preset.daEnd||1)+':00');
+    const DA_START = timeToMinutesFrom12(pad(preset.daStart||10)+':00');
+    const DA_END = timeToMinutesFrom12(pad(preset.daEnd||1)+':00');
     const daAvail = hMin >= DA_START && hMin < DA_END;
     const bikeNeed = Math.max(0, limits['오토바이'].max - bikeFinal);
     const daFill = daAvail ? bikeNeed : 0; // 대행 = 바이크 부족분만
@@ -2642,7 +2642,7 @@ let dragState = null;
 function yToTime(y, totalH){
   const pct = Math.max(0, Math.min(1, y / totalH));
   const totalMin = pct * TL_TOTAL_MINUTES;
-  let h = Math.floor(totalMin / 60) + 6;
+  let h = Math.floor(totalMin / 60) + 12;
   if(h >= 24) h -= 24;
   let m = Math.round((totalMin % 60) / 30) * 30;
   if(m >= 60){ m = 0; h = (h+1) >= 24 ? h+1-24 : h+1; }
@@ -2778,9 +2778,9 @@ async function loadHourlyWeather(){
 
 function isHourInShift(hour, start, end){
   // Check if 'hour' (e.g., 10) falls within [start, end)
-  const hourMin = timeToMinutesFrom6(pad(hour)+':00');
-  const startMin = timeToMinutesFrom6(start);
-  let endMin = timeToMinutesFrom6(end);
+  const hourMin = timeToMinutesFrom12(pad(hour)+':00');
+  const startMin = timeToMinutesFrom12(start);
+  let endMin = timeToMinutesFrom12(end);
   if(endMin <= startMin) endMin += 24*60;
   return hourMin >= startMin && hourMin < endMin;
 }
@@ -2974,23 +2974,23 @@ function buildTimeSelects(){
   $start.innerHTML = '';
   $end.innerHTML = '';
 
-  // 06:00 ~ 02:30 (30min) for start
-  for(let h=6; h<=26; h++){
+  // 12:00 ~ 11:30(+1) (30min) for start
+  for(let h=12; h<=35; h++){
     const rh = h>=24?h-24:h;
     for(let m=0; m<60; m+=30){
-      if(h===26 && m>30) break;
+      if(h===35 && m>30) break;
       const t = pad(rh)+':'+pad(m);
       const opt = document.createElement('option');
       opt.value = t; opt.textContent = t;
       $start.appendChild(opt);
     }
   }
-  // 06:30 ~ 03:00 for end
-  for(let h=6; h<=27; h++){
+  // 12:30 ~ 12:00(+1) for end
+  for(let h=12; h<=36; h++){
     const rh = h>=24?h-24:h;
     for(let m=0; m<60; m+=30){
-      if(h===6&&m===0) continue;
-      if(h===27&&m>0) break;
+      if(h===12&&m===0) continue;
+      if(h===36&&m>0) break;
       const t = pad(rh)+':'+pad(m);
       const opt = document.createElement('option');
       opt.value = t; opt.textContent = t;
@@ -3045,7 +3045,7 @@ function setupShiftGauge(){
     const rect = gauge.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (x-rect.left)/rect.width));
     const totalMin = pct * TL_TOTAL_MINUTES;
-    let h = Math.floor(totalMin/60)+6;
+    let h = Math.floor(totalMin/60)+12;
     if(h>=24) h-=24;
     let m = Math.round((totalMin%60)/30)*30;
     if(m>=60){m=0;h=(h+1)>=24?h+1-24:h+1;}
@@ -3056,9 +3056,9 @@ function setupShiftGauge(){
     // decide if adjusting start or end
     if(!shiftSelectedStart) dragging='start';
     else{
-      const tMin = timeToMinutesFrom6(t);
-      const sMin = shiftSelectedStart ? timeToMinutesFrom6(shiftSelectedStart) : 0;
-      const eMin = shiftSelectedEnd ? timeToMinutesFrom6(shiftSelectedEnd) : TL_TOTAL_MINUTES;
+      const tMin = timeToMinutesFrom12(t);
+      const sMin = shiftSelectedStart ? timeToMinutesFrom12(shiftSelectedStart) : 0;
+      const eMin = shiftSelectedEnd ? timeToMinutesFrom12(shiftSelectedEnd) : TL_TOTAL_MINUTES;
       dragging = Math.abs(tMin-sMin) < Math.abs(tMin-eMin) ? 'start' : 'end';
     }
     const tv = xToTime(e.touches[0].clientX);
@@ -4389,7 +4389,7 @@ function renderListView(){
       empty.push({id, emp});
     }
   });
-  working.sort((a,b) => timeToMinutesFrom6(a.shift.start) - timeToMinutesFrom6(b.shift.start));
+  working.sort((a,b) => timeToMinutesFrom12(a.shift.start) - timeToMinutesFrom12(b.shift.start));
 
   // 전원확정 시 리스트 보드 통으로 초록 테두리
   const allCf = working.length > 0 && unconfirmedCount === 0;
@@ -4432,9 +4432,9 @@ function renderListView(){
   html += '</div></div>';
 
   // === 근무자 리스트 (게이지 + 출퇴근 텍스트 + 상태 버튼) ===
-  const GAUGE_START = 6; // 06:00
-  const GAUGE_END = 27; // 03:00 (27h 기준)
-  const GAUGE_RANGE = GAUGE_END - GAUGE_START; // 21시간
+  const GAUGE_START = 12; // 12:00
+  const GAUGE_END = 36; // 12:00 다음날 (36h 기준)
+  const GAUGE_RANGE = GAUGE_END - GAUGE_START; // 24시간
 
   working.forEach(w => {
     const hasConflict = !!detectConflicts(empKeys, dk)[w.id];
@@ -4444,8 +4444,8 @@ function renderListView(){
     // 게이지 위치 계산
     let sH = parseInt(w.shift.start.split(':')[0]), sM = parseInt(w.shift.start.split(':')[1]||0);
     let eH = parseInt(w.shift.end.split(':')[0]), eM = parseInt(w.shift.end.split(':')[1]||0);
-    if(sH < 6) sH += 24;
-    if(eH < 6) eH += 24;
+    if(sH < 12) sH += 24;
+    if(eH < 12) eH += 24;
     const startPct = Math.max(0, ((sH + sM/60) - GAUGE_START) / GAUGE_RANGE * 100);
     const endPct = Math.min(100, ((eH + eM/60) - GAUGE_START) / GAUGE_RANGE * 100);
     const widthPct = Math.max(1, endPct - startPct);
@@ -4653,13 +4653,13 @@ function renderTimebarView(){
       empty.push({id, emp});
     }
   });
-  working.sort((a,b) => timeToMinutesFrom6(a.shift.start) - timeToMinutesFrom6(b.shift.start));
+  working.sort((a,b) => timeToMinutesFrom12(a.shift.start) - timeToMinutesFrom12(b.shift.start));
 
-  // 시간축: 06~03 (22시간)
-  const barStart = 6, barHours = 22;
+  // 시간축: 12~12(+1) (24시간)
+  const barStart = 12, barHours = 24;
   function timeToPct(timeStr){
     let [h,m] = timeStr.split(':').map(Number);
-    if(h < barStart) h += 24;
+    if(h < 12) h += 24;
     return Math.max(0, Math.min(100, ((h - barStart) + m/60) / barHours * 100));
   }
 
@@ -4691,9 +4691,9 @@ function renderTimebarView(){
   html += '<div style="display:flex;align-items:center;margin-bottom:2px;">';
   html += '<div style="min-width:58px;"></div>';
   html += '<div style="flex:1;position:relative;height:16px;display:flex;">';
-  for(let h=6;h<=27;h+=2){
+  for(let h=12;h<=36;h+=3){
     const rh = h>=24?h-24:h;
-    const pct = (h-6)/barHours*100;
+    const pct = (h-12)/barHours*100;
     html += '<span style="position:absolute;left:'+pct+'%;font-size:.55rem;color:#707088;transform:translateX(-50%);">'+rh+'</span>';
   }
   html += '</div><div style="min-width:36px;"></div></div>';
@@ -5828,7 +5828,7 @@ function buildScheduleContext(targetDates){
   ctx += '- 영업시간: 10:00~03:00 (새벽)\n';
   ctx += '- 최소 인원: 10:00~16:00 2명, 16:00~03:00 3명\n';
   ctx += '- 배달 역할 필요 (16:30 이후 물류)\n';
-  ctx += '- 근무시간: 06:00~03:00 범위, 30분 단위\n';
+  ctx += '- 근무시간: 12:00~12:00(+1) 범위, 30분 단위\n';
   ctx += '- 시간 형식: HH:MM (24시간)\n';
   ctx += '- 직원별 선호시간/불가시간이 있으면 가능한 반영 (강제는 아님, 참고용)\n';
   if(weatherCache.data) ctx += '\n## 날씨: '+weatherCache.data+'\n';
