@@ -1056,6 +1056,46 @@ const KR_HOLIDAYS = new Set([
   '2027-12-25', // 성탄절
 ]);
 
+const KR_HOLIDAY_NAMES = {
+  '2026-01-01': '신정',
+  '2026-01-28': '설날연휴',
+  '2026-01-29': '설날',
+  '2026-01-30': '설날연휴',
+  '2026-03-01': '삼일절',
+  '2026-05-05': '어린이날',
+  '2026-05-06': '대체공휴일',
+  '2026-05-24': '석가탄신일',
+  '2026-06-06': '현충일',
+  '2026-08-15': '광복절',
+  '2026-09-24': '추석연휴',
+  '2026-09-25': '추석',
+  '2026-09-26': '추석연휴',
+  '2026-10-03': '개천절',
+  '2026-10-09': '한글날',
+  '2026-12-25': '성탄절',
+  '2027-01-01': '신정',
+  '2027-02-07': '설날연휴',
+  '2027-02-08': '설날',
+  '2027-02-09': '설날연휴',
+  '2027-03-01': '삼일절',
+  '2027-05-05': '어린이날',
+  '2027-05-13': '석가탄신일',
+  '2027-06-06': '현충일',
+  '2027-08-15': '광복절',
+  '2027-08-16': '대체공휴일',
+  '2027-10-03': '개천절',
+  '2027-10-04': '추석연휴',
+  '2027-10-05': '추석',
+  '2027-10-06': '추석연휴',
+  '2027-10-09': '한글날',
+  '2027-12-25': '성탄절',
+};
+
+function getHolidayName(dateObj){
+  const dk = (typeof dateObj === 'string') ? dateObj : dateKey(dateObj);
+  return KR_HOLIDAY_NAMES[dk] || null;
+}
+
 function isKrHoliday(dateObj) {
   if(typeof dateObj === 'string') return KR_HOLIDAYS.has(dateObj);
   return KR_HOLIDAYS.has(dateKey(dateObj));
@@ -1193,26 +1233,38 @@ function makeHourlyPreset(label, rules){
 }
 const STAFF_PRESETS = {
   '250': makeHourlyPreset('~250만', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:1}, bike:{min:0,max:1}, car:{min:0,max:1}},
-    {hours:[17,18,19,20,21], kitchen:{min:2,max:2.5}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[6,7,8,9,10,11,12], kitchen:{min:1,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[13,14,15,16], kitchen:{min:0,max:1}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[17], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[18,19], kitchen:{min:2,max:2.5}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21], kitchen:{min:2,max:2.5}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[22,23,0], kitchen:{min:2,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[1,2,3], kitchen:{min:2,max:2}, bike:{min:0,max:1}, car:{min:0,max:1}},
   ]),
   '300': makeHourlyPreset('~300만', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:1.5}, bike:{min:0,max:1.5}, car:{min:0,max:1}},
-    {hours:[17,18,19,20,21], kitchen:{min:2.5,max:3.5}, bike:{min:0,max:2}, car:{min:0,max:1}},
+    {hours:[6,7,8,9,10,11,12], kitchen:{min:1,max:2}, bike:{min:0,max:1.5}, car:{min:0,max:1}},
+    {hours:[13,14,15,16], kitchen:{min:0,max:1}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[17], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[18,19], kitchen:{min:2.5,max:3.5}, bike:{min:0,max:2}, car:{min:0,max:1}},
+    {hours:[20,21], kitchen:{min:2.5,max:3.5}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[22,23,0], kitchen:{min:2.5,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[1,2,3], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
   ]),
   '350': makeHourlyPreset('~350만', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:2}, bike:{min:0,max:2}, car:{min:0,max:1}},
-    {hours:[17,18,19,20,21], kitchen:{min:3,max:4}, bike:{min:0,max:2.5}, car:{min:0,max:1}},
+    {hours:[6,7,8,9,10,11,12], kitchen:{min:1,max:2}, bike:{min:0,max:2}, car:{min:0,max:1}},
+    {hours:[13,14,15,16], kitchen:{min:0,max:1}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[17], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[18,19], kitchen:{min:3,max:4}, bike:{min:0,max:2.5}, car:{min:0,max:1}},
+    {hours:[20,21], kitchen:{min:3,max:4}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[22,23,0], kitchen:{min:3,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[1,2,3], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
   ]),
   '맥스': makeHourlyPreset('350만~', [
-    {hours:[6,7,8,9,10,11,12,13,14,15,16], kitchen:{min:1,max:2}, bike:{min:0,max:2}, car:{min:0,max:1}},
-    {hours:[17,18,19,20,21], kitchen:{min:3,max:4.5}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[6,7,8,9,10,11,12], kitchen:{min:1,max:2}, bike:{min:0,max:2}, car:{min:0,max:1}},
+    {hours:[13,14,15,16], kitchen:{min:0,max:1}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[17], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[18,19], kitchen:{min:3,max:4.5}, bike:{min:0,max:1}, car:{min:0,max:1}},
+    {hours:[20,21], kitchen:{min:3,max:4.5}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[22,23,0], kitchen:{min:3,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
     {hours:[1,2,3], kitchen:{min:2,max:3}, bike:{min:0,max:1}, car:{min:0,max:1}},
   ]),
@@ -1254,9 +1306,9 @@ let staffSettings = JSON.parse(localStorage.getItem('ws_staff_settings') || 'nul
     }
   }
   // v2: 소수점 프리셋 적용 → 기존 정수 오버라이드 초기화
-  if(staffSettings.ver !== 5){
+  if(staffSettings.ver !== 6){
     staffSettings.presetOverrides = {};
-    staffSettings.ver = 5;
+    staffSettings.ver = 6;
     changed = true;
   }
   if(changed){
@@ -2031,7 +2083,10 @@ function renderBriefing(){
 
   // ===== 상태 한줄 요약 =====
   html += '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:.65rem;margin-bottom:4px;">';
-  if(isKrHoliday(currentDate)) html += '<span style="color:#E74C3C;font-weight:700;border:1px solid #E74C3C;border-radius:3px;padding:0 3px;">공휴일</span>';
+  if(isKrHoliday(currentDate)){
+    const hName = getHolidayName(currentDate) || '공휴일';
+    html += '<span style="color:#E74C3C;font-weight:700;border:1px solid #E74C3C;border-radius:3px;padding:0 3px;">'+hName+'</span>';
+  }
   html += '<span style="color:#2ECC71;">고정'+fixedCount+'</span>';
   if(variableCount > 0) html += '<span style="color:#E67E22;">수동'+variableCount+'</span>';
   if(emptyCount > 0) html += '<span style="color:#E74C3C;font-weight:700;">미입력'+emptyCount+'</span>';
@@ -2679,6 +2734,8 @@ function renderDateStrip(){
       html += '<div class="ds-dow">'+DOW_SHORT[dow]+'</div>';
     }
     html += '<div class="ds-date'+dowCls+'">'+d.getDate()+'</div>';
+    const _hName = getHolidayName(d);
+    if(_hName) html += '<div style="font-size:.35rem;color:#E74C3C;font-weight:700;line-height:1;white-space:nowrap;overflow:hidden;max-width:36px;text-overflow:ellipsis;">'+_hName+'</div>';
     if(statusLabel) html += '<div style="font-size:.4rem;color:'+borderColor+';font-weight:700;line-height:1;">'+statusLabel+'</div>';
     html += '</div>';
   }
@@ -3363,9 +3420,9 @@ $('shiftDayoff').addEventListener('click', ()=>{
     if(daySchedule[shiftSelectedEmpId] && daySchedule[shiftSelectedEmpId].dayoff){
       delete daySchedule[shiftSelectedEmpId];
     }
-    // 고정스케줄 재적용
+    // 고정스케줄 재적용 (날짜별 동적 스케줄)
     const empName = employees[shiftSelectedEmpId]?.name || '';
-    const fix = FIXED_SCHEDULES[empName];
+    const fix = getFixedScheduleForDate(empName, currentDate);
     if(fix && fix.type==='fixed' && fix.start){
       daySchedule[shiftSelectedEmpId] = {start:fix.start, end:fix.end, role:fix.role};
       fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId, daySchedule[shiftSelectedEmpId]);
@@ -4132,7 +4189,9 @@ function renderCalendarView(){
       continue;
     }
     html+='<div class="cal-cell'+(isToday?' today':'')+'" data-date="'+cdk+'">';
+    const _calHName = getHolidayName(cellDate);
     html+='<div class="cal-date" style="font-size:.7rem;font-weight:700;'+((cellDate.getDay()===0||isKrHoliday(cellDate))?'color:#E74C3C;':cellDate.getDay()===6?'color:#45B7D1;':'color:#E0E0EC;')+'">'+d+'<span style="font-size:.55rem;color:#707088;margin-left:2px;">'+DOW_KR[cellDate.getDay()]+'</span></div>';
+    if(_calHName) html+='<div style="font-size:.4rem;color:#E74C3C;font-weight:600;line-height:1;margin-top:1px;">'+_calHName+'</div>';
 
     // 근무자 요약 (색상 도트 + 이름)
     html+='<div class="cal-emp">';
@@ -4177,13 +4236,21 @@ function renderListView(){
   const dow = DOW_KR[currentDate.getDay()];
   const confirmed = isConfirmed(dk);
 
-  // 주간 휴무 누적일 계산
+  // 주간 휴무 누적일 계산 + 주간 총 근무시간 계산
   const weekOffCount = {};
+  const weekTotalHoursMap = {};
   const mon = getMonday(currentDate);
   for(let i=0;i<7;i++){
     const wd = new Date(mon); wd.setDate(wd.getDate()+i);
     const wdk = dateKey(wd);
-    empKeys.forEach(id => { if(isDayOff(id,wdk)) weekOffCount[id] = (weekOffCount[id]||0)+1; });
+    const wSched = wdk===dk ? daySchedule : (weekSchedules[wdk] || lsLoadSchedule(wdk) || {});
+    empKeys.forEach(id => {
+      if(isDayOff(id,wdk)) weekOffCount[id] = (weekOffCount[id]||0)+1;
+      const ws = wSched[id];
+      if(ws && ws.start && ws.end){
+        weekTotalHoursMap[id] = (weekTotalHoursMap[id]||0) + calcHours(ws.start, ws.end);
+      }
+    });
   }
 
   // 분류
@@ -4281,9 +4348,12 @@ function renderListView(){
     const timeLabel = w.shift.start.replace(/^0/,'')+'-'+w.shift.end.replace(/^0/,'');
 
     html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;padding:4px 6px;background:'+stBg+';border-left:3px solid '+borderC+';border-radius:6px;cursor:pointer;" data-empid="'+w.id+'">';
-    // 이름 + 주간휴무
+    // 이름 + 주간휴무 + 주간근무시간
     const wOff = weekOffCount[w.id]||0;
-    html += '<span style="font-size:.8rem;font-weight:800;color:#FFF;min-width:38px;">'+w.emp.name+(wOff?'<span style="font-size:.55rem;color:'+C_OFF+';font-weight:600;">('+wOff+')</span>':'')+'</span>';
+    const wHrs = weekTotalHoursMap[w.id]||0;
+    const wHrsColor = wHrs > 40 ? '#E74C3C' : '#9090A8';
+    const wHrsLabel = wHrs > 0 ? '<span style="font-size:.5rem;color:'+wHrsColor+';font-weight:600;">[주'+Math.round(wHrs)+'h]</span>' : '';
+    html += '<span style="font-size:.8rem;font-weight:800;color:#FFF;min-width:38px;">'+w.emp.name+(wOff?'<span style="font-size:.55rem;color:'+C_OFF+';font-weight:600;">('+wOff+')</span>':'')+wHrsLabel+'</span>';
     // 역할 (색상텍스트, 있을때만)
     if(roles.length) html += '<span style="font-size:.55rem;">'+roles.map(r=>'<span style="color:'+(ROLE_COLORS[r]||C_DEF)+';font-weight:700;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ')+'</span>';
     // 게이지 (시간 내장)
@@ -4330,7 +4400,10 @@ function renderListView(){
     offList.forEach(o => {
       html += '<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;margin-bottom:2px;background:#E74C3C08;border-radius:6px;border-left:3px solid #E74C3C;cursor:pointer;" data-empid="'+o.id+'">';
       const oOff = weekOffCount[o.id]||0;
-      html += '<span style="font-size:.8rem;font-weight:800;color:#E74C3C;">'+o.emp.name+(oOff?'<span style="font-size:.55rem;color:'+C_OFF+';font-weight:600;">('+oOff+')</span>':'')+'</span>';
+      const oHrs = weekTotalHoursMap[o.id]||0;
+      const oHrsColor = oHrs > 40 ? '#E74C3C' : '#9090A8';
+      const oHrsLabel = oHrs > 0 ? '<span style="font-size:.5rem;color:'+oHrsColor+';font-weight:600;">[주'+Math.round(oHrs)+'h]</span>' : '';
+      html += '<span style="font-size:.8rem;font-weight:800;color:#E74C3C;">'+o.emp.name+(oOff?'<span style="font-size:.55rem;color:'+C_OFF+';font-weight:600;">('+oOff+')</span>':'')+oHrsLabel+'</span>';
       html += '<span style="font-size:.65rem;color:#E74C3C;">휴무</span>';
       html += '<span onclick="event.stopPropagation();toggleDayOffFromList(\''+o.id+'\')" style="margin-left:auto;font-size:.55rem;padding:2px 6px;border-radius:3px;background:#333;color:#9090A8;cursor:pointer;font-weight:700;">해제</span>';
       html += '</div>';
@@ -4359,7 +4432,7 @@ function toggleDayOffFromList(empId){
     dayoffs[empId][dk] = false;
     if(daySchedule[empId] && daySchedule[empId].dayoff) delete daySchedule[empId];
     const empName = employees[empId]?.name || '';
-    const fix = FIXED_SCHEDULES[empName];
+    const fix = getFixedScheduleForDate(empName, currentDate);
     if(fix && fix.type==='fixed' && fix.start){
       daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role};
       fbPut(FB_SCHEDULES+'/'+dk+'/'+empId, daySchedule[empId]);
