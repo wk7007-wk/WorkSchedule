@@ -1889,7 +1889,7 @@ async function loadData(){
 
     // 첫 실행 시 전 데이터 삭제 후 고정값 초기화
     const initVer = localStorage.getItem('ws_init_ver');
-    if(initVer !== 'v5'){
+    if(initVer !== 'v6'){
       // 기존 스케줄 + 구버전 고정스케줄 캐시 클리어
       localStorage.removeItem('ws_fixed_schedules');
       for(let i=0; i<localStorage.length; i++){
@@ -1901,7 +1901,7 @@ async function loadData(){
       }
       daySchedule = {};
       autoApplyFixed(dk);
-      localStorage.setItem('ws_init_ver', 'v5');
+      localStorage.setItem('ws_init_ver', 'v6');
     }
   } catch(e) { console.error('loadData init error:', e); }
 
