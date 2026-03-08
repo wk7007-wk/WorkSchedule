@@ -1530,6 +1530,8 @@ function setShiftStatus(dk, empId, st){
   const key = dk+'_'+empId;
   if(st==='auto') delete shiftStatus[key]; else shiftStatus[key]=st;
   lsSaveShiftStatus();
+  // Firebase 동기화
+  fbPut(FB_WS+'/shift_status/'+dk+'/'+empId, st==='auto' ? null : st);
   // 확정 시 패턴 기록 (AI 학습)
   if(st==='confirmed'){
     const shift = daySchedule[empId];
@@ -1855,9 +1857,10 @@ async function loadData(){
 
   // 2) Firebase 백그라운드 동기화
   try {
-    const [empData, schedData] = await Promise.all([
+    const [empData, schedData, fbShiftStatus] = await Promise.all([
       fbGet(FB_EMPLOYEES),
-      fbGet(FB_SCHEDULES+'/'+dk)
+      fbGet(FB_SCHEDULES+'/'+dk),
+      fbGet(FB_WS+'/shift_status/'+dk)
     ]);
 
     if(empData && Object.keys(empData).length > 0){
@@ -1874,6 +1877,15 @@ async function loadData(){
       const merged = Object.assign({}, schedData, localSched || {});
       daySchedule = merged;
       lsSaveSchedule(dk, merged);
+    }
+    // Firebase shift_status 병합 (Firebase 우선 — 다른 기기에서 확정한 것 반영)
+    if(fbShiftStatus){
+      Object.keys(fbShiftStatus).forEach(empId => {
+        const st = fbShiftStatus[empId];
+        if(st) shiftStatus[dk+'_'+empId] = st;
+        else delete shiftStatus[dk+'_'+empId];
+      });
+      lsSaveShiftStatus();
     }
   } catch(err){
     console.error('loadData Firebase sync error:', err);
@@ -2022,13 +2034,25 @@ async function onDateChange(){
   renderCurrentTab();
   // Firebase 동기화
   try{
-    const schedData = await fbGet(FB_SCHEDULES+'/'+dk);
+    const [schedData, fbShiftSt] = await Promise.all([
+      fbGet(FB_SCHEDULES+'/'+dk),
+      fbGet(FB_WS+'/shift_status/'+dk)
+    ]);
     if(schedData){
       const merged = Object.assign({}, schedData, localSched || {});
       daySchedule = merged;
       lsSaveSchedule(dk, merged);
-      renderCurrentTab();
     }
+    // shift_status Firebase 병합
+    if(fbShiftSt){
+      Object.keys(fbShiftSt).forEach(empId => {
+        const st = fbShiftSt[empId];
+        if(st) shiftStatus[dk+'_'+empId] = st;
+        else delete shiftStatus[dk+'_'+empId];
+      });
+      lsSaveShiftStatus();
+    }
+    renderCurrentTab();
   }catch(e){}
   loadWeekSchedules();
   updateConfirmBtn();
@@ -4549,13 +4573,17 @@ function toggleDayOffFromList(empId){
 // 전체 확정
 function confirmAllShifts(){
   const dk = dateKey(currentDate);
+  const fbBatch = {};
   Object.keys(employees).forEach(id => {
     if(daySchedule[id] && daySchedule[id].start && !isDayOff(id, dk)){
       shiftStatus[dk+'_'+id] = 'confirmed';
       recordPattern(id, dk, daySchedule[id]);
+      fbBatch[id] = 'confirmed';
     }
   });
   lsSaveShiftStatus();
+  // Firebase 일괄 동기화
+  fbPut(FB_WS+'/shift_status/'+dk, fbBatch);
   renderAll();
 }
 // 전체 보정(리셋)
@@ -4565,6 +4593,8 @@ function resetAllShifts(){
     delete shiftStatus[dk+'_'+id];
   });
   lsSaveShiftStatus();
+  // Firebase 리셋
+  fbPut(FB_WS+'/shift_status/'+dk, null);
   renderAll();
 }
 // AI 패턴 추천 적용
