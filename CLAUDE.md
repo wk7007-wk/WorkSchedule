@@ -317,7 +317,9 @@
 4. Git 커밋 + 푸시
 5. GitHub Release: `gh release create "v${VER}" ... --repo wk7007-wk/WorkSchedule`
 
+## 완료
+- 월급 계산 + BankTotal 연동 (calcMonthlyPay, 야간수당 1.5배, 주휴수당, /banktotal/payroll/)
+- 자동 스케줄링 고도화 (preferredHours/unavailableHours 필드, AI 프롬프트 반영)
+
 ## 미완료
-- 월급 계산 + BankTotal 연동
 - 카카오톡 이미지 공유 (NativeBridge 필요)
-- 자동 스케줄링 고도화 (선호시간/불가시간 반영)
