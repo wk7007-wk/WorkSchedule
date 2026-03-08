@@ -333,6 +333,56 @@ body{
 .info-value{color:#E0E0EC;flex:1;}
 .info-placeholder{color:#707088;font-style:italic;font-size:.8rem;}
 
+/* ===== Pay Section ===== */
+.pay-section{
+  margin:4px 2px;
+  border:1px solid #2E2E52;
+  border-radius:8px;
+  overflow:hidden;
+  background:#242444;
+}
+.pay-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 14px;
+  background:#1e1e3a;
+  border-bottom:1px solid #2E2E52;
+  cursor:pointer;user-select:none;
+  min-height:44px;
+}
+.pay-header h3{font-size:.9rem;color:#2ECC71;font-weight:600;}
+.pay-header .arrow{color:#9090A8;transition:transform .2s;font-size:.8rem;}
+.pay-header .arrow.open{transform:rotate(180deg);}
+.pay-body{
+  max-height:0;overflow:hidden;
+  transition:max-height .3s ease;
+}
+.pay-body.open{max-height:2000px;}
+.pay-body-inner{padding:12px 14px;}
+.pay-month-sel{
+  display:flex;align-items:center;gap:8px;margin-bottom:10px;
+}
+.pay-month-sel select{
+  background:#1A1A30;color:#E0E0EC;border:1px solid #2E2E52;
+  border-radius:6px;padding:6px 10px;font-size:.85rem;
+}
+.pay-table{
+  width:100%;border-collapse:collapse;font-size:.8rem;
+}
+.pay-table th{
+  background:#1A1A30;color:#9090A8;padding:6px 4px;
+  border-bottom:1px solid #2E2E52;text-align:right;font-weight:600;
+}
+.pay-table th:first-child{text-align:left;}
+.pay-table td{
+  padding:6px 4px;border-bottom:1px solid #2E2E5244;
+  color:#E0E0EC;text-align:right;
+}
+.pay-table td:first-child{text-align:left;color:#FFD700;font-weight:600;}
+.pay-table tr.pay-total td{
+  border-top:2px solid #2ECC71;font-weight:700;color:#2ECC71;
+}
+.pay-table tr.pay-total td:first-child{color:#2ECC71;}
+
 /* ===== Share Section ===== */
 .share-section{
   margin:8px;
@@ -815,6 +865,24 @@ select.form-input{
   </div>
 </div>
 
+<!-- Pay Section -->
+<div class="pay-section">
+  <div class="pay-header" id="payToggle">
+    <h3>급여</h3>
+    <span class="arrow" id="payArrow">▼</span>
+  </div>
+  <div class="pay-body" id="payBody">
+    <div class="pay-body-inner">
+      <div class="pay-month-sel">
+        <select id="payMonthSelect"></select>
+        <button class="btn btn-sm" id="payCalcBtn" style="color:#2ECC71;border-color:#2ECC71;">계산</button>
+        <button class="btn btn-sm" id="payBankTotalBtn" style="color:#FFD700;border-color:#FFD700;">BankTotal 전송</button>
+      </div>
+      <div id="payTableWrap"></div>
+    </div>
+  </div>
+</div>
+
 <!-- Share Section -->
 <div class="share-section">
   <div class="share-header" id="shareToggle">
@@ -961,6 +1029,14 @@ select.form-input{
     <div class="form-group">
       <label>주간 최대 시간</label>
       <input class="form-input" id="empMaxHours" type="number" placeholder="40" min="0" max="168">
+    </div>
+    <div class="form-group">
+      <label>선호 근무시간 <span style="font-size:.7rem;color:#9090A8;">(예: 17:00~03:00)</span></label>
+      <input class="form-input" id="empPreferredHours" type="text" placeholder="HH:MM~HH:MM">
+    </div>
+    <div class="form-group">
+      <label>불가 시간대 <span style="font-size:.7rem;color:#9090A8;">(예: 06:00~12:00)</span></label>
+      <input class="form-input" id="empUnavailableHours" type="text" placeholder="HH:MM~HH:MM">
     </div>
     <div class="modal-footer">
       <button class="btn" id="empEditCancel">취소</button>
@@ -3568,11 +3644,14 @@ function renderEmpList(){
     item.className = 'emp-list-item';
     const roleText = emp.role || '미지정';
     const rateText = emp.hourlyRate ? emp.hourlyRate.toLocaleString()+'원' : '-';
+    let detailExtra = '';
+    if(emp.preferredHours) detailExtra += ' | 선호:'+emp.preferredHours;
+    if(emp.unavailableHours) detailExtra += ' | 불가:'+emp.unavailableHours;
     item.innerHTML =
       '<div class="emp-dot" style="background:'+(emp.color||'#9090A8')+'"></div>'+
       '<div class="emp-info">'+
         '<div class="name">'+emp.name+'</div>'+
-        '<div class="detail">'+(emp.phone||'전화없음')+' | '+roleText+' | '+rateText+'</div>'+
+        '<div class="detail">'+(emp.phone||'전화없음')+' | '+roleText+' | '+rateText+detailExtra+'</div>'+
       '</div>'+
       '<div class="emp-list-actions">'+
         '<button class="btn btn-sm" data-edit="'+id+'">수정</button>'+
@@ -3635,6 +3714,8 @@ function openEmpEdit(id){
     $('empRole').value = emp.role || '';
     $('empHourlyRate').value = emp.hourlyRate || 0;
     $('empMaxHours').value = emp.maxHours || 40;
+    $('empPreferredHours').value = emp.preferredHours || '';
+    $('empUnavailableHours').value = emp.unavailableHours || '';
     selectedColor = emp.color || PRESET_COLORS[0];
   } else {
     editingEmpId = null;
@@ -3644,6 +3725,8 @@ function openEmpEdit(id){
     $('empRole').value = '';
     $('empHourlyRate').value = 0;
     $('empMaxHours').value = 40;
+    $('empPreferredHours').value = '';
+    $('empUnavailableHours').value = '';
     selectedColor = PRESET_COLORS[0];
   }
   buildColorPicker();
@@ -3657,16 +3740,21 @@ $('empEditCancel').addEventListener('click', ()=> closeModal($empEditModal));
 $('empEditSave').addEventListener('click', async()=>{
   const name = $('empName').value.trim();
   if(!name){ showToast('이름을 입력해주세요'); return; }
+  let id = editingEmpId;
+  if(!id) id = 'emp' + Date.now();
+  // 기존 capabilities 보존
+  const prevData = employees[id] || {};
   const data = {
     name: name,
     phone: $('empPhone').value.trim(),
     color: selectedColor,
     role: $('empRole').value,
     hourlyRate: parseInt($('empHourlyRate').value) || 0,
-    maxHours: parseInt($('empMaxHours').value) || 40
+    maxHours: parseInt($('empMaxHours').value) || 40,
+    preferredHours: $('empPreferredHours').value.trim() || '',
+    unavailableHours: $('empUnavailableHours').value.trim() || '',
+    capabilities: prevData.capabilities || (DEFAULT_EMPLOYEES[id]?.capabilities) || ['주방']
   };
-  let id = editingEmpId;
-  if(!id) id = 'emp' + Date.now();
   closeModal($empEditModal);
   employees[id] = data;
   lsSaveEmployees(employees);
@@ -5036,6 +5124,7 @@ function setupCollapsible(toggleId, arrowId, bodyId, storageKey, defaultOpen){
 setupCollapsible('weekToggle','weekArrow','weekBody','ws_week_open', false);
 setupCollapsible('infoToggle','infoArrow','infoBody','ws_info_open', false);
 setupCollapsible('aiToggle','aiArrow','aiBody','ws_ai_open', false);
+setupCollapsible('payToggle','payArrow','payBody','ws_pay_open', false);
 setupCollapsible('shareToggle','shareArrow','shareBody','ws_share_open', false);
 
 // ============================================================
@@ -5677,7 +5766,11 @@ function buildScheduleContext(targetDates){
   let ctx = '## 직원 목록\n';
   empKeys.forEach(id => {
     const e = employees[id];
-    ctx += '- '+e.name+' (ID:'+id+', 역할:'+( e.role||'미지정')+', 주간최대:'+(e.maxHours||40)+'h)\n';
+    let info = '- '+e.name+' (ID:'+id+', 역할:'+(e.role||'미지정')+', 주간최대:'+(e.maxHours||40)+'h';
+    if(e.preferredHours) info += ', 선호시간:'+e.preferredHours;
+    if(e.unavailableHours) info += ', 불가시간:'+e.unavailableHours;
+    info += ')\n';
+    ctx += info;
   });
   ctx += '\n## 현재 스케줄\n';
   if(targetDates && targetDates.length > 0){
@@ -5699,6 +5792,7 @@ function buildScheduleContext(targetDates){
   ctx += '- 배달 역할 필요 (16:30 이후 물류)\n';
   ctx += '- 근무시간: 06:00~03:00 범위, 30분 단위\n';
   ctx += '- 시간 형식: HH:MM (24시간)\n';
+  ctx += '- 직원별 선호시간/불가시간이 있으면 가능한 반영 (강제는 아님, 참고용)\n';
   if(weatherCache.data) ctx += '\n## 날씨: '+weatherCache.data+'\n';
   if(sportsCache.data) ctx += '\n## 경기일정: '+sportsCache.data+'\n';
   return ctx;
@@ -5956,6 +6050,201 @@ $('calAllBtn').addEventListener('click', ()=>{
   generateICS(events, '근무표_'+m+'월'+d+'일.ics');
   showToast('전체 캘린더 다운로드');
 });
+
+// ============================================================
+// Monthly Pay Calculation
+// ============================================================
+function calcMonthlyPay(empId, year, month){
+  const emp = employees[empId];
+  if(!emp) return null;
+  const rate = emp.hourlyRate || 9860;
+  const daysInMonth = new Date(year, month, 0).getDate();
+  let totalHours = 0, normalHours = 0, nightHours = 0;
+  let weeklyHoursArr = []; // 주별 근무시간 (주휴수당 계산용)
+
+  // 주 시작일(월요일) 기준으로 주 구분
+  let currentWeekStart = null;
+  let currentWeekHours = 0;
+
+  for(let d = 1; d <= daysInMonth; d++){
+    const dk = year+'-'+pad(month)+'-'+pad(d);
+    const dateObj = new Date(year, month-1, d);
+    const dayOfWeek = dateObj.getDay(); // 0=일, 1=월
+
+    // 주 경계 처리 (월요일 시작)
+    if(dayOfWeek === 1 || currentWeekStart === null){
+      if(currentWeekStart !== null){
+        weeklyHoursArr.push(currentWeekHours);
+      }
+      currentWeekStart = dk;
+      currentWeekHours = 0;
+    }
+
+    // 휴무 체크
+    if(isDayOff(empId, dk)) continue;
+
+    const sched = lsLoadSchedule(dk);
+    if(!sched || !sched[empId] || !sched[empId].start) continue;
+    const s = sched[empId];
+
+    // 시간 파싱
+    const startParts = s.start.split(':').map(Number);
+    const endParts = s.end.split(':').map(Number);
+    let startMin = startParts[0]*60 + startParts[1];
+    let endMin = endParts[0]*60 + endParts[1];
+
+    // 야간근무 (03:00 등) = 다음날 처리
+    if(endMin <= startMin) endMin += 24*60;
+
+    const totalMin = endMin - startMin;
+    const dayHours = totalMin / 60;
+    totalHours += dayHours;
+    currentWeekHours += dayHours;
+
+    // 야간 구간 계산 (22:00~30:00=06:00 다음날)
+    // 야간 = 22:00~30:00 (= 22:00~06:00 다음날)
+    const nightStart = 22*60;
+    const nightEnd = 30*60; // 06:00 다음날
+
+    let nightMin = 0;
+    // 구간 겹침 계산
+    const overlapStart = Math.max(startMin, nightStart);
+    const overlapEnd = Math.min(endMin, nightEnd);
+    if(overlapEnd > overlapStart) nightMin += (overlapEnd - overlapStart);
+
+    // 0:00~6:00 구간도 야간 (startMin이 0~6시 사이일 수 있음 — 드물지만)
+    // 이미 endMin <= startMin일 때 +24*60 했으므로, 22:00~30:00으로 커버됨
+
+    nightHours += nightMin / 60;
+    normalHours += (totalMin - nightMin) / 60;
+  }
+
+  // 마지막 주 처리
+  if(currentWeekStart !== null){
+    weeklyHoursArr.push(currentWeekHours);
+  }
+
+  // 주휴수당: 주 15시간 이상 근무 시 1일 유급 (시급 * 8시간)
+  let weeklyHolidayPay = 0;
+  let qualifiedWeeks = 0;
+  weeklyHoursArr.forEach(wh => {
+    if(wh >= 15){
+      qualifiedWeeks++;
+      weeklyHolidayPay += rate * 8;
+    }
+  });
+
+  const normalPay = Math.round(normalHours * rate);
+  const nightPay = Math.round(nightHours * rate * 1.5);
+
+  return {
+    totalHours: Math.round(totalHours*100)/100,
+    normalHours: Math.round(normalHours*100)/100,
+    nightHours: Math.round(nightHours*100)/100,
+    normalPay,
+    nightPay,
+    weeklyHolidayPay: Math.round(weeklyHolidayPay),
+    qualifiedWeeks,
+    totalPay: normalPay + nightPay + Math.round(weeklyHolidayPay)
+  };
+}
+
+let lastPayData = null; // BankTotal 전송용 캐시
+
+function initPaySection(){
+  const sel = $('payMonthSelect');
+  if(!sel) return;
+  const now = new Date();
+  const thisMonth = now.getFullYear()+'-'+pad(now.getMonth()+1);
+  const lastDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const lastMonth = lastDate.getFullYear()+'-'+pad(lastDate.getMonth()+1);
+  sel.innerHTML = '<option value="'+thisMonth+'">이번달 ('+thisMonth+')</option>'
+                + '<option value="'+lastMonth+'">지난달 ('+lastMonth+')</option>';
+}
+
+function renderPayTable(){
+  const sel = $('payMonthSelect');
+  const wrap = $('payTableWrap');
+  if(!sel || !wrap) return;
+  const ym = sel.value.split('-');
+  const year = parseInt(ym[0]), month = parseInt(ym[1]);
+
+  const empKeys = Object.keys(employees);
+  const payResults = {};
+  let grandTotal = 0;
+
+  empKeys.forEach(id => {
+    const result = calcMonthlyPay(id, year, month);
+    if(result){
+      payResults[id] = result;
+      grandTotal += result.totalPay;
+    }
+  });
+
+  lastPayData = {year, month, results: payResults};
+
+  let html = '<table class="pay-table"><thead><tr>';
+  html += '<th>이름</th><th>총시간</th><th>기본급</th><th>야간수당</th><th>주휴수당</th><th>합계</th>';
+  html += '</tr></thead><tbody>';
+
+  empKeys.forEach(id => {
+    const emp = employees[id];
+    const r = payResults[id];
+    if(!r) return;
+    if(r.totalHours === 0) return; // 근무 없는 직원 스킵
+    html += '<tr>';
+    html += '<td>'+emp.name+'</td>';
+    html += '<td>'+r.totalHours+'h</td>';
+    html += '<td>'+r.normalPay.toLocaleString()+'</td>';
+    html += '<td>'+r.nightPay.toLocaleString()+'</td>';
+    html += '<td>'+r.weeklyHolidayPay.toLocaleString()+'</td>';
+    html += '<td>'+r.totalPay.toLocaleString()+'</td>';
+    html += '</tr>';
+  });
+
+  html += '<tr class="pay-total">';
+  html += '<td>합계</td><td></td><td></td><td></td><td></td>';
+  html += '<td>'+grandTotal.toLocaleString()+'원</td>';
+  html += '</tr>';
+  html += '</tbody></table>';
+
+  wrap.innerHTML = html;
+}
+
+$('payCalcBtn').addEventListener('click', ()=> renderPayTable());
+$('payMonthSelect').addEventListener('change', ()=> renderPayTable());
+
+$('payBankTotalBtn').addEventListener('click', async()=>{
+  if(!lastPayData || !lastPayData.results){
+    showToast('먼저 계산을 실행하세요');
+    return;
+  }
+  const ym = lastPayData.year+'-'+pad(lastPayData.month);
+  const empKeys = Object.keys(lastPayData.results);
+  let successCount = 0;
+
+  for(const id of empKeys){
+    const emp = employees[id];
+    const r = lastPayData.results[id];
+    if(!r || r.totalHours === 0) continue;
+    const fbPath = FB_BASE+'/banktotal/payroll/'+ym+'/'+emp.name;
+    const payload = {
+      hours: r.totalHours,
+      normalPay: r.normalPay,
+      nightPay: r.nightPay,
+      weeklyPay: r.weeklyHolidayPay,
+      totalPay: r.totalPay,
+      updatedAt: Date.now()
+    };
+    const ok = await fbPut(fbPath, payload);
+    if(ok) successCount++;
+  }
+
+  if(successCount > 0) showToast('BankTotal 전송 완료 ('+successCount+'명)');
+  else showToast('전송할 데이터 없음');
+});
+
+initPaySection();
 
 // ============================================================
 // Visibility change handler (foreground return)
