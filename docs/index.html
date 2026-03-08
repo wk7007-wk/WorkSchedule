@@ -1622,6 +1622,28 @@ function getMonday(d){
   return dt;
 }
 
+// 근무자 배열로 게이지 범위 자동 계산 (최초출근-1h ~ 마지막퇴근+1h)
+function calcGaugeRange(working){
+  if(!working || working.length === 0) return {gaugeStart: 12, gaugeHours: 12};
+  let minH = 48, maxH = 0;
+  working.forEach(w => {
+    let sH = parseInt(w.shift.start.split(':')[0]);
+    let eH = parseInt(w.shift.end.split(':')[0]);
+    let eM = parseInt(w.shift.end.split(':')[1] || 0);
+    if(eM > 0) eH++; // 올림
+    if(sH < 12) sH += 24;
+    if(eH < 12) eH += 24;
+    if(eH <= sH) eH += 24; // 자정 넘김 보정
+    if(sH < minH) minH = sH;
+    if(eH > maxH) maxH = eH;
+  });
+  const gaugeStart = minH - 1;
+  const gaugeEnd = maxH + 1;
+  let gaugeHours = gaugeEnd - gaugeStart;
+  if(gaugeHours < 6) gaugeHours = 6;
+  return {gaugeStart, gaugeHours};
+}
+
 // Convert time string "HH:MM" to minutes from 12:00(noon)
 // Hours 00-11 are treated as next day (24-35)
 function timeToMinutesFrom12(timeStr){
@@ -4432,9 +4454,10 @@ function renderListView(){
   html += '</div></div>';
 
   // === 근무자 리스트 (게이지 + 출퇴근 텍스트 + 상태 버튼) ===
-  const GAUGE_START = 12; // 12:00
-  const GAUGE_END = 36; // 12:00 다음날 (36h 기준)
-  const GAUGE_RANGE = GAUGE_END - GAUGE_START; // 24시간
+  const _g = calcGaugeRange(working);
+  const GAUGE_START = _g.gaugeStart;
+  const GAUGE_RANGE = _g.gaugeHours;
+  const GAUGE_END = GAUGE_START + GAUGE_RANGE;
 
   working.forEach(w => {
     const hasConflict = !!detectConflicts(empKeys, dk)[w.id];
@@ -4655,8 +4678,9 @@ function renderTimebarView(){
   });
   working.sort((a,b) => timeToMinutesFrom12(a.shift.start) - timeToMinutesFrom12(b.shift.start));
 
-  // 시간축: 12~12(+1) (24시간)
-  const barStart = 12, barHours = 24;
+  // 시간축: 근무자 기준 유동 범위
+  const _mg = calcGaugeRange(working);
+  const barStart = _mg.gaugeStart, barHours = _mg.gaugeHours;
   function timeToPct(timeStr){
     let [h,m] = timeStr.split(':').map(Number);
     if(h < 12) h += 24;
@@ -4691,9 +4715,10 @@ function renderTimebarView(){
   html += '<div style="display:flex;align-items:center;margin-bottom:2px;">';
   html += '<div style="min-width:58px;"></div>';
   html += '<div style="flex:1;position:relative;height:16px;display:flex;">';
-  for(let h=12;h<=36;h+=3){
+  const _labelStep = barHours <= 8 ? 1 : barHours <= 14 ? 2 : 3;
+  for(let h=barStart;h<=barStart+barHours;h+=_labelStep){
     const rh = h>=24?h-24:h;
-    const pct = (h-12)/barHours*100;
+    const pct = (h-barStart)/barHours*100;
     html += '<span style="position:absolute;left:'+pct+'%;font-size:.55rem;color:#707088;transform:translateX(-50%);">'+rh+'</span>';
   }
   html += '</div><div style="min-width:36px;"></div></div>';
