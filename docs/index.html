@@ -2056,9 +2056,10 @@ async function onDateChange(){
   renderCurrentTab();
   // Firebase 동기화
   try{
-    const [schedData, fbShiftSt] = await Promise.all([
+    const [schedData, fbShiftSt, fbConfirmed] = await Promise.all([
       fbGet(FB_SCHEDULES+'/'+dk),
-      fbGet(FB_WS+'/shift_status/'+dk)
+      fbGet(FB_WS+'/shift_status/'+dk),
+      fbGet(FB_WS+'/confirmed/'+dk)
     ]);
     if(schedData){
       const merged = Object.assign({}, schedData, localSched || {});
@@ -2074,6 +2075,13 @@ async function onDateChange(){
       });
       lsSaveShiftStatus();
     }
+    // confirmed 상태 Firebase 동기화
+    if(fbConfirmed !== undefined && fbConfirmed !== null){
+      confirmedDays[dk] = !!fbConfirmed;
+    } else {
+      delete confirmedDays[dk];
+    }
+    lsSaveConfirmed(confirmedDays);
     renderCurrentTab();
   }catch(e){}
   loadWeekSchedules();
