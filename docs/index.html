@@ -1967,20 +1967,34 @@ async function loadData(){
 
 async function loadWeekSchedules(){
   const monday = getMonday(currentDate);
-  const promises = [];
+  const schedPromises = [];
+  const statusPromises = [];
   const keys = [];
   for(let i=0; i<7; i++){
     const d = new Date(monday);
     d.setDate(d.getDate()+i);
     const dk = dateKey(d);
     keys.push(dk);
-    promises.push(fbGet(FB_SCHEDULES+'/'+dk));
+    schedPromises.push(fbGet(FB_SCHEDULES+'/'+dk));
+    statusPromises.push(fbGet(FB_WS+'/shift_status/'+dk));
   }
-  const results = await Promise.all(promises);
+  const [schedResults, statusResults] = await Promise.all([
+    Promise.all(schedPromises),
+    Promise.all(statusPromises)
+  ]);
   weekSchedules = {};
   keys.forEach((k,i)=>{
-    weekSchedules[k] = results[i] || {};
+    weekSchedules[k] = schedResults[i] || {};
+    // 주간 shift_status 병합
+    const fbSt = statusResults[i];
+    if(fbSt){
+      Object.keys(fbSt).forEach(empId => {
+        if(fbSt[empId]) shiftStatus[k+'_'+empId] = fbSt[empId];
+        else delete shiftStatus[k+'_'+empId];
+      });
+    }
   });
+  lsSaveShiftStatus();
   renderWeek();
 }
 
