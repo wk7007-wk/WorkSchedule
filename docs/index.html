@@ -4943,10 +4943,11 @@ function renderTimebarView(){
     if(width <= 0) width += 100;
     width = Math.min(width, 100 - left);
 
-    const barBg = roleColor+'40';
-    const borderL = roleColor;
+    const barBg = isCf ? roleColor+'40' : roleColor+'18';
+    const borderL = isCf ? roleColor : roleColor+'88';
+    const rowOpacity = isCf ? '1' : '.6';
 
-    html += '<div data-empid="'+w.id+'" style="display:flex;align-items:center;padding:2px 6px;cursor:pointer;">';
+    html += '<div data-empid="'+w.id+'" style="display:flex;align-items:center;padding:2px 6px;cursor:pointer;opacity:'+rowOpacity+';">';
     // 이름 + 주간휴무
     html += '<div style="min-width:58px;font-size:.85rem;font-weight:700;color:'+(isCf?C_OK:'#E0E0EC')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">';
     html += w.emp.name;
@@ -4956,7 +4957,8 @@ function renderTimebarView(){
     html += '<div style="flex:1;position:relative;height:32px;background:#1A1A30;border-radius:4px;overflow:hidden;">';
     if(isToday) html += '<div style="position:absolute;left:'+nowPct+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:2;"></div>';
     const isNarrow = width < 30;
-    html += '<div style="position:absolute;left:'+left+'%;width:'+width+'%;top:1px;bottom:1px;background:'+barBg+';border-left:3px solid '+borderL+';border-radius:3px;"></div>';
+    const barBorder = isCf ? '' : 'border:1px dashed '+roleColor+'66;';
+    html += '<div style="position:absolute;left:'+left+'%;width:'+width+'%;top:1px;bottom:1px;background:'+barBg+';border-left:3px solid '+borderL+';border-radius:3px;'+barBorder+'"></div>';
     // 텍스트: 바 좁으면 바 오른쪽에 표시, 넓으면 바 안에 표시
     const txtLeft = isNarrow ? (left+width+1) : left;
     const txtW = isNarrow ? (100-left-width-1) : width;
@@ -4972,7 +4974,7 @@ function renderTimebarView(){
     if(isCf){
       html += '<span data-action="status" data-sid="'+w.id+'" data-st="auto" style="min-width:32px;text-align:center;font-size:.65rem;padding:4px 6px;border-radius:5px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;margin-left:3px;">확</span>';
     } else {
-      html += '<span data-action="status" data-sid="'+w.id+'" data-st="confirmed" style="min-width:32px;text-align:center;font-size:.65rem;padding:4px 6px;border-radius:5px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;margin-left:3px;">미</span>';
+      html += '<span data-action="status" data-sid="'+w.id+'" data-st="confirmed" style="min-width:32px;text-align:center;font-size:.65rem;padding:4px 6px;border-radius:5px;cursor:pointer;background:'+C_DEF+'33;color:'+C_DEF+';font-weight:700;margin-left:3px;border:1px solid '+C_DEF+';">미</span>';
     }
     html += '</div>';
   });
