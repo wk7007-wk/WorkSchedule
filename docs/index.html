@@ -4568,6 +4568,50 @@ function renderListView(){
   if(offList.length) html += '<span style="color:'+C_OFF+';">휴'+offList.length+'</span>';
   html += '</div></div>';
 
+  // === 충돌 요약 배너 (시간대별) ===
+  const allConflicts = detectConflicts(empKeys, dk);
+  const hourConflicts = {}; // hour → [{role, type, msg}]
+  for(const key in allConflicts){
+    if(key.startsWith('_hour_')){
+      allConflicts[key].forEach(c => {
+        if(!hourConflicts[c.hour]) hourConflicts[c.hour] = [];
+        hourConflicts[c.hour].push(c);
+      });
+    } else {
+      allConflicts[key].forEach(c => {
+        if(!hourConflicts[c.hour]) hourConflicts[c.hour] = [];
+        // 중복 방지
+        if(!hourConflicts[c.hour].some(x => x.hour===c.hour && x.role===c.role && x.type===c.type))
+          hourConflicts[c.hour].push(c);
+      });
+    }
+  }
+  const conflictHours = Object.keys(hourConflicts).map(Number).sort((a,b)=>a-b);
+  if(conflictHours.length > 0){
+    html += '<div style="margin-bottom:4px;padding:4px 8px;background:#E74C3C12;border:1px solid #E74C3C33;border-radius:6px;">';
+    html += '<div style="font-size:.55rem;color:#E74C3C;font-weight:700;margin-bottom:2px;">인원 알림</div>';
+    // 연속 시간 그룹핑
+    const groups = [];
+    conflictHours.forEach(h => {
+      hourConflicts[h].forEach(c => {
+        const last = groups[groups.length-1];
+        if(last && last.role===c.role && last.type===c.type && last.hours[last.hours.length-1]===h-1){
+          last.hours.push(h);
+        } else {
+          groups.push({role:c.role, type:c.type, hours:[h], msg:c.msg});
+        }
+      });
+    });
+    groups.forEach(g => {
+      const rangeStr = g.hours.length===1 ? g.hours[0]+'시' : g.hours[0]+'~'+g.hours[g.hours.length-1]+'시';
+      const typeLabel = g.type==='over' ? '초과' : '부족';
+      const icon = g.type==='over' ? '▲' : '▼';
+      const color = g.type==='over' ? '#E74C3C' : '#E67E22';
+      html += '<div style="font-size:.55rem;color:'+color+';padding:1px 0;">'+icon+' '+rangeStr+' '+(ROLE_LABELS[g.role]||g.role)+' '+typeLabel+'</div>';
+    });
+    html += '</div>';
+  }
+
   // === 근무자 리스트 (게이지 + 출퇴근 텍스트 + 상태 버튼) ===
   const _g = calcGaugeRange(working);
   const GAUGE_START = _g.gaugeStart;
@@ -4575,9 +4619,7 @@ function renderListView(){
   const GAUGE_END = GAUGE_START + GAUGE_RANGE;
 
   working.forEach(w => {
-    const hasConflict = !!detectConflicts(empKeys, dk)[w.id];
     const roles = w.shift.role ? w.shift.role.split(',').filter(Boolean) : [];
-    const roleHtml = roles.map(r => '<span style="color:'+(ROLE_COLORS[r]||'#9090A8')+';font-size:.6rem;font-weight:700;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
 
     // 게이지 위치 계산 (DAY_START_HOUR 기준)
     let sH = parseInt(w.shift.start.split(':')[0]), sM = parseInt(w.shift.start.split(':')[1]||0);
@@ -4593,16 +4635,11 @@ function renderListView(){
     const isConfirmed = w.status==='confirmed';
     const stColor = isConfirmed ? C_OK : C_DEF;
     const stBg = isConfirmed ? C_OK+'10' : C_DEF+'08';
-    const borderC = hasConflict ? C_OFF : stColor;
 
-    // 패턴 제안
-    const pattern = getPatternSuggestion(w.id, dk);
-    const patternMatch = pattern && w.shift.start===pattern.start && w.shift.end===pattern.end;
-
-    const barC = hasConflict ? C_OFF : stColor;
+    const barC = stColor;
     const timeLabel = w.shift.start.replace(/^0/,'')+'-'+w.shift.end.replace(/^0/,'');
 
-    html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;padding:4px 6px;background:'+stBg+';border-left:3px solid '+borderC+';border-radius:6px;cursor:pointer;" data-empid="'+w.id+'">';
+    html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;padding:4px 6px;background:'+stBg+';border-left:3px solid '+stColor+';border-radius:6px;cursor:pointer;" data-empid="'+w.id+'">';
     // 이름 + 주간휴무 + 주간근무시간
     const wOff = weekOffCount[w.id]||0;
     const wHrs = weekTotalHoursMap[w.id]||0;
@@ -4616,13 +4653,12 @@ function renderListView(){
     html += '<div style="position:absolute;left:'+startPct+'%;width:'+widthPct+'%;top:1px;bottom:1px;background:'+barC+'40;border-radius:2px;border-left:2px solid '+barC+';"></div>';
     html += '<span style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:.55rem;color:#E0E0EC;font-weight:600;white-space:nowrap;text-shadow:0 0 3px #000;">'+timeLabel+' ('+w.hours+'h)</span>';
     html += '</div>';
-    // 상태 버튼: confirmed=확정(초록), 그외=미확정(회색) — 터치로 토글
+    // 상태 버튼
     if(isConfirmed){
-      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'auto\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;">확정</span>';
+      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'auto\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;">확</span>';
     } else {
-      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;">미확정</span>';
+      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;">미</span>';
     }
-    if(hasConflict) html += '<span style="font-size:.5rem;color:'+C_OFF+';font-weight:700;">!</span>';
     html += '</div>';
   });
 
@@ -4856,9 +4892,42 @@ function renderTimebarView(){
   }
   html += '</div><div style="min-width:36px;"></div></div>';
 
+  // === 충돌 요약 배너 ===
+  const _tbHourConf = {};
+  for(const key in allConflicts){
+    allConflicts[key].forEach(c => {
+      if(!_tbHourConf[c.hour]) _tbHourConf[c.hour] = [];
+      if(!_tbHourConf[c.hour].some(x => x.role===c.role && x.type===c.type))
+        _tbHourConf[c.hour].push(c);
+    });
+  }
+  const _tbConfHours = Object.keys(_tbHourConf).map(Number).sort((a,b)=>a-b);
+  if(_tbConfHours.length > 0){
+    html += '<div style="margin-bottom:4px;padding:4px 8px;background:#E74C3C12;border:1px solid #E74C3C33;border-radius:6px;">';
+    html += '<div style="font-size:.55rem;color:#E74C3C;font-weight:700;margin-bottom:2px;">인원 알림</div>';
+    const _tbGroups = [];
+    _tbConfHours.forEach(h => {
+      _tbHourConf[h].forEach(c => {
+        const last = _tbGroups[_tbGroups.length-1];
+        if(last && last.role===c.role && last.type===c.type && last.hours[last.hours.length-1]===h-1){
+          last.hours.push(h);
+        } else {
+          _tbGroups.push({role:c.role, type:c.type, hours:[h]});
+        }
+      });
+    });
+    _tbGroups.forEach(g => {
+      const rangeStr = g.hours.length===1 ? g.hours[0]+'시' : g.hours[0]+'~'+g.hours[g.hours.length-1]+'시';
+      const typeLabel = g.type==='over' ? '초과' : '부족';
+      const icon = g.type==='over' ? '▲' : '▼';
+      const color = g.type==='over' ? '#E74C3C' : '#E67E22';
+      html += '<div style="font-size:.55rem;color:'+color+';padding:1px 0;">'+icon+' '+rangeStr+' '+(ROLE_LABELS[g.role]||g.role)+' '+typeLabel+'</div>';
+    });
+    html += '</div>';
+  }
+
   // === 근무자 타임바 ===
   working.forEach(w => {
-    const hasConflict = !!allConflicts[w.id];
     const roles = w.shift.role ? w.shift.role.split(',').filter(Boolean) : [];
     const primaryRole = roles[0] || '주방';
     const roleColor = ROLE_COLORS[primaryRole] || '#9090A8';
@@ -4871,8 +4940,8 @@ function renderTimebarView(){
     if(width <= 0) width += 100;
     width = Math.min(width, 100 - left);
 
-    const barBg = hasConflict ? '#E74C3C55' : roleColor+'40';
-    const borderL = hasConflict ? C_OFF : roleColor;
+    const barBg = roleColor+'40';
+    const borderL = roleColor;
 
     html += '<div data-empid="'+w.id+'" style="display:flex;align-items:center;padding:2px 6px;cursor:pointer;">';
     // 이름 + 주간휴무
