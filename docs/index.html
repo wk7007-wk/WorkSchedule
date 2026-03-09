@@ -1236,8 +1236,8 @@ function shortName(empName){ return SHORT_NAMES[empName] || empName?.charAt(0) |
 // 고정 스케줄 기본값 (수정 팝업 "고정으로 저장"으로 변경 가능)
 let FIXED_SCHEDULES = {
   '이원규': {start:'17:00', end:'03:00', role:'주방,오토바이', type:'fixed'},
-  '히오':   {start:'18:00', end:'03:00', role:'주방', type:'fixed'},
-  '리':     {start:'18:00', end:'03:00', role:'주방', type:'fixed'},
+  '히오':   {start:'17:00', end:'03:00', role:'주방', type:'fixed'},
+  '리':     {start:'17:00', end:'03:00', role:'주방', type:'fixed'},
   '박준모': {start:'03:00', end:'11:00', role:'주방,차배달', type:'fixed'},
   '전묘정': {start:'03:00', end:'11:00', role:'주방', type:'fixed'},
   '권연옥': {start:null, end:null, role:'주방', type:'conditional'},
@@ -1250,8 +1250,8 @@ function getFixedScheduleForDate(empName, dateObj) {
   const holiday = isWeekendOrHoliday(d);
 
   if(empName === '이원규') return {start:'17:00', end:'03:00', role:'주방,오토바이', type:'fixed'};
-  if(empName === '히오') return {start: holiday ? '17:00' : '18:00', end:'03:00', role:'주방', type:'fixed'};
-  if(empName === '리') return {start: holiday ? '17:00' : '18:00', end:'03:00', role:'주방', type:'fixed'};
+  if(empName === '히오') return {start:'17:00', end:'03:00', role:'주방', type:'fixed'};
+  if(empName === '리') return {start:'17:00', end:'03:00', role:'주방', type:'fixed'};
   if(empName === '박준모') {
     if(holiday) return {start:'07:00', end:'17:00', role:'주방,차배달', type:'fixed'};
     return {start:'03:00', end:'11:00', role:'주방,차배달', type:'fixed'};
