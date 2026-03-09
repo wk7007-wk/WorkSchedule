@@ -749,6 +749,18 @@ select.form-input{
 </style>
 </head>
 <body>
+<div id="errOverlay" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#E74C3C;color:#fff;padding:8px;font-size:12px;max-height:40vh;overflow:auto;word-break:break-all;"></div>
+<script>
+window.onerror=function(msg,url,line,col,err){
+  var el=document.getElementById('errOverlay');
+  if(el){el.style.display='block';el.innerHTML+='<div><b>ERR:</b> '+msg+' (line:'+line+' col:'+col+')</div>';}
+  return false;
+};
+window.addEventListener('unhandledrejection',function(e){
+  var el=document.getElementById('errOverlay');
+  if(el){el.style.display='block';el.innerHTML+='<div><b>Promise:</b> '+e.reason+'</div>';}
+});
+</script>
 
 <!-- Header (2행 구조: 날짜 네비 + 기능 버튼) -->
 <div style="position:sticky;top:0;z-index:100;background:#1A1A30;border-bottom:1px solid #2E2E52;">
