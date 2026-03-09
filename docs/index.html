@@ -690,7 +690,7 @@ select.form-input{
 .date-strip{
   display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:4px 6px;
   background:#1A1A30;border-bottom:1px solid #2E2E52;
-  max-height:120px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+  max-height:130px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
 }
 .date-strip::-webkit-scrollbar{display:none;}
 .date-strip-hdr{font-size:.5rem;color:#707088;text-align:center;padding:1px 0;font-weight:600;}
@@ -2944,7 +2944,7 @@ function renderDateStrip(){
   ['월','화','수','목','금','토','일'].forEach(d => {
     html += '<div class="date-strip-hdr" style="position:sticky;top:0;background:#1A1A30;z-index:1;">'+d+'</div>';
   });
-  for(let i=0; i<28; i++){
+  for(let i=-7; i<56; i++){
     const d = new Date(monday);
     d.setDate(d.getDate()+i);
     const dk = dateKey(d);
