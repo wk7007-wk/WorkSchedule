@@ -2070,7 +2070,9 @@ function showDateFlash(){
   el._t = setTimeout(()=>{ el.style.opacity = '0'; }, 600);
 }
 
+let _dateChangeId = 0;
 async function onDateChange(){
+  const myId = ++_dateChangeId;
   showDateFlash();
   updateDateDisplay();
   // Reconnect schedule SSE for new date
@@ -2085,6 +2087,8 @@ async function onDateChange(){
   generateAutoDayoffs();
   autoApplyFixed(dk);
   renderCurrentTab();
+  // 연속 호출 시 이전 요청 무시
+  if(myId !== _dateChangeId) return;
   // Firebase 동기화
   try{
     const [schedData, fbShiftSt, fbConfirmed] = await Promise.all([
@@ -2092,6 +2096,7 @@ async function onDateChange(){
       fbGet(FB_WS+'/shift_status/'+dk),
       fbGet(FB_WS+'/confirmed/'+dk)
     ]);
+    if(myId !== _dateChangeId) return;
     if(schedData){
       const merged = Object.assign({}, schedData, localSched || {});
       daySchedule = merged;
@@ -2115,6 +2120,7 @@ async function onDateChange(){
     lsSaveConfirmed(confirmedDays);
     renderCurrentTab();
   }catch(e){}
+  if(myId !== _dateChangeId) return;
   loadWeekSchedules();
   updateConfirmBtn();
 }
