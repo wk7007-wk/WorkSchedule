@@ -4584,6 +4584,7 @@ function renderListView(){
     let eH = parseInt(w.shift.end.split(':')[0]), eM = parseInt(w.shift.end.split(':')[1]||0);
     if(sH < DAY_START_HOUR) sH += 24;
     if(eH < DAY_START_HOUR) eH += 24;
+    if(eH <= sH) eH += 24; // 자정 넘김 보정
     const startPct = Math.max(0, ((sH + sM/60) - GAUGE_START) / GAUGE_RANGE * 100);
     const endPct = Math.min(100, ((eH + eM/60) - GAUGE_START) / GAUGE_RANGE * 100);
     const widthPct = Math.max(1, endPct - startPct);
