@@ -749,19 +749,6 @@ select.form-input{
 </style>
 </head>
 <body>
-<div id="errOverlay" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#E74C3C;color:#fff;padding:8px;font-size:12px;max-height:40vh;overflow:auto;word-break:break-all;"></div>
-<script>
-window.onerror=function(msg,url,line,col,err){
-  var el=document.getElementById('errOverlay');
-  if(el){el.style.display='block';el.innerHTML+='<div><b>ERR:</b> '+msg+' (line:'+line+' col:'+col+')</div>';}
-  return false;
-};
-window.addEventListener('unhandledrejection',function(e){
-  var el=document.getElementById('errOverlay');
-  if(el){el.style.display='block';el.innerHTML+='<div><b>Promise:</b> '+e.reason+'</div>';}
-});
-</script>
-
 <!-- Header (2행 구조: 날짜 네비 + 기능 버튼) -->
 <div style="position:sticky;top:0;z-index:100;background:#1A1A30;border-bottom:1px solid #2E2E52;">
   <div style="display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:4px;">
@@ -1900,7 +1887,7 @@ async function loadData(){
     dataLoaded = true;
     $loading.style.display = 'none';
     $tabContent.style.display = '';
-    try { renderAll(); } catch(e) { var el=document.getElementById('errOverlay');if(el){el.style.display='block';el.innerHTML+='<div>renderAll1:'+e.message+'</div>';} }
+    renderAll();
   } else {
     $loading.style.display = 'flex';
     $tabContent.style.display = 'none';
@@ -1973,7 +1960,7 @@ async function loadData(){
 
   $loading.style.display = 'none';
   $tabContent.style.display = '';
-  try { renderAll(); } catch(e) { var el=document.getElementById('errOverlay');if(el){el.style.display='block';el.innerHTML+='<div>renderAll2:'+e.message+'</div>';} }
+  renderAll();
   loadWeekSchedules();
   updateConfirmBtn();
 }
@@ -2157,7 +2144,7 @@ function renderAll(){
     ['buildKakaoPerEmp', buildKakaoPerEmp],
   ];
   for(const [name, fn] of steps){
-    try { fn(); } catch(e) { var el=document.getElementById('errOverlay');if(el){el.style.display='block';el.innerHTML+='<div><b>'+name+':</b> '+e.message+'</div>';} }
+    try { fn(); } catch(e) { console.error('[WS] '+name+' error:', e); }
   }
 }
 
@@ -4980,7 +4967,6 @@ function renderTimebarView(){
     } else {
       html += '<span data-action="status" data-sid="'+w.id+'" data-st="confirmed" style="min-width:32px;text-align:center;font-size:.65rem;padding:4px 6px;border-radius:5px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;margin-left:3px;">미</span>';
     }
-    if(hasConflict) html += '<span style="font-size:.6rem;color:'+C_OFF+';font-weight:700;">!</span>';
     html += '</div>';
   });
 
