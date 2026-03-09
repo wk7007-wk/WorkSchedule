@@ -686,23 +686,22 @@ select.form-input{
   display:flex;align-items:center;justify-content:center;gap:6px;
 }
 
-/* ===== Date Strip (60일 스크롤) ===== */
+/* ===== Date Strip (주간 카드) ===== */
 .date-strip{
-  display:flex;overflow-x:auto;gap:2px;padding:6px 6px;
+  display:flex;gap:4px;padding:4px 6px;
   background:#1A1A30;border-bottom:1px solid #2E2E52;
-  -webkit-overflow-scrolling:touch;scrollbar-width:none;
 }
-.date-strip::-webkit-scrollbar{display:none;}
 .date-strip-item{
-  flex:0 0 auto;min-width:36px;padding:3px 2px;border-radius:6px;
-  text-align:center;cursor:pointer;border:2px solid #2E2E52;
-  transition:background .1s;
+  flex:1;padding:6px 2px;border-radius:8px;
+  text-align:center;cursor:pointer;border:1.5px solid #2E2E52;
+  transition:background .1s,border-color .15s;
 }
 .date-strip-item:active{background:#2A2A45;}
-.date-strip-item .ds-dow{font-size:.48rem;color:#707088;line-height:1;}
-.date-strip-item .ds-date{font-size:.75rem;font-weight:700;color:#E0E0EC;line-height:1.2;}
+.date-strip-item .ds-dow{font-size:.65rem;color:#707088;line-height:1;}
+.date-strip-item .ds-date{font-size:1.1rem;font-weight:800;color:#E0E0EC;line-height:1.3;}
 .date-strip-item .ds-date.sun{color:#E74C3C;}
 .date-strip-item .ds-date.sat{color:#4ECDC4;}
+.date-strip-item .ds-count{font-size:.6rem;color:#707088;line-height:1;}
 
 /* ===== Date Picker Dropdown ===== */
 .date-picker-overlay{
@@ -752,11 +751,11 @@ select.form-input{
 <!-- Header (2행 구조: 날짜 네비 + 기능 버튼) -->
 <div style="position:sticky;top:0;z-index:100;background:#1A1A30;border-bottom:1px solid #2E2E52;">
   <div style="display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:4px;">
-    <button class="btn nav-btn" id="prevDay" aria-label="3일 전" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">◀◀</button>
+    <button class="btn nav-btn" id="prevDay" aria-label="1주 전" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">◀◀</button>
     <button class="btn nav-btn" id="prevDay1" aria-label="이전 날" style="font-size:.8rem;min-width:32px;min-height:32px;padding:4px;">◀</button>
     <span class="date-display" id="dateDisplay" style="cursor:pointer;min-width:90px;"></span>
     <button class="btn nav-btn" id="nextDay1" aria-label="다음 날" style="font-size:.8rem;min-width:32px;min-height:32px;padding:4px;">▶</button>
-    <button class="btn nav-btn" id="nextDay" aria-label="3일 후" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">▶▶</button>
+    <button class="btn nav-btn" id="nextDay" aria-label="1주 후" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">▶▶</button>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px 4px;gap:4px;">
     <div style="display:flex;gap:4px;">
@@ -782,7 +781,7 @@ select.form-input{
   <button class="layout-tab" data-tab="weekly">주간</button>
 </div>
 
-<!-- Date Strip (60일 스크롤) -->
+<!-- Date Strip (주간 카드) -->
 <div class="date-strip" id="dateStrip"></div>
 
 <!-- 매출구간 선택 바 -->
@@ -2929,21 +2928,20 @@ function renderDateStrip(){
   if(!con) return;
   const today = new Date(); today.setHours(0,0,0,0);
   const empKeys = Object.keys(employees);
-  const totalEmp = empKeys.length;
   const selectedDk = dateKey(currentDate);
   const DOW_SHORT = ['일','월','화','수','목','금','토'];
+  const monday = getMonday(currentDate);
 
   let html = '';
-  // -7일 ~ +52일 = 60일
-  for(let i=-7; i<53; i++){
-    const d = new Date(today);
+  for(let i=0; i<7; i++){
+    const d = new Date(monday);
     d.setDate(d.getDate()+i);
     const dk = dateKey(d);
     const dow = d.getDay();
-    const isToday = i===0;
+    const isToday = isSameDay(d, today);
     const isSelected = dk===selectedDk;
 
-    // 확정: confirmed만. auto/pending = 미확정
+    // 확정 상태 계산
     let confirmedCount = 0;
     let assignedCount = 0;
     const sched = dk===selectedDk ? daySchedule : (weekSchedules[dk] || lsLoadSchedule(dk));
@@ -2956,15 +2954,16 @@ function renderDateStrip(){
       });
     }
 
-    // 테두리: 전원확정만 초록, 그 외 테두리없음
-    let borderColor = '#2E2E5200';
-    let statusLabel = '';
-    if(assignedCount > 0 && confirmedCount === assignedCount){
-      borderColor = C_OK; statusLabel = '확정';
+    // 테두리 색상: 전원확정=C_OK, 부분확정=C_OK+88, 미확정=C_DEF, 없음=#2E2E52
+    let borderColor = '#2E2E52';
+    if(assignedCount > 0){
+      if(confirmedCount === assignedCount) borderColor = C_OK;
+      else if(confirmedCount > 0) borderColor = C_OK+'88';
+      else borderColor = C_DEF;
     }
 
     const dowCls = (dow===0 || isKrHoliday(d)) ? ' sun' : dow===6 ? ' sat' : '';
-    const selStyle = isSelected ? 'background:#2A2A45;opacity:1;' : 'opacity:.4;';
+    const selStyle = isSelected ? 'background:#2A2A45;opacity:1;border-width:2px;' : 'opacity:.7;';
 
     html += '<div class="date-strip-item" data-dk="'+dk+'" style="border-color:'+borderColor+';'+selStyle+'">';
     if(isToday){
@@ -2974,8 +2973,12 @@ function renderDateStrip(){
     }
     html += '<div class="ds-date'+dowCls+'">'+d.getDate()+'</div>';
     const _hName = getHolidayName(d);
-    if(_hName) html += '<div style="font-size:.35rem;color:#E74C3C;font-weight:700;line-height:1;white-space:nowrap;overflow:hidden;max-width:36px;text-overflow:ellipsis;">'+_hName+'</div>';
-    if(statusLabel) html += '<div style="font-size:.4rem;color:'+borderColor+';font-weight:700;line-height:1;">'+statusLabel+'</div>';
+    if(_hName){
+      html += '<div style="font-size:.45rem;color:#E74C3C;font-weight:700;line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+_hName+'</div>';
+    }
+    if(assignedCount > 0){
+      html += '<div class="ds-count" style="color:'+(confirmedCount===assignedCount?C_OK:C_DEF)+';">'+assignedCount+'명</div>';
+    }
     html += '</div>';
   }
   con.innerHTML = html;
@@ -2988,14 +2991,6 @@ function renderDateStrip(){
       onDateChange();
     });
   });
-
-  // 선택된 날짜를 중앙으로 스크롤
-  const sel = con.querySelector('[data-dk="'+selectedDk+'"]');
-  if(sel){
-    setTimeout(()=>{
-      sel.scrollIntoView({inline:'center', behavior:'smooth', block:'nearest'});
-    }, 50);
-  }
 }
 
 // ============================================================
@@ -3005,83 +3000,25 @@ function renderWeek(){
   if(!dataLoaded) return;
   const monday = getMonday(currentDate);
   const empKeys = Object.keys(employees);
-  const today = new Date();
 
+  // weekGrid는 상단 dateStrip이 대체하므로 비움
   $weekGrid.innerHTML = '';
-  const daysOff = {}; // empId -> count of days off
 
+  // 휴무 요약은 유지
+  const daysOff = {};
   empKeys.forEach(id => { daysOff[id] = 0; });
-
-  const todayMidnight = new Date(today);
-  todayMidnight.setHours(0,0,0,0);
-
   for(let i=0; i<7; i++){
     const d = new Date(monday);
     d.setDate(d.getDate()+i);
     const dk = dateKey(d);
     const sched = weekSchedules[dk] || {};
-    const dow = d.getDay();
-    const isCurrentDay = isSameDay(d, currentDate);
-    const isTodayDay = isSameDay(d, today);
-    const isPast = d < todayMidnight;
-
-    // 확정 상태 체크 (auto+confirmed=확정, pending만 미확정)
-    let cfCount = 0;
-    let scheduledCount = 0;
     empKeys.forEach(empId => {
-      if(sched[empId] && sched[empId].start){
-        scheduledCount++;
-        if(getShiftStatus(dk, empId)==='confirmed') cfCount++;
-      } else {
+      if(!sched[empId] || !sched[empId].start){
         daysOff[empId] = (daysOff[empId]||0) + 1;
       }
     });
-    const allConfirmed = scheduledCount > 0 && cfCount === scheduledCount;
-    const borderC = scheduledCount > 0 ? (allConfirmed ? C_OK : (cfCount > 0 ? C_OK+'88' : C_DEF)) : '#2E2E52';
-
-    const cell = document.createElement('div');
-    cell.className = 'week-day';
-    cell.style.borderColor = borderC;
-    if(allConfirmed) cell.style.borderWidth = '2px';
-    if(isCurrentDay) cell.style.background = '#2A2A45';
-    if(isPast) cell.style.opacity = '.3';
-
-    const label = document.createElement('div');
-    label.className = 'day-label';
-    if(isTodayDay){
-      label.textContent = '오늘';
-      label.style.color = C_OK;
-      label.style.fontWeight = '700';
-    } else {
-      label.textContent = DOW_KR_SHORT[dow];
-    }
-    cell.appendChild(label);
-
-    const dateNum = document.createElement('div');
-    dateNum.className = 'day-date';
-    if(dow === 0 || isKrHoliday(d)) dateNum.classList.add('sun');
-    if(dow === 6 && !isKrHoliday(d)) dateNum.classList.add('sat');
-    dateNum.textContent = d.getDate();
-    cell.appendChild(dateNum);
-
-    // 인원수 + 확정 비율
-    if(scheduledCount > 0){
-      const cnt = document.createElement('div');
-      cnt.className = 'day-count';
-      cnt.style.color = allConfirmed ? C_OK : C_DEF;
-      cnt.textContent = scheduledCount+'명';
-      cell.appendChild(cnt);
-    }
-
-    cell.addEventListener('click', ()=>{
-      currentDate = new Date(d);
-      onDateChange();
-    });
-
-    $weekGrid.appendChild(cell);
   }
 
-  // Days off summary
   $weekOffs.innerHTML = '';
   empKeys.forEach(empId => {
     const emp = employees[empId];
@@ -4273,13 +4210,13 @@ $('nextDay1').addEventListener('click', ()=>{
   currentDate.setDate(currentDate.getDate()+1);
   onDateChange();
 });
-// 3일 이동
+// 1주 이동
 $('prevDay').addEventListener('click', ()=>{
-  currentDate.setDate(currentDate.getDate()-3);
+  currentDate.setDate(currentDate.getDate()-7);
   onDateChange();
 });
 $('nextDay').addEventListener('click', ()=>{
-  currentDate.setDate(currentDate.getDate()+3);
+  currentDate.setDate(currentDate.getDate()+7);
   onDateChange();
 });
 // 날짜 터치 → 30일 리스트 피커
