@@ -5644,7 +5644,8 @@ function buildIcsForEmployee(empId, events, trackHistory){
   const prevDates = trackHistory ? JSON.parse(localStorage.getItem(prevKey)||'[]') : [];
   const curDates = events.map(ev=>ev.date);
 
-  let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
+  let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n'
+    + 'BEGIN:VTIMEZONE\r\nTZID:Asia/Seoul\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900\r\nTZNAME:KST\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n';
   events.forEach(ev=>{
     const [y,mo,dd] = ev.date.split('-');
     const [sh,sm] = ev.start.split(':').map(Number);
@@ -6224,7 +6225,8 @@ document.querySelectorAll('.ai-quick').forEach(btn => {
 // .ics Calendar Generation (iPhone + Galaxy compatible)
 // ============================================================
 function generateICS(events, filename){
-  let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n';
+  let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//WorkSchedule//KR\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n'
+    + 'BEGIN:VTIMEZONE\r\nTZID:Asia/Seoul\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0900\r\nTZOFFSETTO:+0900\r\nTZNAME:KST\r\nEND:STANDARD\r\nEND:VTIMEZONE\r\n';
   events.forEach(ev => {
     const [y,mo,d] = ev.date.split('-');
     const [sh,sm] = ev.start.split(':').map(Number);
