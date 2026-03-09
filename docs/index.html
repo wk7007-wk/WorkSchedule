@@ -2268,39 +2268,70 @@ function renderBriefing(){
   ];
   const _pk = getActivePresetKey();
 
+  // 공백구간 감지: 전 역할 인원 0인 시간대
+  const gapSet = new Set();
+  hmHours.forEach(h => {
+    const s = staffing[pad(h)+':00'];
+    if(!s || s.total === 0) gapSet.add(h);
+  });
+  // 연속 공백 구간 그룹화
+  const gaugeSegments = []; // {type:'gap'|'work', hours:[...]}
+  hmHours.forEach(h => {
+    const isGap = gapSet.has(h);
+    const last = gaugeSegments[gaugeSegments.length-1];
+    if(last && last.type === (isGap?'gap':'work')){
+      last.hours.push(h);
+    } else {
+      gaugeSegments.push({type: isGap?'gap':'work', hours:[h]});
+    }
+  });
+
   gaugeRows.forEach(row => {
     html += '<div style="display:flex;align-items:center;gap:2px;margin-bottom:1px;">';
     html += '<span style="font-size:.6rem;font-weight:700;color:'+row.color+';min-width:32px;">'+row.label+'</span>';
     html += '<div style="flex:1;display:flex;gap:1px;height:26px;">';
-    hmHours.forEach(h => {
-      const hStr = pad(h)+':00';
-      const s = staffing[hStr];
-      const val = s ? row.getVal(s) : 0;
-      const lim = getRoleLimits(h)[row.roleKey];
-      const isBikeDA = row.key==='bikeDel' && val===0 && s && s.daAvail;
-      const hasOverride = false; // 규칙 변경은 절대치 — 커스텀 표시 불필요
-      let bg = '#1A1A30', tc = '#707088', txt = '';
-      if(isBikeDA){
-        bg = '#E67E2230'; tc = '#E67E22'; txt = '대';
-      } else if(val > 0){
-        if(val > lim.max){ bg = C_OFF; tc = '#fff'; }
-        else if(val < lim.min){ bg = C_OFF+'55'; tc = C_OFF; }
-        else { bg = '#3498DB40'; tc = '#E0E0EC'; }
-        txt = val%1===0 ? val : val.toFixed(1);
-      } else if(lim.min > 0){
-        bg = C_OFF+'22'; tc = C_OFF; txt = '!';
+    gaugeSegments.forEach(seg => {
+      if(seg.type === 'gap'){
+        // 공백구간 축소
+        html += '<div style="flex:0.3;background:#0D0D1A;display:flex;align-items:center;justify-content:center;border-radius:2px;opacity:.5;">';
+        html += '</div>';
+      } else {
+        seg.hours.forEach(h => {
+          const hStr = pad(h)+':00';
+          const s = staffing[hStr];
+          const val = s ? row.getVal(s) : 0;
+          const lim = getRoleLimits(h)[row.roleKey];
+          const isBikeDA = row.key==='bikeDel' && val===0 && s && s.daAvail;
+          let bg = '#1A1A30', tc = '#707088', txt = '';
+          if(isBikeDA){
+            bg = '#E67E2230'; tc = '#E67E22'; txt = '대';
+          } else if(val > 0){
+            if(val > lim.max){ bg = C_OFF; tc = '#fff'; }
+            else if(val < lim.min){ bg = C_OFF+'55'; tc = C_OFF; }
+            else { bg = '#3498DB40'; tc = '#E0E0EC'; }
+            txt = val%1===0 ? val : val.toFixed(1);
+          } else if(lim.min > 0){
+            bg = C_OFF+'22'; tc = C_OFF; txt = '!';
+          }
+          html += '<div data-gauge-hour="'+h+'" style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:'+tc+';font-weight:700;border-radius:2px;cursor:pointer;">';
+          html += txt;
+          html += '</div>';
+        });
       }
-      html += '<div data-gauge-hour="'+h+'" style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:'+tc+';font-weight:700;border-radius:2px;cursor:pointer;'+(hasOverride?'border-bottom:2px solid #FFD700;':'')+'">';
-      html += txt;
-      html += '</div>';
     });
     html += '</div></div>';
   });
-  // 시간 레이블
+  // 시간 레이블 (공백구간 축소 + "공백" 표기)
   html += '<div style="display:flex;align-items:center;gap:2px;">';
   html += '<span style="min-width:32px;"></span>';
   html += '<div style="flex:1;display:flex;gap:1px;">';
-  hmHours.forEach(h => { html += '<div style="flex:1;text-align:center;font-size:.5rem;color:#707088;">'+h+'</div>'; });
+  gaugeSegments.forEach(seg => {
+    if(seg.type === 'gap'){
+      html += '<div style="flex:0.3;text-align:center;font-size:.45rem;color:#404058;font-style:italic;">공백</div>';
+    } else {
+      seg.hours.forEach(h => { html += '<div style="flex:1;text-align:center;font-size:.5rem;color:#707088;">'+h+'</div>'; });
+    }
+  });
   html += '</div></div>';
 
   panel.innerHTML = html;
@@ -2514,6 +2545,17 @@ function renderTimeline(){
   const checkHours = ALL_HOURS;
   const totalSlots = checkHours.length;
 
+  // 커버리지 공백구간 감지
+  const _cvGap = new Set();
+  checkHours.forEach(h => { const s = staffing[pad(h)+':00']; if(!s || s.total===0) _cvGap.add(h); });
+  const _cvSegs = [];
+  checkHours.forEach(h => {
+    const isGap = _cvGap.has(h);
+    const last = _cvSegs[_cvSegs.length-1];
+    if(last && last.type===(isGap?'gap':'work')) last.hours.push(h);
+    else _cvSegs.push({type:isGap?'gap':'work', hours:[h]});
+  });
+
   let html = '<div style="font-size:.7rem;color:#FFD700;font-weight:600;margin-bottom:6px;">역할별 커버리지</div>';
 
   // === 역할별 수평 바 ===
@@ -2528,26 +2570,32 @@ function renderTimeline(){
     html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:1px;">';
     html += '<span style="font-size:.6rem;font-weight:700;color:'+role.color+';min-width:38px;">'+role.label+'</span>';
     html += '<div style="flex:1;display:flex;gap:1px;height:16px;">';
-    checkHours.forEach(h => {
-      const hStr = pad(h)+':00';
-      const s = staffing[hStr];
-      const val = s ? role.getVal(s) : 0;
-      const lim = role.getLimits(h);
-      const isBikeDA = role.key==='bikeDel' && val===0 && s && s.daAvail;
-      let bg = '#1A1A30', textColor = '#707088', txt = '';
-      if(isBikeDA){
-        bg = '#E67E2230'; textColor = '#E67E22'; txt = '대';
-      } else if(val > 0){
-        if(val > lim.max){ bg = C_OFF; textColor = '#fff'; }
-        else if(val < lim.min){ bg = C_OFF+'55'; textColor = C_OFF; }
-        else { bg = '#3498DB40'; textColor = '#E0E0EC'; }
-        txt = val%1===0 ? val : val.toFixed(1);
-      } else if(lim.min > 0){
-        bg = C_OFF+'22'; textColor = C_OFF; txt = '!';
+    _cvSegs.forEach(seg => {
+      if(seg.type==='gap'){
+        html += '<div style="flex:0.3;background:#0D0D1A;border-radius:1px;"></div>';
+      } else {
+        seg.hours.forEach(h => {
+          const hStr = pad(h)+':00';
+          const s = staffing[hStr];
+          const val = s ? role.getVal(s) : 0;
+          const lim = role.getLimits(h);
+          const isBikeDA = role.key==='bikeDel' && val===0 && s && s.daAvail;
+          let bg = '#1A1A30', textColor = '#707088', txt = '';
+          if(isBikeDA){
+            bg = '#E67E2230'; textColor = '#E67E22'; txt = '대';
+          } else if(val > 0){
+            if(val > lim.max){ bg = C_OFF; textColor = '#fff'; }
+            else if(val < lim.min){ bg = C_OFF+'55'; textColor = C_OFF; }
+            else { bg = '#3498DB40'; textColor = '#E0E0EC'; }
+            txt = val%1===0 ? val : val.toFixed(1);
+          } else if(lim.min > 0){
+            bg = C_OFF+'22'; textColor = C_OFF; txt = '!';
+          }
+          html += '<div style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+textColor+';font-weight:700;border-radius:1px;">';
+          html += txt;
+          html += '</div>';
+        });
       }
-      html += '<div style="flex:1;background:'+bg+';display:flex;align-items:center;justify-content:center;font-size:.45rem;color:'+textColor+';font-weight:700;border-radius:1px;">';
-      html += txt;
-      html += '</div>';
     });
     html += '</div></div></div>';
   });
@@ -2557,38 +2605,56 @@ function renderTimeline(){
   html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:1px;">';
   html += '<span style="font-size:.6rem;font-weight:700;color:#E67E22;min-width:38px;">대행</span>';
   html += '<div style="flex:1;display:flex;gap:1px;height:12px;">';
-  checkHours.forEach(h => {
-    const hStr = pad(h)+':00';
-    const s = staffing[hStr];
-    const df = s ? s.daFill : 0;
-    const hasDA = df > 0;
-    html += '<div style="flex:1;background:'+(hasDA?'#E67E2233':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.4rem;color:'+(hasDA?'#E67E22':'#707088')+';font-weight:600;border-radius:1px;">';
-    html += hasDA ? (df % 1 !== 0 ? df.toFixed(1) : df.toString()) : '';
-    html += '</div>';
+  _cvSegs.forEach(seg => {
+    if(seg.type==='gap'){
+      html += '<div style="flex:0.3;background:#0D0D1A;border-radius:1px;"></div>';
+    } else {
+      seg.hours.forEach(h => {
+        const hStr = pad(h)+':00';
+        const s = staffing[hStr];
+        const df = s ? s.daFill : 0;
+        const hasDA = df > 0;
+        html += '<div style="flex:1;background:'+(hasDA?'#E67E2233':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.4rem;color:'+(hasDA?'#E67E22':'#707088')+';font-weight:600;border-radius:1px;">';
+        html += hasDA ? (df % 1 !== 0 ? df.toFixed(1) : df.toString()) : '';
+        html += '</div>';
+      });
+    }
   });
   html += '</div></div></div>';
 
-  // === 시간 레이블 ===
+  // === 시간 레이블 (공백 축소) ===
   html += '<div style="display:flex;align-items:center;gap:4px;">';
   html += '<span style="min-width:38px;"></span>';
   html += '<div style="flex:1;display:flex;gap:1px;">';
-  checkHours.forEach(h => {
-    html += '<div style="flex:1;text-align:center;font-size:.4rem;color:#707088;">'+h+'</div>';
+  _cvSegs.forEach(seg => {
+    if(seg.type==='gap'){
+      html += '<div style="flex:0.3;text-align:center;font-size:.35rem;color:#404058;font-style:italic;">공백</div>';
+    } else {
+      seg.hours.forEach(h => {
+        html += '<div style="flex:1;text-align:center;font-size:.4rem;color:#707088;">'+h+'</div>';
+      });
+    }
   });
   html += '</div></div>';
 
-  // === 합계 인원 행 ===
+  // === 합계 인원 행 (공백 축소) ===
   html += '<div style="display:flex;align-items:center;gap:4px;margin-top:2px;">';
   html += '<span style="font-size:.55rem;color:#9090A8;min-width:38px;">합계</span>';
   html += '<div style="flex:1;display:flex;gap:1px;height:14px;">';
-  checkHours.forEach(h => {
-    const hStr = pad(h)+':00';
-    const s = staffing[hStr];
-    const total = s ? s.total : 0;
-    const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver || s.deliveryUnder);
-    html += '<div style="flex:1;background:'+(anyConflict?'#E74C3C22':'#2ECC7115')+';display:flex;align-items:center;justify-content:center;font-size:.5rem;color:'+(anyConflict?'#E74C3C':'#2ECC71')+';font-weight:700;border-radius:1px;">';
-    html += total > 0 ? total : '';
-    html += '</div>';
+  _cvSegs.forEach(seg => {
+    if(seg.type==='gap'){
+      html += '<div style="flex:0.3;background:#0D0D1A;border-radius:1px;"></div>';
+    } else {
+      seg.hours.forEach(h => {
+        const hStr = pad(h)+':00';
+        const s = staffing[hStr];
+        const total = s ? s.total : 0;
+        const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver || s.deliveryUnder);
+        html += '<div style="flex:1;background:'+(anyConflict?'#E74C3C22':'#2ECC7115')+';display:flex;align-items:center;justify-content:center;font-size:.5rem;color:'+(anyConflict?'#E74C3C':'#2ECC71')+';font-weight:700;border-radius:1px;">';
+        html += total > 0 ? total : '';
+        html += '</div>';
+      });
+    }
   });
   html += '</div></div>';
 
@@ -4837,18 +4903,33 @@ function renderTimebarView(){
     html += '</div>';
   }
 
-  // === 합계 인원 행 (터치→구간설정) ===
+  // === 합계 인원 행 (터치→구간설정, 공백축소) ===
+  const _tbGapSet = new Set();
+  GAUGE_HOURS.forEach(h => { const s = staffing[pad(h)+':00']; if(!s || s.total===0) _tbGapSet.add(h); });
+  const _tbSegs = [];
+  GAUGE_HOURS.forEach(h => {
+    const isGap = _tbGapSet.has(h);
+    const last = _tbSegs[_tbSegs.length-1];
+    if(last && last.type===(isGap?'gap':'work')) last.hours.push(h);
+    else _tbSegs.push({type:isGap?'gap':'work', hours:[h]});
+  });
   html += '<div style="display:flex;align-items:center;padding:3px 6px;margin-top:4px;border-top:1px solid #2E2E52;">';
   html += '<div style="min-width:58px;font-size:.55rem;color:#9090A8;">인원</div>';
   html += '<div style="flex:1;position:relative;height:22px;display:flex;gap:1px;">';
-  GAUGE_HOURS.forEach(h => {
-    const hStr = pad(h)+':00';
-    const s = staffing[hStr];
-    const t = s ? s.total : 0;
-    const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver || s.deliveryUnder);
-    html += '<div data-action="gaugeEdit" data-hour="'+h+'" style="flex:1;background:'+(anyConflict?C_OFF+'22':t>0?'#3498DB15':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:'+(anyConflict?C_OFF:t>0?'#3498DB':'#707088')+';font-weight:700;border-radius:1px;cursor:pointer;">';
-    html += t > 0 ? t : '';
-    html += '</div>';
+  _tbSegs.forEach(seg => {
+    if(seg.type==='gap'){
+      html += '<div style="flex:0.3;background:#0D0D1A;display:flex;align-items:center;justify-content:center;font-size:.4rem;color:#404058;font-style:italic;border-radius:1px;">공백</div>';
+    } else {
+      seg.hours.forEach(h => {
+        const hStr = pad(h)+':00';
+        const s = staffing[hStr];
+        const t = s ? s.total : 0;
+        const anyConflict = s && (s.kitchenOver || s.kitchenUnder || s.carOver || s.bikeOver || s.deliveryUnder);
+        html += '<div data-action="gaugeEdit" data-hour="'+h+'" style="flex:1;background:'+(anyConflict?C_OFF+'22':t>0?'#3498DB15':'#1A1A30')+';display:flex;align-items:center;justify-content:center;font-size:.55rem;color:'+(anyConflict?C_OFF:t>0?'#3498DB':'#707088')+';font-weight:700;border-radius:1px;cursor:pointer;">';
+        html += t > 0 ? t : '';
+        html += '</div>';
+      });
+    }
   });
   html += '</div><div style="min-width:36px;"></div></div>';
 
