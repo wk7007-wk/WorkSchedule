@@ -4955,8 +4955,14 @@ function renderTimebarView(){
     // 바 영역
     html += '<div style="flex:1;position:relative;height:32px;background:#1A1A30;border-radius:4px;overflow:hidden;">';
     if(isToday) html += '<div style="position:absolute;left:'+nowPct+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:2;"></div>';
-    html += '<div style="position:absolute;left:'+left+'%;width:'+width+'%;top:1px;bottom:1px;background:'+barBg+';border-left:3px solid '+borderL+';border-radius:3px;display:flex;align-items:center;padding:0 5px;gap:3px;overflow:hidden;">';
-    html += '<span style="font-size:.65rem;color:#E0E0EC;font-weight:600;white-space:nowrap;">'+w.shift.start.replace(/^0/,'')+'-'+w.shift.end.replace(/^0/,'')+'</span>';
+    const isNarrow = width < 30;
+    html += '<div style="position:absolute;left:'+left+'%;width:'+width+'%;top:1px;bottom:1px;background:'+barBg+';border-left:3px solid '+borderL+';border-radius:3px;"></div>';
+    // 텍스트: 바 좁으면 바 오른쪽에 표시, 넓으면 바 안에 표시
+    const txtLeft = isNarrow ? (left+width+1) : left;
+    const txtW = isNarrow ? (100-left-width-1) : width;
+    html += '<div style="position:absolute;left:'+txtLeft+'%;width:'+txtW+'%;top:1px;bottom:1px;display:flex;align-items:center;padding:0 4px;gap:3px;overflow:hidden;">';
+    const timeStr = w.shift.start.replace(/^0/,'')+'-'+w.shift.end.replace(/^0/,'');
+    html += '<span style="font-size:.65rem;color:#E0E0EC;font-weight:600;white-space:nowrap;">'+timeStr+'</span>';
     if(roles.length) html += '<span style="font-size:.55rem;white-space:nowrap;">'+roles.map(r=>'<span style="color:'+(ROLE_COLORS[r]||'#fff')+';">'+(ROLE_LABELS[r]||r)+'</span>').join(' ')+'</span>';
     html += '<span style="font-size:.55rem;color:#9090A8;">('+w.hours+'h)</span>';
     html += '</div>';
