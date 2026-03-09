@@ -1625,16 +1625,17 @@ function getMonday(d){
 }
 
 // 근무자 배열로 게이지 범위 자동 계산 (최초출근-1h ~ 마지막퇴근+1h)
+// 기준: 03시가 하루 시작
 function calcGaugeRange(working){
-  if(!working || working.length === 0) return {gaugeStart: 12, gaugeHours: 12};
+  if(!working || working.length === 0) return {gaugeStart: 3, gaugeHours: 12};
   let minH = 48, maxH = 0;
   working.forEach(w => {
     let sH = parseInt(w.shift.start.split(':')[0]);
     let eH = parseInt(w.shift.end.split(':')[0]);
     let eM = parseInt(w.shift.end.split(':')[1] || 0);
     if(eM > 0) eH++; // 올림
-    if(sH < 12) sH += 24;
-    if(eH < 12) eH += 24;
+    if(sH < 3) sH += 24;
+    if(eH < 3) eH += 24;
     if(eH <= sH) eH += 24; // 자정 넘김 보정
     if(sH < minH) minH = sH;
     if(eH > maxH) maxH = eH;
@@ -3877,6 +3878,7 @@ const WEEKLY_DAYOFFS = {
   '리': [2],       // 매주 화요일
   '히오': [1],     // 매주 월요일
   '권연옥': [0, 3, 4, 6],  // 매주 일,수,목,토
+  // 박준모+전묘정 커플 — 보통 같은 날 휴무 (수동 등록)
 };
 
 // 특정 기간 휴무
@@ -4481,11 +4483,11 @@ function renderListView(){
     const roles = w.shift.role ? w.shift.role.split(',').filter(Boolean) : [];
     const roleHtml = roles.map(r => '<span style="color:'+(ROLE_COLORS[r]||'#9090A8')+';font-size:.6rem;font-weight:700;">'+(ROLE_LABELS[r]||r)+'</span>').join(' ');
 
-    // 게이지 위치 계산
+    // 게이지 위치 계산 (03시 기준)
     let sH = parseInt(w.shift.start.split(':')[0]), sM = parseInt(w.shift.start.split(':')[1]||0);
     let eH = parseInt(w.shift.end.split(':')[0]), eM = parseInt(w.shift.end.split(':')[1]||0);
-    if(sH < 12) sH += 24;
-    if(eH < 12) eH += 24;
+    if(sH < 3) sH += 24;
+    if(eH < 3) eH += 24;
     const startPct = Math.max(0, ((sH + sM/60) - GAUGE_START) / GAUGE_RANGE * 100);
     const endPct = Math.min(100, ((eH + eM/60) - GAUGE_START) / GAUGE_RANGE * 100);
     const widthPct = Math.max(1, endPct - startPct);
@@ -4700,7 +4702,7 @@ function renderTimebarView(){
   const barStart = _mg.gaugeStart, barHours = _mg.gaugeHours;
   function timeToPct(timeStr){
     let [h,m] = timeStr.split(':').map(Number);
-    if(h < 12) h += 24;
+    if(h < 3) h += 24;
     return Math.max(0, Math.min(100, ((h - barStart) + m/60) / barHours * 100));
   }
 
