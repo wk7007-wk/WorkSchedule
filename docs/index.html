@@ -1861,6 +1861,7 @@ function connectScheduleSSE(gen){
 // Data loading
 // ============================================================
 async function loadData(){
+  console.log('[WS] loadData start');
   const dk = dateKey(currentDate);
 
   // 1) localStorage 즉시 로드 (데이터 유실 방지)
@@ -1960,7 +1961,8 @@ async function loadData(){
 
   $loading.style.display = 'none';
   $tabContent.style.display = '';
-  try { renderAll(); } catch(e) { console.error('renderAll error:', e); }
+  console.log('[WS] renderAll start');
+  try { renderAll(); console.log('[WS] renderAll done'); } catch(e) { console.error('renderAll error:', e); }
   loadWeekSchedules();
   updateConfirmBtn();
 }
@@ -2132,17 +2134,20 @@ function updateDateDisplay(){
 // Render all
 // ============================================================
 function renderAll(){
-  try {
-    updateDateDisplay();
-    renderRevenueBar();
-    renderBriefing();
-    renderCurrentTab();
-    renderDateStrip();
-    renderWeek();
-    checkLogistics();
-    buildCalButtons();
-    buildKakaoPerEmp();
-  } catch(e) { console.error('renderAll error:', e); }
+  const steps = [
+    ['updateDateDisplay', updateDateDisplay],
+    ['renderRevenueBar', renderRevenueBar],
+    ['renderBriefing', renderBriefing],
+    ['renderCurrentTab', renderCurrentTab],
+    ['renderDateStrip', renderDateStrip],
+    ['renderWeek', renderWeek],
+    ['checkLogistics', checkLogistics],
+    ['buildCalButtons', buildCalButtons],
+    ['buildKakaoPerEmp', buildKakaoPerEmp],
+  ];
+  for(const [name, fn] of steps){
+    try { fn(); } catch(e) { console.error('[WS] '+name+' error:', e); document.title='ERR:'+name; return; }
+  }
 }
 
 // ============================================================
