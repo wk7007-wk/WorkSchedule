@@ -690,7 +690,9 @@ select.form-input{
 .date-strip{
   display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:4px 6px;
   background:#1A1A30;border-bottom:1px solid #2E2E52;
+  max-height:120px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
 }
+.date-strip::-webkit-scrollbar{display:none;}
 .date-strip-hdr{font-size:.5rem;color:#707088;text-align:center;padding:1px 0;font-weight:600;}
 .date-strip-item{
   padding:4px 2px;border-radius:6px;
@@ -2935,14 +2937,14 @@ function renderDateStrip(){
   const empKeys = Object.keys(employees);
   const selectedDk = dateKey(currentDate);
 
-  // 2주: 이번주 월~일 + 다음주 월~일
+  // 4주: 이번주 포함 4주
   const monday = getMonday(currentDate);
   let html = '';
-  // 요일 헤더
+  // 요일 헤더 (sticky)
   ['월','화','수','목','금','토','일'].forEach(d => {
-    html += '<div class="date-strip-hdr">'+d+'</div>';
+    html += '<div class="date-strip-hdr" style="position:sticky;top:0;background:#1A1A30;z-index:1;">'+d+'</div>';
   });
-  for(let i=0; i<14; i++){
+  for(let i=0; i<28; i++){
     const d = new Date(monday);
     d.setDate(d.getDate()+i);
     const dk = dateKey(d);
@@ -2974,6 +2976,7 @@ function renderDateStrip(){
     const selStyle = isSelected ? 'background:#2A2A45;border-width:2px;border-color:'+borderColor+';' : 'border-color:'+borderColor+';';
 
     html += '<div class="'+cls+'" data-dk="'+dk+'" style="'+selStyle+'">';
+    if(isToday) html += '<div style="font-size:.4rem;color:#2ECC71;font-weight:700;line-height:1;">오늘</div>';
     html += '<div class="ds-date'+dowCls+'">'+d.getDate()+'</div>';
     if(assignedCount > 0){
       html += '<div class="ds-count" style="color:'+(confirmedCount===assignedCount?C_OK:C_DEF)+';">'+assignedCount+'명</div>';
@@ -2989,6 +2992,9 @@ function renderDateStrip(){
       onDateChange();
     });
   });
+  // 선택된 날짜가 보이도록 스크롤
+  const selEl = con.querySelector('.date-strip-item[data-dk="'+selectedDk+'"]');
+  if(selEl) setTimeout(()=> selEl.scrollIntoView({block:'center',behavior:'auto'}), 10);
 }
 
 // ============================================================
