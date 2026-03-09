@@ -1900,7 +1900,7 @@ async function loadData(){
     dataLoaded = true;
     $loading.style.display = 'none';
     $tabContent.style.display = '';
-    renderAll();
+    try { renderAll(); } catch(e) { var el=document.getElementById('errOverlay');if(el){el.style.display='block';el.innerHTML+='<div>renderAll1:'+e.message+'</div>';} }
   } else {
     $loading.style.display = 'flex';
     $tabContent.style.display = 'none';
@@ -1973,8 +1973,7 @@ async function loadData(){
 
   $loading.style.display = 'none';
   $tabContent.style.display = '';
-  console.log('[WS] renderAll start');
-  try { renderAll(); console.log('[WS] renderAll done'); } catch(e) { console.error('renderAll error:', e); }
+  try { renderAll(); } catch(e) { var el=document.getElementById('errOverlay');if(el){el.style.display='block';el.innerHTML+='<div>renderAll2:'+e.message+'</div>';} }
   loadWeekSchedules();
   updateConfirmBtn();
 }
@@ -2158,7 +2157,7 @@ function renderAll(){
     ['buildKakaoPerEmp', buildKakaoPerEmp],
   ];
   for(const [name, fn] of steps){
-    try { fn(); } catch(e) { console.error('[WS] '+name+' error:', e); document.title='ERR:'+name; return; }
+    try { fn(); } catch(e) { var el=document.getElementById('errOverlay');if(el){el.style.display='block';el.innerHTML+='<div><b>'+name+':</b> '+e.message+'</div>';} }
   }
 }
 
