@@ -3664,10 +3664,11 @@ $('shiftDayoff').addEventListener('click', ()=>{
     if(fix && fix.type==='fixed' && fix.start){
       daySchedule[shiftSelectedEmpId] = {start:fix.start, end:fix.end, role:fix.role};
       fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId, daySchedule[shiftSelectedEmpId]);
+      setShiftStatus(dk, shiftSelectedEmpId, 'confirmed');
     }
     lsSaveSchedule(dk, daySchedule);
     closeModal($shiftModal);
-    showToast('휴무 해제');
+    showToast('휴무 해제 + 확정');
   } else {
     // 휴무 지정
     if(!dayoffs[shiftSelectedEmpId]) dayoffs[shiftSelectedEmpId] = {};
@@ -4689,9 +4690,10 @@ function toggleDayOffFromList(empId){
     if(fix && fix.type==='fixed' && fix.start){
       daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role};
       fbPut(FB_SCHEDULES+'/'+dk+'/'+empId, daySchedule[empId]);
+      setShiftStatus(dk, empId, 'confirmed');
     }
     lsSaveSchedule(dk, daySchedule);
-    showToast('휴무 해제');
+    showToast('휴무 해제 + 확정');
   } else {
     // 휴무 지정
     dayoffs[empId][dk] = true;
