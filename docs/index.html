@@ -5518,9 +5518,21 @@ function showSharePreview(imgBase64){
     const title = document.createElement('div');
     title.style.cssText = 'color:#E0E0EC;font-size:15px;font-weight:700;margin-bottom:10px;';
     title.textContent = '공유 미리보기';
+    const imgWrap = document.createElement('div');
+    imgWrap.style.cssText = 'width:100%;max-height:78vh;overflow:auto;-webkit-overflow-scrolling:touch;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);';
     const img = document.createElement('img');
     img.src = imgBase64;
-    img.style.cssText = 'width:100%;max-height:78vh;object-fit:contain;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.6);';
+    let zoomed = false;
+    img.style.cssText = 'width:100%;display:block;transition:width .2s;';
+    img.addEventListener('click', e=>{
+      e.stopPropagation();
+      zoomed = !zoomed;
+      img.style.width = zoomed ? '200%' : '100%';
+    });
+    imgWrap.appendChild(img);
+    const hint = document.createElement('div');
+    hint.style.cssText = 'color:#9090A8;font-size:11px;margin-top:4px;text-align:center;';
+    hint.textContent = '이미지 터치로 확대/축소';
     const btnRow = document.createElement('div');
     btnRow.style.cssText = 'display:flex;gap:12px;margin-top:14px;';
     const btnSend = document.createElement('button');
@@ -5530,7 +5542,7 @@ function showSharePreview(imgBase64){
     btnCancel.textContent = '취소';
     btnCancel.style.cssText = 'padding:10px 32px;border:1px solid rgba(255,255,255,.2);border-radius:8px;font-size:14px;font-weight:600;color:#9090A8;background:rgba(255,255,255,.05);cursor:pointer;';
     btnRow.append(btnCancel, btnSend);
-    overlay.append(title, img, btnRow);
+    overlay.append(title, imgWrap, hint, btnRow);
     document.body.appendChild(overlay);
     const close = ok=>{ document.body.removeChild(overlay); resolve(ok); };
     btnSend.onclick = ()=> close(true);
