@@ -5407,8 +5407,11 @@ $('shareTextBtn').addEventListener('click', ()=>{
   let text = '근무표 '+m+'/'+d+' ('+dow+')\n';
   text += '─────────────\n';
   let hasShift = false;
+  const dk = dateKey(currentDate);
   empKeys.forEach(empId => {
     const emp = employees[empId];
+    if(emp.name === '이원규') return; // 사장 제외
+    if(isDayOff(empId, dk)) return; // 휴무 제외
     const shift = daySchedule[empId];
     if(shift && shift.start){
       text += emp.name+': '+shift.start+'~'+shift.end;
