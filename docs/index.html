@@ -690,14 +690,14 @@ select.form-input{
 .date-strip{
   display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:4px 6px;
   background:#1A1A30;border-bottom:1px solid #2E2E52;
-  max-height:130px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
+  max-height:150px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;
 }
 .date-strip::-webkit-scrollbar{display:none;}
 .date-strip-hdr{font-size:.5rem;color:#707088;text-align:center;padding:1px 0;font-weight:600;}
 .date-strip-item{
-  padding:4px 2px;border-radius:6px;
+  padding:8px 2px;border-radius:8px;min-height:44px;
   text-align:center;cursor:pointer;border:1.5px solid #2E2E52;
-  transition:background .1s,border-color .15s;
+  transition:background .15s,border-color .15s,box-shadow .15s;
 }
 .date-strip-item:active{background:#2A2A45;}
 .date-strip-item .ds-date{font-size:.9rem;font-weight:800;color:#E0E0EC;line-height:1.2;}
@@ -706,6 +706,15 @@ select.form-input{
 .date-strip-item .ds-count{font-size:.5rem;color:#707088;line-height:1;margin-top:1px;}
 .date-strip-item.ds-past{opacity:.3;}
 .date-strip-item.ds-today .ds-date{color:#2ECC71;}
+.date-strip-item.ds-selected{
+  background:#7C6FE0;border-color:#9B8FFF;border-width:2px;
+  position:relative;z-index:2;
+  box-shadow:0 0 0 2px rgba(155,143,255,0.4),0 0 12px rgba(124,111,224,0.5);
+}
+.date-strip-item.ds-selected .ds-date{color:#FFFFFF !important;font-weight:900;}
+.date-strip-item.ds-selected .ds-count{color:rgba(255,255,255,0.85);}
+.date-strip-item.ds-selected.ds-today .ds-date{color:#FFFFFF !important;}
+.date-strip-item.ds-past.ds-selected{opacity:1;}
 
 /* ===== Date Picker Dropdown ===== */
 .date-picker-overlay{
@@ -2968,8 +2977,8 @@ function renderDateStrip(){
     }
 
     const dowCls = (dow===0 || isKrHoliday(d)) ? ' sun' : dow===6 ? ' sat' : '';
-    const cls = 'date-strip-item'+(isPast?' ds-past':'')+(isToday?' ds-today':'');
-    const selStyle = isSelected ? 'background:#2A2A45;border-width:2px;border-color:'+borderColor+';' : 'border-color:'+borderColor+';';
+    const cls = 'date-strip-item'+(isPast?' ds-past':'')+(isToday?' ds-today':'')+(isSelected?' ds-selected':'');
+    const selStyle = isSelected ? '' : 'border-color:'+borderColor+';';
 
     html += '<div class="'+cls+'" data-dk="'+dk+'" style="'+selStyle+'">';
     if(isToday) html += '<div style="font-size:.4rem;color:#2ECC71;font-weight:700;line-height:1;">오늘</div>';
