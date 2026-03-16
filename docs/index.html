@@ -1643,6 +1643,53 @@ function getMonday(d){
   return dt;
 }
 
+// 예정 vs 실제 출퇴근 통합 조회
+function getEffectiveShift(empId, dk) {
+  const sched = daySchedule[empId];
+  const att = dayAttendance[empId];
+  const result = { start: null, end: null, role: '', isActual: false, attData: att, schedData: sched };
+  if (sched) {
+    result.start = sched.start;
+    result.end = sched.end;
+    result.role = sched.role || '';
+  }
+  if (att) {
+    const trustSources = ['owner', 'staff', 'manual', 'fallback+pair', 'bulk'];
+    const startTrust = trustSources.includes(att.actual_start_source);
+    const endTrust = trustSources.includes(att.actual_end_source);
+    if (att.actual_start && startTrust) {
+      result.start = att.actual_start;
+      result.isActual = true;
+    }
+    if (att.actual_end && endTrust) {
+      result.end = att.actual_end;
+      result.isActual = true;
+    }
+  }
+  return result;
+}
+
+// 출퇴근 source → 바 색상
+function attSrcColor(source) {
+  switch(source) {
+    case 'owner': return '#2ECC71';
+    case 'staff': return '#3498DB';
+    case 'manual': return '#3498DB';
+    case 'fallback+pair': return '#3498DB';
+    case 'gemini': return '#888888';
+    case 'fallback': return '#E67E22';
+    case 'bulk': return '#2ECC71';
+    default: return '#888888';
+  }
+}
+
+// 시간 문자열 → 분 변환 (오차 계산용)
+function parseTimeMin(timeStr) {
+  if (!timeStr) return null;
+  const parts = timeStr.split(':');
+  return parseInt(parts[0]) * 60 + parseInt(parts[1] || 0);
+}
+
 // 근무자 배열로 게이지 범위 자동 계산 (최초출근-1h ~ 마지막퇴근+1h)
 // 기준: 03시가 하루 시작
 function calcGaugeRange(working){
@@ -1659,6 +1706,23 @@ function calcGaugeRange(working){
     if(sH < minH) minH = sH;
     if(eH > maxH) maxH = eH;
   });
+  // dayAttendance 실제 시간도 범위에 포함
+  if (dayAttendance) {
+    Object.values(dayAttendance).forEach(att => {
+      if (att.actual_start) {
+        let h = parseInt(att.actual_start.split(':')[0]);
+        if (h < DAY_START_HOUR) h += 24;
+        if (h < minH) minH = h;
+      }
+      if (att.actual_end) {
+        let h = parseInt(att.actual_end.split(':')[0]);
+        let m2 = parseInt(att.actual_end.split(':')[1] || 0);
+        if (m2 > 0) h++;
+        if (h < DAY_START_HOUR) h += 24;
+        if (h > maxH) maxH = h;
+      }
+    });
+  }
   const gaugeStart = minH - 1;
   const gaugeEnd = maxH + 1;
   let gaugeHours = gaugeEnd - gaugeStart;
@@ -2106,17 +2170,22 @@ async function onDateChange(){
   if(myId !== _dateChangeId) return;
   // Firebase 동기화 (출퇴근 데이터 병렬 로드)
   try{
-    const [schedData, fbShiftSt, fbConfirmed, fbAttendance] = await Promise.all([
+    const [schedData, fbShiftSt, fbConfirmed, fbAttendance, fbRevenue] = await Promise.all([
       fbGet(FB_SCHEDULES+'/'+dk),
       fbGet(FB_WS+'/shift_status/'+dk),
       fbGet(FB_WS+'/confirmed/'+dk),
-      fbGet(FB_BASE+'/packhelper/storebot_attendance/'+dk)
+      fbGet(FB_BASE+'/packhelper/storebot_attendance/'+dk),
+      fbGet(FB_WS+'/daily_revenue/'+dk)
     ]);
     if(myId !== _dateChangeId) return;
     if(schedData){
       const merged = Object.assign({}, schedData, localSched || {});
       daySchedule = merged;
       lsSaveSchedule(dk, merged);
+    }
+    // daily_revenue Firebase 동기화
+    if(fbRevenue !== undefined && fbRevenue !== null){
+      dailyRevenueMap[dk] = fbRevenue;
     }
     // shift_status Firebase 병합
     if(fbShiftSt){
@@ -4469,17 +4538,12 @@ function buildAttendanceRow(empId, shift){
   if(!att){
     return '<div style="padding:1px 0 0 42px;font-size:.55rem;color:#707088;">실제 <span class="src-warning" style="font-weight:600;">미기록</span></div>';
   }
-  const aStart = att.actual_start || '-';
-  const aEnd = att.actual_end || '-';
+  // source 배지만 표시 (실제 시간은 타임바에 2레이어로 표시됨)
   const sSrc = att.actual_start_source || '';
   const eSrc = att.actual_end_source || '';
-  // 주요 source (둘 다 같으면 하나만, 다르면 둘 다)
   const srcSet = new Set(); if(sSrc) srcSet.add(sSrc); if(eSrc) srcSet.add(eSrc);
   let srcBadges = ''; srcSet.forEach(s => { srcBadges += ' '+attSrcBadge(s); });
-  // 시간 차이 경고
-  const startWarn = attTimeDiffWarning(shift.start, att.actual_start);
-  const endWarn = attTimeDiffWarning(shift.end, att.actual_end);
-  return '<div style="padding:1px 0 0 42px;font-size:.55rem;color:#9090A8;">실제 <span style="font-weight:600;">'+aStart+'</span>'+startWarn+' ~ <span style="font-weight:600;">'+aEnd+'</span>'+endWarn+srcBadges+'</div>';
+  return '<div style="padding:1px 0 0 42px;font-size:.55rem;color:#9090A8;">'+srcBadges+'</div>';
 }
 
 // List view renderer — 보정 기반 리스트 (메인 뷰)
@@ -4943,6 +5007,8 @@ function renderTimebarView(){
     const roleColor = ROLE_COLORS[primaryRole] || '#9090A8';
     const isCf = w.status==='confirmed';
     const wOff = weekOffCount[w.id]||0;
+    const att = dayAttendance[w.id];
+    const hasActual = att && att.actual_start;
 
     const left = timeToPct(w.shift.start);
     let right = timeToPct(w.shift.end);
@@ -4950,8 +5016,9 @@ function renderTimebarView(){
     if(width <= 0) width += 100;
     width = Math.min(width, 100 - left);
 
-    const barBg = isCf ? roleColor+'40' : roleColor+'18';
-    const borderL = isCf ? roleColor : roleColor+'88';
+    // 실제 데이터 있으면 예정 바는 항상 dashed, 없으면 기존 로직
+    const barBg = hasActual ? roleColor+'18' : (isCf ? roleColor+'40' : roleColor+'18');
+    const borderL = hasActual ? roleColor+'55' : (isCf ? roleColor : roleColor+'88');
     const rowOpacity = isCf ? '1' : '.6';
 
     html += '<div data-empid="'+w.id+'" style="opacity:'+rowOpacity+';">';
@@ -4964,10 +5031,33 @@ function renderTimebarView(){
     html += '</div>';
     // 바 영역
     html += '<div style="flex:1;position:relative;height:32px;background:#1A1A30;border-radius:4px;overflow:hidden;">';
-    if(isToday) html += '<div style="position:absolute;left:'+nowPct+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:2;"></div>';
+    if(isToday) html += '<div style="position:absolute;left:'+nowPct+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:3;"></div>';
     const isNarrow = width < 30;
-    const barBorder = isCf ? '' : 'border:1px dashed '+roleColor+'66;';
-    html += '<div style="position:absolute;left:'+left+'%;width:'+width+'%;top:1px;bottom:1px;background:'+barBg+';border-left:3px solid '+borderL+';border-radius:3px;'+barBorder+'"></div>';
+    // 예정 바 (Layer 1) — 실제 데이터 있으면 항상 dashed
+    const schedBarBorder = hasActual ? 'border:1.5px dashed '+roleColor+'55;' : (isCf ? '' : 'border:1px dashed '+roleColor+'66;');
+    html += '<div style="position:absolute;left:'+left+'%;width:'+width+'%;top:1px;bottom:1px;background:'+barBg+';border-left:3px solid '+borderL+';border-radius:3px;'+schedBarBorder+'z-index:1;"></div>';
+    // 실제 바 (Layer 2) — dayAttendance 있을 때만
+    if(hasActual) {
+      const actStartPct = timeToPct(att.actual_start);
+      const actEndPct = att.actual_end ? timeToPct(att.actual_end) : actStartPct;
+      const actWidthPct = Math.max(actEndPct - actStartPct, 1);
+      const srcColor = attSrcColor(att.actual_start_source || att.actual_end_source || '');
+      html += '<div style="position:absolute;left:'+actStartPct+'%;width:'+actWidthPct+'%;top:5px;bottom:5px;background:'+srcColor+'40;border-left:3px solid '+srcColor+';border-radius:2px;z-index:2;"></div>';
+      // 오차 배지
+      const schedMin = parseTimeMin(w.shift.start);
+      const actMin = parseTimeMin(att.actual_start);
+      if (schedMin !== null && actMin !== null) {
+        let diff = actMin - schedMin;
+        if (diff > 720) diff -= 1440;
+        if (diff < -720) diff += 1440;
+        const absDiff = Math.abs(diff);
+        if (absDiff >= 10) {
+          const label = diff > 0 ? absDiff + '분늦음' : absDiff + '분일찍';
+          const badgeColor = absDiff >= 180 ? '#FF4444' : absDiff >= 60 ? '#E67E22' : '#888';
+          html += '<span style="position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:.45rem;color:'+badgeColor+';font-weight:700;z-index:3;">'+label+'</span>';
+        }
+      }
+    }
     // 텍스트: 바 좁으면 바 오른쪽에 표시, 넓으면 바 안에 표시
     const txtLeft = isNarrow ? (left+width+1) : left;
     const txtW = isNarrow ? (100-left-width-1) : width;
