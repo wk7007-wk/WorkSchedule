@@ -52,6 +52,8 @@ body{
 .btn-accent:active{background:#27ae60;}
 .btn-danger{background:#E74C3C;color:#fff;border-color:#E74C3C;}
 .btn-danger:active{background:#c0392b;}
+/* Attendance source badges */
+.src-owner{color:#2ECC71;}.src-pair{color:#4FC3F7;}.src-gemini{color:#9090A8;}.src-fallback{color:#E67E22;}.src-warning{color:#E74C3C;}
 .btn-gold{background:transparent;border-color:#FFD700;color:#FFD700;}
 .btn-gold:active{background:#FFD70022;}
 .btn-warning{background:#E67E22;color:#fff;border-color:#E67E22;}
@@ -1527,6 +1529,7 @@ let sseGeneration = 0;
 let monthViewYear, monthViewMonth;
 let dataLoaded = false;
 let confirmedDays = {}; // { 'yyyy-MM-dd': true } — 확정된 날짜
+let dayAttendance = {}; // storebot_attendance for currentDate
 let shiftStatus = {}; // { 'yyyy-MM-dd_empId': 'auto'|'confirmed'|'pending' } — 보정 상태
 
 // 색상 상수 (전역)
@@ -2094,18 +2097,20 @@ async function onDateChange(){
   const localSched = lsLoadSchedule(dk);
   if(localSched) daySchedule = localSched;
   else daySchedule = {};
+  dayAttendance = {}; // 날짜 변경 시 초기화
   // 자동 휴무 생성 + 고정 스케줄 적용
   generateAutoDayoffs();
   autoApplyFixed(dk);
   renderCurrentTab();
   // 연속 호출 시 이전 요청 무시
   if(myId !== _dateChangeId) return;
-  // Firebase 동기화
+  // Firebase 동기화 (출퇴근 데이터 병렬 로드)
   try{
-    const [schedData, fbShiftSt, fbConfirmed] = await Promise.all([
+    const [schedData, fbShiftSt, fbConfirmed, fbAttendance] = await Promise.all([
       fbGet(FB_SCHEDULES+'/'+dk),
       fbGet(FB_WS+'/shift_status/'+dk),
-      fbGet(FB_WS+'/confirmed/'+dk)
+      fbGet(FB_WS+'/confirmed/'+dk),
+      fbGet(FB_BASE+'/packhelper/storebot_attendance/'+dk)
     ]);
     if(myId !== _dateChangeId) return;
     if(schedData){
@@ -2129,6 +2134,8 @@ async function onDateChange(){
       delete confirmedDays[dk];
     }
     lsSaveConfirmed(confirmedDays);
+    // 출퇴근 데이터 저장
+    dayAttendance = fbAttendance || {};
     renderCurrentTab();
   }catch(e){}
   if(myId !== _dateChangeId) return;
@@ -4433,6 +4440,48 @@ function renderCalendarView(){
   });
 }
 
+// 출퇴근 source → 색상/라벨
+const ATT_SRC_MAP = {
+  owner:   {color:'#2ECC71', cls:'src-owner'},
+  'gemini+pair': {color:'#4FC3F7', cls:'src-pair'},
+  gemini:  {color:'#9090A8', cls:'src-gemini'},
+  fallback:{color:'#E67E22', cls:'src-fallback'}
+};
+function attSrcBadge(source){
+  const m = ATT_SRC_MAP[source] || {color:'#707088', cls:''};
+  return '<span style="font-size:.5rem;color:'+m.color+';font-weight:600;padding:1px 3px;border:1px solid '+m.color+'44;border-radius:3px;">'+source+'</span>';
+}
+// 스케줄 시간 대비 실제 시간 차이(분) — ±3시간(180분) 초과 시 경고
+function attTimeDiffWarning(schedTime, actualTime){
+  if(!schedTime || !actualTime) return '';
+  const sParts = schedTime.split(':'), aParts = actualTime.split(':');
+  let sMin = parseInt(sParts[0])*60 + parseInt(sParts[1]||0);
+  let aMin = parseInt(aParts[0])*60 + parseInt(aParts[1]||0);
+  // 자정 넘김 보정
+  if(sMin < DAY_START_HOUR*60) sMin += 24*60;
+  if(aMin < DAY_START_HOUR*60) aMin += 24*60;
+  const diff = Math.abs(aMin - sMin);
+  if(diff > 180) return ' <span class="src-warning" style="font-size:.5rem;font-weight:700;">'+Math.round(diff)+'분차</span>';
+  return '';
+}
+function buildAttendanceRow(empId, shift){
+  const att = dayAttendance[empId];
+  if(!att){
+    return '<div style="padding:1px 0 0 42px;font-size:.55rem;color:#707088;">실제 <span class="src-warning" style="font-weight:600;">미기록</span></div>';
+  }
+  const aStart = att.actual_start || '-';
+  const aEnd = att.actual_end || '-';
+  const sSrc = att.actual_start_source || '';
+  const eSrc = att.actual_end_source || '';
+  // 주요 source (둘 다 같으면 하나만, 다르면 둘 다)
+  const srcSet = new Set(); if(sSrc) srcSet.add(sSrc); if(eSrc) srcSet.add(eSrc);
+  let srcBadges = ''; srcSet.forEach(s => { srcBadges += ' '+attSrcBadge(s); });
+  // 시간 차이 경고
+  const startWarn = attTimeDiffWarning(shift.start, att.actual_start);
+  const endWarn = attTimeDiffWarning(shift.end, att.actual_end);
+  return '<div style="padding:1px 0 0 42px;font-size:.55rem;color:#9090A8;">실제 <span style="font-weight:600;">'+aStart+'</span>'+startWarn+' ~ <span style="font-weight:600;">'+aEnd+'</span>'+endWarn+srcBadges+'</div>';
+}
+
 // List view renderer — 보정 기반 리스트 (메인 뷰)
 function renderListView(){
   const con = $('listContent');
@@ -4595,7 +4644,9 @@ function renderListView(){
     const timeLabel = w.shift.start.replace(/^0/,'')+'-'+w.shift.end.replace(/^0/,'');
 
     const _listBorderC = ROLE_COLORS[roles[0]||'주방'] || stColor;
-    html += '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px;padding:4px 6px;background:'+stBg+';border-left:3px solid '+_listBorderC+';border-radius:6px;cursor:pointer;" data-empid="'+w.id+'">';
+    html += '<div style="margin-bottom:2px;padding:4px 6px;background:'+stBg+';border-left:3px solid '+_listBorderC+';border-radius:6px;cursor:pointer;" data-empid="'+w.id+'">';
+    // Row 1: 이름 + 게이지 + 상태버튼
+    html += '<div style="display:flex;align-items:center;gap:4px;">';
     // 이름 + 주간휴무 + 주간근무시간
     const wOff = weekOffCount[w.id]||0;
     const wHrs = weekTotalHoursMap[w.id]||0;
@@ -4615,6 +4666,9 @@ function renderListView(){
     } else {
       html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;">미</span>';
     }
+    html += '</div>';
+    // Row 2: 실제 출퇴근 시간
+    html += buildAttendanceRow(w.id, w.shift);
     html += '</div>';
   });
 
