@@ -2137,7 +2137,7 @@ async function onDateChange(){
     // 출퇴근 데이터 저장
     dayAttendance = fbAttendance || {};
     renderCurrentTab();
-  }catch(e){}
+  }catch(e){ console.error('[WS] onDateChange Firebase sync error:', e); }
   if(myId !== _dateChangeId) return;
   loadWeekSchedules();
   updateConfirmBtn();
@@ -4954,7 +4954,8 @@ function renderTimebarView(){
     const borderL = isCf ? roleColor : roleColor+'88';
     const rowOpacity = isCf ? '1' : '.6';
 
-    html += '<div data-empid="'+w.id+'" style="display:flex;align-items:center;padding:2px 6px;cursor:pointer;opacity:'+rowOpacity+';">';
+    html += '<div data-empid="'+w.id+'" style="opacity:'+rowOpacity+';">';
+    html += '<div style="display:flex;align-items:center;padding:2px 6px;cursor:pointer;">';
     // 이름 + 주간휴무
     const nameColor = isCf ? roleColor : roleColor+'bb';
     html += '<div style="min-width:58px;font-size:.85rem;font-weight:700;color:'+nameColor+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">';
@@ -4984,6 +4985,9 @@ function renderTimebarView(){
     } else {
       html += '<span data-action="status" data-sid="'+w.id+'" data-st="confirmed" style="min-width:32px;text-align:center;font-size:.65rem;padding:4px 6px;border-radius:5px;cursor:pointer;background:'+C_DEF+'33;color:'+C_DEF+';font-weight:700;margin-left:3px;border:1px solid '+C_DEF+';">미</span>';
     }
+    html += '</div>';
+    // Row 2: 실제 출퇴근 시간 (timebar)
+    html += buildAttendanceRow(w.id, w.shift);
     html += '</div>';
   });
 

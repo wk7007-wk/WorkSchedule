@@ -331,3 +331,21 @@ buildIcsForEmployee()의 ws_shared_{empId} (L5601)
 sseGeneration 카운터 (L1517, L1763)
   → connectSSE 호출마다 증가. 구버전 핸들러는 gen !== sseGeneration 체크로 자동 종료
   → 이 패턴 제거 시 날짜 이동 후 구버전 SSE가 새 daySchedule 덮어씀
+
+## 충돌 보호 — 출퇴근 데이터 파이프라인 (삭제/변경 금지 — code-guard 크로스체크 대상)
+#
+# 파이프라인: 카톡 → StoreBot → Firebase → WorkSchedule
+#   1. StoreBot server.py save_attendance() → /packhelper/storebot_attendance/{날짜}/{empId}.json
+#   2. WorkSchedule onDateChange() → fbGet(FB_BASE+'/packhelper/storebot_attendance/'+dk)
+#   3. dayAttendance 변수에 저장
+#   4. buildAttendanceRow(empId, shift) → 리스트/타임바 뷰에 표시
+#
+# 크로스체크: 한쪽 변경 시 반드시 양쪽 확인
+#   - StoreBot 경로 변경 → WorkSchedule fbGet 경로도 변경
+#   - WorkSchedule dayAttendance 구조 변경 → buildAttendanceRow 필드 매칭 확인
+#   - Firebase 필드명(actual_start, actual_end, actual_start_source 등) 양쪽 일치 필수
+#
+# 보호 대상:
+#   - WorkSchedule: onDateChange(L2113), dayAttendance(L1532), buildAttendanceRow(L4467)
+#   - StoreBot: save_attendance(server.py), get_attendance(server.py)
+#   - Firebase 경로: /packhelper/storebot_attendance/{날짜}/{empId}
