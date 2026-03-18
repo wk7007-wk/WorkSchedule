@@ -32,7 +32,7 @@
 - 이모지/그림 아이콘 지양 → 색상 텍스트
 
 ## 구조
-- 파일: /root/WorkSchedule/docs/index.html (단일)
+- 파일: /root/WorkSchedule/docs/index.html (HTML 구조) + style.css (CSS) + app.js (JS)
 - Pages: https://wk7007-wk.github.io/WorkSchedule/
 - init_ver: v7 (캐시 초기화 버전)
 - Firebase: /workschedule/ (employees, schedules, dayoffs, confirmed, settings)
