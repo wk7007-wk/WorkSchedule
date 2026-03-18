@@ -3236,9 +3236,9 @@ function openDatePicker(){
   const empKeys = Object.keys(employees);
 
   let html = '<div class="dp-jump">';
-  html += '<button onclick="jumpDate(-7)">◀ 1주</button>';
-  html += '<button onclick="jumpDate(0)">오늘</button>';
-  html += '<button onclick="jumpDate(7)">1주 ▶</button>';
+  html += '<button data-action="jumpDate" data-days="-7">◀ 1주</button>';
+  html += '<button data-action="jumpDate" data-days="0">오늘</button>';
+  html += '<button data-action="jumpDate" data-days="7">1주 ▶</button>';
   html += '</div>';
 
   for(let i=0; i<30; i++){
@@ -3271,13 +3271,20 @@ function openDatePicker(){
   list.innerHTML = html;
   overlay.classList.add('open');
 
-  list.querySelectorAll('.dp-item').forEach(item => {
-    item.addEventListener('click', ()=>{
+  // 이벤트 위임 (날짜 선택 + jumpDate 버튼)
+  list.addEventListener('click', function(e){
+    const jumpBtn = e.target.closest('[data-action="jumpDate"]');
+    if(jumpBtn){
+      jumpDate(parseInt(jumpBtn.dataset.days));
+      return;
+    }
+    const item = e.target.closest('.dp-item');
+    if(item && item.dataset.dk){
       const parts = item.dataset.dk.split('-');
       currentDate = new Date(+parts[0], +parts[1]-1, +parts[2]);
       overlay.classList.remove('open');
       onDateChange();
-    });
+    }
   });
   overlay.addEventListener('click', (e)=>{
     if(e.target === overlay) overlay.classList.remove('open');
@@ -3532,7 +3539,7 @@ function renderListView(){
   html += '</div>';
   html += '<div style="display:flex;gap:4px;align-items:center;">';
   if(unconfirmedCount > 0){
-    html += '<span onclick="confirmAllShifts()" style="font-size:.75rem;padding:5px 12px;border-radius:6px;background:'+C_OK+'44;color:'+C_OK+';cursor:pointer;font-weight:700;border:1px solid '+C_OK+'66;">전체확정</span>';
+    html += '<span data-action="confirmAll" style="font-size:.75rem;padding:5px 12px;border-radius:6px;background:'+C_OK+'44;color:'+C_OK+';cursor:pointer;font-weight:700;border:1px solid '+C_OK+'66;">전체확정</span>';
   } else if(working.length > 0){
     html += '<span style="font-size:.7rem;padding:4px 10px;border-radius:6px;background:'+C_OK+'22;color:'+C_OK+';font-weight:700;">확정됨</span>';
   }
@@ -3646,9 +3653,9 @@ function renderListView(){
     html += '</div>';
     // 상태 버튼
     if(isConfirmed){
-      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'auto\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;">확</span>';
+      html += '<span data-action="status" data-sid="'+w.id+'" data-st="auto" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:'+C_OK+';color:#fff;font-weight:700;">확</span>';
     } else {
-      html += '<span onclick="event.stopPropagation();setShiftStatus(\''+dk+'\',\''+w.id+'\',\'confirmed\')" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;">미</span>';
+      html += '<span data-action="status" data-sid="'+w.id+'" data-st="confirmed" style="font-size:.55rem;padding:2px 5px;border-radius:3px;cursor:pointer;background:#333;color:'+C_DEF+';font-weight:700;">미</span>';
     }
     html += '</div>';
     // Row 2: 실제 출퇴근 시간
@@ -3666,12 +3673,12 @@ function renderListView(){
       html += '<span style="font-size:.85rem;font-weight:800;color:#707088;min-width:44px;">'+e.emp.name+'</span>';
       if(pattern){
         html += '<span style="font-size:.65rem;color:'+C_OK+';">AI '+pattern.start+'~'+pattern.end+'</span>';
-        html += '<span onclick="event.stopPropagation();applyPatternSuggestion(\''+e.id+'\',\''+dk+'\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:'+C_OK+'33;color:'+C_OK+';cursor:pointer;font-weight:700;">확정</span>';
+        html += '<span data-action="applyPattern" data-pid="'+e.id+'" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:'+C_OK+'33;color:'+C_OK+';cursor:pointer;font-weight:700;">확정</span>';
       } else {
         html += '<span style="font-size:.7rem;color:#707088;">미입력</span>';
       }
       html += '<span style="margin-left:auto;display:flex;gap:3px;">';
-      html += '<span onclick="event.stopPropagation();confirmDayOff(\''+e.id+'\')" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:#E74C3C33;color:#E74C3C;cursor:pointer;font-weight:700;">휴확</span>';
+      html += '<span data-action="confirmOff" data-oid="'+e.id+'" style="font-size:.55rem;padding:2px 6px;border-radius:3px;background:#E74C3C33;color:#E74C3C;cursor:pointer;font-weight:700;">휴확</span>';
       html += '</span>';
       html += '</div>';
     });
@@ -3690,7 +3697,7 @@ function renderListView(){
       const oHrsLabel = oHrs > 0 ? '<span style="font-size:.5rem;color:'+oHrsColor+';font-weight:600;">[주'+Math.round(oHrs)+'h]</span>' : '';
       html += '<span style="font-size:.8rem;font-weight:800;color:#E74C3C;">'+o.emp.name+(oOff?'<span style="font-size:.55rem;color:'+C_OFF+';font-weight:600;">('+oOff+')</span>':'')+oHrsLabel+'</span>';
       html += '<span style="font-size:.65rem;color:#E74C3C;">휴무</span>';
-      html += '<span onclick="event.stopPropagation();toggleDayOffFromList(\''+o.id+'\')" style="margin-left:auto;font-size:.55rem;padding:2px 6px;border-radius:3px;background:#333;color:#9090A8;cursor:pointer;font-weight:700;">해제</span>';
+      html += '<span data-action="toggleOff" data-oid="'+o.id+'" style="margin-left:auto;font-size:.55rem;padding:2px 6px;border-radius:3px;background:#333;color:#9090A8;cursor:pointer;font-weight:700;">해제</span>';
       html += '</div>';
     });
     html += '</div>';
@@ -3699,12 +3706,21 @@ function renderListView(){
   html += '</div>';
   con.innerHTML = html;
 
-  // 터치 → 수정창
-  con.querySelectorAll('[data-empid]').forEach(row => {
-    row.addEventListener('click', (e)=>{
-      if(e.target.closest('[onclick]')) return; // 버튼 클릭 무시
-      openShiftModal(row.dataset.empid);
-    });
+  // === 이벤트 위임 (data-action) ===
+  con.addEventListener('click', function(e){
+    const tgt = e.target.closest('[data-action]');
+    if(tgt){
+      e.stopPropagation();
+      const action = tgt.dataset.action;
+      if(action==='confirmAll') confirmAllShifts();
+      else if(action==='status') setShiftStatus(dk, tgt.dataset.sid, tgt.dataset.st);
+      else if(action==='applyPattern') applyPatternSuggestion(tgt.dataset.pid, dk);
+      else if(action==='confirmOff') confirmDayOff(tgt.dataset.oid);
+      else if(action==='toggleOff') toggleDayOffFromList(tgt.dataset.oid);
+      return;
+    }
+    const row = e.target.closest('[data-empid]');
+    if(row) openShiftModal(row.dataset.empid);
   });
 }
 
