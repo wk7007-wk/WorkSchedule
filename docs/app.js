@@ -3761,14 +3761,29 @@ function toggleDayOffFromList(empId){
 function confirmAllShifts(){
   const dk = dateKey(currentDate);
   const fbBatch = {};
+  const fbDayoffBatch = {};
   Object.keys(employees).forEach(id => {
     if(daySchedule[id] && daySchedule[id].start && !isDayOff(id, dk)){
+      // 근무자 확정
       shiftStatus[dk+'_'+id] = 'confirmed';
       recordPattern(id, dk, daySchedule[id]);
       fbBatch[id] = 'confirmed';
+    } else if(!daySchedule[id] || !daySchedule[id].start){
+      // 미입력자 → 휴무 확정 (휴확)
+      if(!isDayOff(id, dk)){
+        if(!dayoffs[id]) dayoffs[id] = {};
+        dayoffs[id][dk] = true;
+        fbDayoffBatch[id+'/'+dk] = true;
+      }
     }
   });
   lsSaveShiftStatus();
+  if(Object.keys(fbDayoffBatch).length > 0){
+    lsSaveDayoffs();
+    Object.entries(fbDayoffBatch).forEach(([path, val]) => {
+      fbPut(FB_DAYOFFS+'/'+path, val);
+    });
+  }
   // Firebase 일괄 동기화
   fbPut(FB_WS+'/shift_status/'+dk, fbBatch);
   // 전원 확정 시 날짜도 확정 처리
