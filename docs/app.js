@@ -34,9 +34,7 @@ const DEFAULT_EMPLOYEES = {
   emp3: {name:'리', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방']},
   emp4: {name:'히오', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방']},
   emp5: {name:'박준모', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방','차배달']},
-  emp6: {name:'전묘정', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방']},
-  emp7: {name:'대유', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방','차배달']},
-  emp8: {name:'김재훈', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방','차배달']}
+  emp9: {name:'사아야', phone:'', role:'', hourlyRate:9860, maxHours:40, capabilities:['주방']}
 };
 
 // ============================================================
@@ -178,9 +176,8 @@ let FIXED_SCHEDULES = {
   '히오':   {start:'17:00', end:'03:00', role:'주방', type:'fixed'},
   '리':     {start:'17:00', end:'03:00', role:'주방', type:'fixed'},
   '박준모': {start:'03:00', end:'11:00', role:'주방,차배달', type:'fixed'},
-  '전묘정': {start:'03:00', end:'11:00', role:'주방', type:'fixed'},
   '권연옥': {start:null, end:null, role:'주방', type:'conditional'},
-  '대유':   {start:null, end:null, role:'', type:'variable'}, // 변칙 — 수동 입력
+  '사아야': {start:'17:00', end:'22:00', role:'주방', type:'conditional'},
 };
 
 function getFixedScheduleForDate(empName, dateObj) {
@@ -189,23 +186,30 @@ function getFixedScheduleForDate(empName, dateObj) {
   const holiday = isWeekendOrHoliday(d);
 
   if(empName === '이원규') return {start:'17:00', end:'03:00', role:'주방,오토바이', type:'fixed'};
-  if(empName === '히오') return {start:'17:00', end:'03:00', role:'주방', type:'fixed'};
-  if(empName === '리') return {start:'17:00', end:'03:00', role:'주방', type:'fixed'};
+  if(empName === '히오') {
+    if(dow === 5 || dow === 6) return {start:'17:00', end:'05:00', role:'주방', type:'fixed'}; // 금토
+    if(dow === 0) return {start:'17:00', end:'02:00', role:'주방', type:'fixed'}; // 일
+    return {start:'17:00', end:'03:00', role:'주방', type:'fixed'};
+  }
+  if(empName === '리') {
+    if(dow === 5 || dow === 6) return {start:'17:00', end:'05:00', role:'주방', type:'fixed'}; // 금토
+    if(dow === 0) return {start:'17:00', end:'02:00', role:'주방', type:'fixed'}; // 일
+    return {start:'17:00', end:'03:00', role:'주방', type:'fixed'};
+  }
   if(empName === '박준모') {
     if(holiday) return {start:'07:00', end:'17:00', role:'주방,차배달', type:'fixed'};
     return {start:'03:00', end:'11:00', role:'주방,차배달', type:'fixed'};
   }
-  if(empName === '전묘정') {
-    if(holiday) return {start:'07:00', end:'17:00', role:'주방', type:'fixed'};
-    return {start:'03:00', end:'11:00', role:'주방', type:'fixed'};
-  }
   if(empName === '권연옥') {
     if(dow === 1) return {start:'17:30', end:'03:00', role:'주방', type:'fixed'}; // 월
-    if(dow === 2) return {start:'12:00', end:'00:00', role:'주방', type:'fixed'}; // 화
+    if(dow === 2) return {start:'15:00', end:'00:00', role:'주방', type:'fixed'}; // 화
     if(dow === 5) return {start:'17:30', end:'03:00', role:'주방', type:'fixed'}; // 금
     return null; // 수목토일 = 휴무
   }
-  if(empName === '대유') return {start:null, end:null, role:'', type:'variable'};
+  if(empName === '사아야') {
+    if(dow >= 1 && dow <= 3) return {start:'17:00', end:'22:00', role:'주방', type:'fixed'}; // 월화수
+    return null; // 목금토일 = 휴무
+  }
   return FIXED_SCHEDULES[empName] || null;
 }
 
@@ -224,12 +228,10 @@ try{
 const EMP_CAPABILITIES = {
   '이원규': ['주방','차배달','오토바이'],
   '박준모': ['주방','차배달'],
-  '대유':   ['주방','차배달'],
-  '전묘정': ['주방'],
   '리':     ['주방'],
   '히오':   ['주방'],
   '권연옥': ['주방'],
-  '김재훈': ['주방','차배달'],
+  '사아야': ['주방'],
 };
 
 // 역할 표시 (색상 텍스트, 이모지 지양)
@@ -1002,23 +1004,44 @@ function autoApplyFixed(dk){
   let changed = false;
   const parts = dk.split('-');
   const dateObj = new Date(+parts[0], +parts[1]-1, +parts[2]);
+  const fixedEmpIds = []; // 고정 적용된 직원들
 
   for(const empName in FIXED_SCHEDULES){
     const fix = getFixedScheduleForDate(empName, dateObj);
-    if(!fix || fix.type === 'variable' || fix.type === 'conditional' && !fix.start || !fix.start) continue;
+    if(!fix || fix.type === 'variable' || (fix.type === 'conditional' && !fix.start) || !fix.start) continue;
     const empId = findEmpIdByName(empName);
     if(!empId) continue;
-    if(daySchedule[empId]) continue;
     if(isDayOff(empId, dk)) continue;
-    daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role};
-    changed = true;
+    if(!daySchedule[empId]){
+      daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role};
+      changed = true;
+    }
+    // 고정근무자 자동 확정 (renderAll 없이 직접 설정)
+    const stKey = dk+'_'+empId;
+    if(shiftStatus[stKey] !== 'confirmed'){
+      shiftStatus[stKey] = 'confirmed';
+      fbPut(FB_WS+'/shift_status/'+dk+'/'+empId, 'confirmed');
+      // AI 학습 패턴 기록
+      const shift = daySchedule[empId];
+      if(shift && shift.start) recordPattern(empId, dk, shift);
+    }
+    fixedEmpIds.push(empId);
   }
   if(changed){
     lsSaveSchedule(dk, daySchedule);
-    // Firebase에도 저장
     for(const empId in daySchedule){
       const s = daySchedule[empId];
       if(s && s.start) fbPut(FB_SCHEDULES+'/'+dk+'/'+empId, s);
+    }
+  }
+  lsSaveShiftStatus();
+  // 고정근무자만 있는 날 → 전체 확정
+  const workingIds = Object.keys(daySchedule).filter(id => daySchedule[id] && daySchedule[id].start && !isDayOff(id, dk));
+  if(workingIds.length > 0 && workingIds.every(id => fixedEmpIds.includes(id))){
+    if(!confirmedDays[dk]){
+      confirmedDays[dk] = true;
+      lsSaveConfirmed(confirmedDays);
+      fbPut(FB_WS+'/confirmed/'+dk, true);
     }
   }
   return changed;
@@ -1271,11 +1294,6 @@ function renderBriefing(){
   if(variableCount > 0) html += '<span style="color:#E67E22;">수동'+variableCount+'</span>';
   if(emptyCount > 0) html += '<span style="color:#E74C3C;font-weight:700;">미입력'+emptyCount+'</span>';
   if(offToday.length > 0) html += '<span style="color:#E74C3C;">휴:'+offToday.join(',')+'</span>';
-  // 대유 경고
-  const daeyuId = findEmpIdByName('대유');
-  if(daeyuId && !isDayOff(daeyuId, dk) && (!daySchedule[daeyuId] || !daySchedule[daeyuId].start)){
-    html += '<span style="color:#F0A500;font-weight:700;">대유미입력</span>';
-  }
   // 날씨
   const wxNow = hourlyWeather[new Date().getHours()];
   if(wxNow){
@@ -2926,7 +2944,8 @@ const WEEKLY_DAYOFFS = {
   '리': [2],       // 매주 화요일
   '히오': [1],     // 매주 월요일
   '권연옥': [0, 3, 4, 6],  // 매주 일,수,목,토
-  // 박준모+전묘정 커플 — 보통 같은 날 휴무 (수동 등록)
+  '박준모': [0],     // 매주 일요일
+  '사아야': [0, 4, 5, 6],  // 매주 일,목,금,토
 };
 
 // 특정 기간 휴무
