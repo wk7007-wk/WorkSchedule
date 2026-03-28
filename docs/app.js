@@ -919,8 +919,10 @@ async function loadData(){
     }
 
     if(schedData){
-      // Firebase 데이터와 로컬 병합 (로컬 우선)
-      const merged = Object.assign({}, schedData, localSched || {});
+      // Firebase 데이터와 로컬 병합 (로컬 우선) — 삭제된 직원 제외
+      const rawMerged = Object.assign({}, schedData, localSched || {});
+      const merged = {};
+      for(const id in rawMerged){ if(DEFAULT_EMPLOYEES[id]) merged[id] = rawMerged[id]; }
       daySchedule = merged;
       lsSaveSchedule(dk, merged);
     }
