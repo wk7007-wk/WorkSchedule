@@ -770,9 +770,12 @@ function connectSSE(){
       try{
         const d = JSON.parse(e.data);
         if(d.path === '/'){
-          employees = d.data || {};
+          const raw = d.data || {};
+          employees = {};
+          for(const id in raw){ if(DEFAULT_EMPLOYEES[id]) employees[id] = raw[id]; }
         } else {
           const key = d.path.replace(/^\//,'');
+          if(!DEFAULT_EMPLOYEES[key]) return; // 삭제된 직원 무시
           if(d.data === null) delete employees[key];
           else employees[key] = d.data;
         }
@@ -902,8 +905,13 @@ async function loadData(){
     ]);
 
     if(empData && Object.keys(empData).length > 0){
-      employees = empData;
-      lsSaveEmployees(empData);
+      // DEFAULT_EMPLOYEES에 있는 직원만 사용 (삭제된 직원 필터)
+      const filtered = {};
+      for(const id in empData){
+        if(DEFAULT_EMPLOYEES[id]) filtered[id] = empData[id];
+      }
+      employees = Object.keys(filtered).length > 0 ? filtered : JSON.parse(JSON.stringify(DEFAULT_EMPLOYEES));
+      lsSaveEmployees(employees);
     } else if(!localEmp || Object.keys(employees).length === 0){
       employees = JSON.parse(JSON.stringify(DEFAULT_EMPLOYEES));
       lsSaveEmployees(employees);
