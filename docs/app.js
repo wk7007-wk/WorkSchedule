@@ -939,10 +939,12 @@ async function loadData(){
 
     // 첫 실행 시 전 데이터 삭제 후 고정값 초기화
     const initVer = localStorage.getItem('ws_init_ver');
-    if(initVer !== 'v9'){
-      // 기존 스케줄 + 휴무 + 구버전 고정스케줄 캐시 전부 클리어
+    if(initVer !== 'v10'){
+      // 직원 변경(전묘정/대유/김재훈 삭제, 사아야 추가) — 캐시 초기화
       localStorage.removeItem('ws_fixed_schedules');
       localStorage.removeItem('ws_dayoffs');
+      localStorage.removeItem('ws_employees');
+      localStorage.removeItem('ws_shift_status');
       for(let i=0; i<localStorage.length; i++){
         const key = localStorage.key(i);
         if(key && key.startsWith('ws_sched_')){
@@ -952,9 +954,10 @@ async function loadData(){
       }
       dayoffs = {};
       daySchedule = {};
+      shiftStatus = {};
       generateAutoDayoffs();
       autoApplyFixed(dk);
-      localStorage.setItem('ws_init_ver', 'v9');
+      localStorage.setItem('ws_init_ver', 'v10');
     }
   } catch(e) { console.error('loadData init error:', e); }
 
