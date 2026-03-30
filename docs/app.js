@@ -1546,11 +1546,27 @@ function renderTimeline(){
         const uniqueReasons = [...new Set(reasons)];
         conflictBadge = '<span style="font-size:.55rem;color:#FF6B6B;font-weight:700;background:#E74C3C33;padding:1px 3px;border-radius:3px;">'+uniqueReasons[0]+'</span>';
       }
+      // 보정값 뱃지 (출근)
+      let attBadge = '';
+      const _att = dayAttendance[empId];
+      const _sch = daySchedule[empId];
+      if(_att && _att.actual_start && shift.start){
+        const _diffVal = (_sch && _sch.diff_start !== undefined) ? _sch.diff_start : (function(){
+          const sp=shift.start.split(':'), ap=_att.actual_start.split(':');
+          let d2=parseInt(ap[0])*60+parseInt(ap[1]||0)-(parseInt(sp[0])*60+parseInt(sp[1]||0));
+          if(d2>720)d2-=1440; else if(d2<-720)d2+=1440; return d2;
+        })();
+        const _dc = _diffVal<0?'#2ECC71':(_diffVal>0?'#E74C3C':'#9090A8');
+        const _dt = _diffVal===0?'정시':(_diffVal>0?'+'+_diffVal+'분':_diffVal+'분');
+        attBadge = '<span style="font-size:.5rem;color:'+_dc+';font-weight:700;">✓'+_att.actual_start+' ('+_dt+')</span>';
+      }
+
       block.innerHTML =
         '<span style="font-size:.75rem;font-weight:700;color:#FFFFFF;text-shadow:0 1px 2px #000;">'+nameLbl+'</span>'+
         '<span style="font-size:.7rem;font-weight:600;color:#FFFFFF;">'+timeText+'</span>'+
         (roleHtml ? '<span style="font-size:.6rem;">'+roleHtml+'</span>' : '')+
         '<span style="font-size:.6rem;color:#FFD700;font-weight:600;">'+hours+'h</span>'+
+        attBadge+
         conflictBadge;
 
       block.addEventListener('click', (e)=>{
@@ -3499,15 +3515,63 @@ function attTimeDiffWarning(schedTime, actualTime){
 }
 function buildAttendanceRow(empId, shift){
   const att = dayAttendance[empId];
-  if(!att){
+  // daySchedule에서도 actual_ 데이터 확인 (workschedule 경로에 저장된 것)
+  const sched = daySchedule[empId];
+  const actualStart = (att && att.actual_start) || (sched && sched.actual_start) || null;
+  const actualEnd = (att && att.actual_end) || (sched && sched.actual_end) || null;
+
+  if(!actualStart && !actualEnd){
     return '<div style="padding:1px 0 0 42px;font-size:.55rem;color:#707088;">실제 <span class="src-warning" style="font-weight:600;">미기록</span></div>';
   }
-  // source 배지만 표시 (실제 시간은 타임바에 2레이어로 표시됨)
-  const sSrc = att.actual_start_source || '';
-  const eSrc = att.actual_end_source || '';
-  const srcSet = new Set(); if(sSrc) srcSet.add(sSrc); if(eSrc) srcSet.add(eSrc);
-  let srcBadges = ''; srcSet.forEach(s => { srcBadges += ' '+attSrcBadge(s); });
-  return '<div style="padding:1px 0 0 42px;font-size:.55rem;color:#9090A8;">'+srcBadges+'</div>';
+
+  // 보정값 계산 함수
+  function calcDiff(schedTime, actualTime){
+    if(!schedTime || !actualTime) return null;
+    const sp = schedTime.split(':'), ap = actualTime.split(':');
+    let sMin = parseInt(sp[0])*60 + parseInt(sp[1]||0);
+    let aMin = parseInt(ap[0])*60 + parseInt(ap[1]||0);
+    let diff = aMin - sMin;
+    if(diff > 720) diff -= 1440;
+    else if(diff < -720) diff += 1440;
+    return diff;
+  }
+
+  function diffBadge(diff){
+    if(diff === null) return '';
+    let color, text;
+    if(diff < 0){ color = '#2ECC71'; text = diff+'분'; }
+    else if(diff > 0){ color = '#E74C3C'; text = '+'+diff+'분'; }
+    else { color = '#9090A8'; text = '정시'; }
+    return ' <span style="color:'+color+';font-weight:700;">('+text+')</span>';
+  }
+
+  let html = '<div style="padding:1px 0 0 42px;font-size:.55rem;color:#9090A8;">';
+
+  // 출근 보정값
+  if(actualStart){
+    const schedStart = shift ? shift.start : null;
+    const startDiff = (sched && sched.diff_start !== undefined) ? sched.diff_start : calcDiff(schedStart, actualStart);
+    html += '<span style="color:#2ECC71;">✓'+actualStart+'</span>'+diffBadge(startDiff);
+  }
+
+  // 퇴근 보정값
+  if(actualEnd){
+    const schedEnd = shift ? shift.end : null;
+    const endDiff = (sched && sched.diff_end !== undefined) ? sched.diff_end : calcDiff(schedEnd, actualEnd);
+    if(actualStart) html += ' ';
+    html += '<span style="color:#3498DB;">→'+actualEnd+'</span>'+diffBadge(endDiff);
+  }
+
+  // source 배지
+  if(att){
+    const sSrc = att.actual_start_source || '';
+    const eSrc = att.actual_end_source || '';
+    const srcSet = new Set(); if(sSrc) srcSet.add(sSrc); if(eSrc) srcSet.add(eSrc);
+    srcSet.forEach(s => { html += ' '+attSrcBadge(s); });
+  }
+
+  html += '</div>';
+  return html;
 }
 
 // List view renderer — 보정 기반 리스트 (메인 뷰)
