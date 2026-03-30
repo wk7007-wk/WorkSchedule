@@ -599,11 +599,13 @@ function attSrcColor(source) {
   switch(source) {
     case 'owner': return '#2ECC71';
     case 'staff': return '#3498DB';
-    case 'manual': return '#3498DB';
-    case 'fallback+pair': return '#3498DB';
-    case 'gemini': return '#888888';
+    case 'staff+pair': return '#4FC3F7';
+    case 'manual': return '#E67E22';
     case 'fallback': return '#E67E22';
-    case 'bulk': return '#2ECC71';
+    case 'fallback+pair': return '#E67E22';
+    case 'gemini': return '#9090A8';
+    case 'gemini+pair': return '#4FC3F7';
+    case 'bulk': return '#9090A8';
     default: return '#888888';
   }
 }
@@ -3491,14 +3493,20 @@ function renderCalendarView(){
 
 // 출퇴근 source → 색상/라벨
 const ATT_SRC_MAP = {
-  owner:   {color:'#2ECC71', cls:'src-owner'},
-  'gemini+pair': {color:'#4FC3F7', cls:'src-pair'},
-  gemini:  {color:'#9090A8', cls:'src-gemini'},
-  fallback:{color:'#E67E22', cls:'src-fallback'}
+  owner:          {color:'#2ECC71', label:'사장'},
+  staff:          {color:'#3498DB', label:'본인'},
+  'staff+pair':   {color:'#4FC3F7', label:'동시출근'},
+  'gemini+pair':  {color:'#4FC3F7', label:'AI+동시'},
+  gemini:         {color:'#9090A8', label:'AI'},
+  manual:         {color:'#E67E22', label:'수동'},
+  fallback:       {color:'#E67E22', label:'자동'},
+  'fallback+pair':{color:'#E67E22', label:'자동+동시'},
+  bulk:           {color:'#9090A8', label:'일괄'}
 };
 function attSrcBadge(source){
-  const m = ATT_SRC_MAP[source] || {color:'#707088', cls:''};
-  return '<span style="font-size:.5rem;color:'+m.color+';font-weight:600;padding:1px 3px;border:1px solid '+m.color+'44;border-radius:3px;">'+source+'</span>';
+  if(!source) return '';
+  const m = ATT_SRC_MAP[source] || {color:'#707088', label:source};
+  return '<span style="font-size:.5rem;color:'+m.color+';font-weight:600;padding:1px 3px;border:1px solid '+m.color+'44;border-radius:3px;">'+m.label+'</span>';
 }
 // 스케줄 시간 대비 실제 시간 차이(분) — ±3시간(180분) 초과 시 경고
 function attTimeDiffWarning(schedTime, actualTime){
