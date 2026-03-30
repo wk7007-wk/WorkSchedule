@@ -175,7 +175,7 @@ function shortName(empName){ return SHORT_NAMES[empName] || empName?.charAt(0) |
 // type: 'fixed'=매일 고정, 'variable'=변칙(수동)
 // 고정 스케줄 기본값 (수정 팝업 "고정으로 저장"으로 변경 가능)
 let FIXED_SCHEDULES = {
-  '이원규': {start:'17:00', end:'03:00', role:'주방,오토바이', type:'fixed'},
+  '이원규': {start:'18:00', end:'06:00', role:'주방,오토바이', type:'fixed'},
   '히오':   {start:'17:00', end:'03:00', role:'주방', type:'fixed'},
   '리':     {start:'17:00', end:'03:00', role:'주방', type:'fixed'},
   '박준모': {start:'03:00', end:'11:00', role:'주방,차배달', type:'fixed'},
@@ -188,7 +188,7 @@ function getFixedScheduleForDate(empName, dateObj) {
   const dow = d.getDay(); // 0=일,1=월,...6=토
   const holiday = isWeekendOrHoliday(d);
 
-  if(empName === '이원규') return {start:'17:00', end:'03:00', role:'주방,오토바이', type:'fixed'};
+  if(empName === '이원규') return {start:'18:00', end:'06:00', role:'주방,오토바이', type:'fixed'};
   if(empName === '히오') {
     if(dow === 5 || dow === 6) return {start:'17:00', end:'05:00', role:'주방', type:'fixed'}; // 금토
     if(dow === 0) return {start:'17:00', end:'02:00', role:'주방', type:'fixed'}; // 일
@@ -204,9 +204,7 @@ function getFixedScheduleForDate(empName, dateObj) {
     return {start:'03:00', end:'11:00', role:'주방,차배달', type:'fixed'};
   }
   if(empName === '권연옥') {
-    if(dow === 1) return {start:'17:30', end:'03:00', role:'주방', type:'fixed'}; // 월
-    if(dow === 2) return {start:'15:00', end:'00:00', role:'주방', type:'fixed'}; // 화
-    if(dow === 5) return {start:'17:30', end:'03:00', role:'주방', type:'fixed'}; // 금
+    if(dow === 1 || dow === 2 || dow === 5) return {start:'17:00', end:'03:00', role:'주방', type:'fixed'}; // 월화금
     return null; // 수목토일 = 휴무
   }
   if(empName === '사아야') {
@@ -953,10 +951,9 @@ async function loadData(){
     generateAutoDayoffs();
     autoApplyFixed(dk);
 
-    // 첫 실행 시 전 데이터 삭제 후 고정값 초기화
+    // 첫 실행 시 localStorage 캐시만 초기화 (Firebase 데이터는 유지)
     const initVer = localStorage.getItem('ws_init_ver');
-    if(initVer !== 'v10'){
-      // 직원 변경(전묘정/대유/김재훈 삭제, 사아야 추가) — 캐시 초기화
+    if(initVer !== 'v11'){
       localStorage.removeItem('ws_fixed_schedules');
       localStorage.removeItem('ws_dayoffs');
       localStorage.removeItem('ws_employees');
@@ -965,15 +962,15 @@ async function loadData(){
         const key = localStorage.key(i);
         if(key && key.startsWith('ws_sched_')){
           localStorage.removeItem(key);
-          i--; // 키 삭제 후 인덱스 조정
+          i--;
         }
       }
       dayoffs = {};
-      daySchedule = {};
       shiftStatus = {};
       generateAutoDayoffs();
+      // daySchedule 초기화하지 않음 — Firebase에서 로드된 데이터 보존
       autoApplyFixed(dk);
-      localStorage.setItem('ws_init_ver', 'v10');
+      localStorage.setItem('ws_init_ver', 'v11');
     }
   } catch(e) { console.error('loadData init error:', e); }
 
@@ -2977,10 +2974,10 @@ async function loadDayoffs(){
 // 매주 반복 휴무 (요일 기반) + 특정 기간 휴무 자동 생성
 // 월=1, 화=2, ..., 일=0
 const WEEKLY_DAYOFFS = {
-  '리': [2],       // 매주 화요일
+  '리': [1],       // 매주 월요일
   '히오': [1],     // 매주 월요일
   '권연옥': [0, 3, 4, 6],  // 매주 일,수,목,토
-  '박준모': [1],     // 매주 월요일
+  '박준모': [0],     // 매주 일요일
   '사아야': [0, 4, 5, 6],  // 매주 일,목,금,토
 };
 
