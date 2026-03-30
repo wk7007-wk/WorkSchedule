@@ -926,10 +926,9 @@ async function loadData(){
     }
 
     if(schedData){
-      // Firebase 데이터와 로컬 병합 (로컬 우선) — 삭제된 직원 제외
-      const rawMerged = Object.assign({}, schedData, localSched || {});
+      // Firebase 우선 — 외부(Claude 등)에서 수정한 값 보존
       const merged = {};
-      for(const id in rawMerged){ if(DEFAULT_EMPLOYEES[id]) merged[id] = rawMerged[id]; }
+      for(const id in schedData){ if(DEFAULT_EMPLOYEES[id]) merged[id] = schedData[id]; }
       daySchedule = merged;
       lsSaveSchedule(dk, merged);
     }
@@ -1033,7 +1032,7 @@ function autoApplyFixed(dk){
     if(!empId) continue;
     if(isDayOff(empId, dk)) continue;
     if(!daySchedule[empId]){
-      daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role};
+      daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role, _new:true};
       changed = true;
     }
     // 고정근무자 자동 확정 (renderAll 없이 직접 설정)
@@ -1049,9 +1048,10 @@ function autoApplyFixed(dk){
   }
   if(changed){
     lsSaveSchedule(dk, daySchedule);
+    // 새로 추가된 직원만 Firebase PUT (기존 데이터 덮어쓰기 방지)
     for(const empId in daySchedule){
       const s = daySchedule[empId];
-      if(s && s.start) fbPut(FB_SCHEDULES+'/'+dk+'/'+empId, s);
+      if(s && s._new){ delete s._new; fbPut(FB_SCHEDULES+'/'+dk+'/'+empId, s); }
     }
   }
   lsSaveShiftStatus();
