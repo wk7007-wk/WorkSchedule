@@ -26,6 +26,11 @@ class MainActivity : AppCompatActivity() {
     private val WEB_URL = "https://wk7007-wk.github.io/WorkSchedule/"
     private val FALLBACK_URL = "file:///android_asset/index.html"
 
+    // 서브폰(서버) 판별: StoreBot 설치 여부로 판단
+    private fun isSubPhone(): Boolean = try {
+        packageManager.getPackageInfo("com.storebot.app", 0); true
+    } catch (_: Exception) { false }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -76,7 +81,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadPage() {
-        webView.loadUrl(WEB_URL)
+        val url = if (isSubPhone()) "${WEB_URL}?readonly=1" else WEB_URL
+        webView.loadUrl(url)
     }
 
     override fun onBackPressed() {

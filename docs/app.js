@@ -10,6 +10,9 @@ const FB_EMPLOYEES = FB_WS + '/employees';
 const FB_SCHEDULES = FB_WS + '/schedules';
 const FB_SETTINGS = FB_WS + '/settings';
 
+// 읽기 전용 모드 — URL 파라미터 ?readonly=1 또는 Firebase 설정으로 활성화
+const READONLY_MODE = new URLSearchParams(location.search).get('readonly') === '1';
+
 // ============================================================
 // 하루 시작 시간 (오픈시간) — 이 값만 바꾸면 게이지·정렬·타임바 전부 연동
 // ============================================================
@@ -695,6 +698,7 @@ async function fbGet(url){
   }catch(e){ console.error('fbGet error',url,e); return null; }
 }
 async function fbPut(url, data){
+  if(READONLY_MODE){ showToast('읽기 전용 모드'); return false; }
   try{
     const r = await fetch(url+'.json',{
       method:'PUT',
@@ -706,6 +710,7 @@ async function fbPut(url, data){
   }catch(e){ console.error('fbPut error',url,e); showToast('저장 실패'); return false; }
 }
 async function fbPatch(url, data){
+  if(READONLY_MODE){ showToast('읽기 전용 모드'); return false; }
   try{
     const r = await fetch(url+'.json',{
       method:'PATCH',
