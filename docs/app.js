@@ -188,7 +188,10 @@ function getFixedScheduleForDate(empName, dateObj) {
   const dow = d.getDay(); // 0=일,1=월,...6=토
   const holiday = isWeekendOrHoliday(d);
 
-  if(empName === '이원규') return {start:'18:00', end:'06:00', role:'주방,오토바이', type:'fixed'};
+  if(empName === '이원규') {
+    if(dow === 0) return {start:'18:00', end:'02:00', role:'주방,오토바이', type:'fixed'}; // 일요일
+    return {start:'18:00', end:'06:00', role:'주방,오토바이', type:'fixed'};
+  }
   if(empName === '히오') {
     if(dow === 5 || dow === 6) return {start:'17:00', end:'05:00', role:'주방', type:'fixed'}; // 금토
     if(dow === 0) return {start:'17:00', end:'02:00', role:'주방', type:'fixed'}; // 일
