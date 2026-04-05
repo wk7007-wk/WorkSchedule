@@ -50,6 +50,13 @@ fbPatch(url, data)           PATCH .json
 fbDelete(url)                DELETE .json
   → 모두 async, 실패 시 showToast('저장 실패')
 
+### 0405 정합성/성능 보강
+purgeEmployeeReferences(empId)  직원 삭제 시 오늘 이후 스케줄/휴무/보정상태 정리
+performRenderAll() / renderAll(force)  requestAnimationFrame 기반 렌더 합치기
+  → 닫힌 섹션(week/share)은 무거운 렌더 생략, 열릴 때만 강제 렌더
+MainActivity.kt              WebView가 로컬 asset 우선 로드, file URL의 Firebase 접근 허용
+app/src/main/assets/*        docs/index.html, app.js, style.css를 앱 자산으로 동기화
+
 ### localStorage 레이어 (L1729~1757)
 lsSaveEmployees / lsLoadEmployees    ws_employees
 lsSaveSchedule / lsLoadSchedule      ws_sched_{yyyy-MM-dd}

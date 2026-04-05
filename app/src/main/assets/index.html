@@ -2,18 +2,325 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>근무표</title>
-<style>
-body { background: #1C1B1F; color: #E6E1E5; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-.msg { text-align: center; }
-h2 { color: #D0BCFF; }
-</style>
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div class="msg">
-<h2>오프라인</h2>
-<p>인터넷 연결을 확인해주세요.</p>
+<!-- Header (2행 구조: 날짜 네비 + 기능 버튼) -->
+<div style="position:sticky;top:0;z-index:100;background:#1A1A30;border-bottom:1px solid #2E2E52;">
+  <div style="display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:4px;">
+    <button class="btn nav-btn" id="prevDay" aria-label="1주 전" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">◀◀</button>
+    <button class="btn nav-btn" id="prevDay1" aria-label="이전 날" style="font-size:.8rem;min-width:32px;min-height:32px;padding:4px;">◀</button>
+    <span class="date-display" id="dateDisplay" style="cursor:pointer;min-width:90px;"></span>
+    <button class="btn nav-btn" id="nextDay1" aria-label="다음 날" style="font-size:.8rem;min-width:32px;min-height:32px;padding:4px;">▶</button>
+    <button class="btn nav-btn" id="nextDay" aria-label="1주 후" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">▶▶</button>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px 4px;gap:4px;">
+    <div style="display:flex;gap:4px;">
+      <button class="btn emp-mgr-btn" id="empMgrBtn">직원</button>
+      <button class="btn emp-mgr-btn" id="dayoffMgrBtn" style="color:#E74C3C;border-color:#E74C3C55;">휴무</button>
+    </div>
+    <div style="display:flex;gap:4px;">
+      <button class="btn btn-sm" id="refreshBtn" aria-label="새로고침" style="font-size:.75rem;padding:2px 6px;min-width:auto;min-height:26px;color:#707088;border-color:#2E2E52;">↻</button>
+    </div>
+    <!-- 재배치/작업중 버튼 숨김 (기능 불명확, 보정 시스템으로 대체) -->
+    <button class="btn btn-sm" id="resetFixedBtn" style="display:none;">재배치</button>
+    <button class="btn btn-sm" id="confirmDayBtn" style="display:none;">작업중</button>
+  </div>
 </div>
+
+<!-- 당일 브리핑 패널 -->
+<div id="briefingPanel" style="background:#1e1e3a;border-bottom:1px solid #2E2E52;padding:6px 4px;font-size:.75rem;"></div>
+
+<!-- 레이아웃 탭 -->
+<div class="layout-tabs" id="layoutTabs">
+  <button class="layout-tab active" data-tab="timebar">타임바</button>
+  <button class="layout-tab" data-tab="list">리스트</button>
+</div>
+
+<!-- Date Strip (주간 카드) -->
+<div class="date-strip" id="dateStrip"></div>
+
+<!-- 매출구간 선택 바 -->
+<div id="revenueBar" style="display:flex;gap:3px;padding:4px 6px;background:#1A1A30;border-bottom:1px solid #2E2E52;"></div>
+
+<!-- 탭 컨텐츠 -->
+<div class="loading" id="loadingIndicator"><div class="spinner"></div>불러오는 중...</div>
+<div id="tabContent" style="display:none;">
+  <div class="tab-panel active" id="panelTimebar">
+    <div id="timebarContent"></div>
+  </div>
+  <div class="tab-panel" id="panelList">
+    <div id="listContent"></div>
+  </div>
+  </div>
+
+<!-- Date Picker Overlay (30일 리스트) -->
+<div class="date-picker-overlay" id="datePickerOverlay">
+  <div class="date-picker-list" id="datePickerList"></div>
+</div>
+
+<!-- Week Overview -->
+<div class="week-section">
+  <div class="week-header" id="weekToggle">
+    <h3>주간 개요</h3>
+    <span class="arrow" id="weekArrow">▼</span>
+  </div>
+  <div class="week-body" id="weekBody">
+    <div class="week-grid" id="weekGrid"></div>
+    <div class="week-offs" id="weekOffs"></div>
+  </div>
+</div>
+
+<!-- Info Bar -->
+<div class="info-section">
+  <div class="info-header" id="infoToggle">
+    <h3>정보</h3>
+    <span class="arrow" id="infoArrow">▼</span>
+  </div>
+  <div class="info-body" id="infoBody">
+    <div class="info-body-inner">
+      <div class="info-row">
+        <span class="info-icon">🌤</span>
+        <span class="info-label">날씨</span>
+        <span class="info-value" id="weatherInfo"><span class="info-placeholder">로딩중...</span></span>
+      </div>
+      <div class="info-row">
+        <span class="info-icon">⚽</span>
+        <span class="info-label">경기</span>
+        <span class="info-value" id="sportsInfo"><span class="info-placeholder">로딩중...</span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI Scheduling Section -->
+<div class="ai-section">
+  <div class="ai-header" id="aiToggle">
+    <h3>AI 스케줄링</h3>
+    <span class="arrow" id="aiArrow">▼</span>
+  </div>
+  <div class="ai-body" id="aiBody">
+    <div class="ai-chat-list" id="aiChatList">
+      <div class="ai-msg ai" style="color:#9090A8;font-size:.8rem;">스케줄 요청을 입력하세요. 예: "내일 스케줄 짜줘", "이번주 배치해줘"</div>
+    </div>
+    <div class="ai-input-area">
+      <input class="form-input" id="aiInput" type="text" placeholder="스케줄 요청..." enterkeyhint="send">
+      <button class="btn btn-accent btn-sm" id="aiSendBtn" style="min-width:52px;">전송</button>
+    </div>
+    <div class="ai-quick-btns">
+      <button class="btn btn-sm ai-quick" data-prompt="오늘 스케줄 짜줘">오늘</button>
+      <button class="btn btn-sm ai-quick" data-prompt="내일 스케줄 짜줘">내일</button>
+      <button class="btn btn-sm ai-quick" data-prompt="이번주 스케줄 짜줘">이번주</button>
+      <button class="btn btn-sm ai-quick" data-prompt="내일 인원 부족한 시간대 알려줘">부족체크</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pay Section -->
+<div class="pay-section">
+  <div class="pay-header" id="payToggle">
+    <h3>급여</h3>
+    <span class="arrow" id="payArrow">▼</span>
+  </div>
+  <div class="pay-body" id="payBody">
+    <div class="pay-body-inner">
+      <div class="pay-month-sel">
+        <select id="payMonthSelect"></select>
+        <button class="btn btn-sm" id="payCalcBtn" style="color:#2ECC71;border-color:#2ECC71;">계산</button>
+        <button class="btn btn-sm" id="payBankTotalBtn" style="color:#FFD700;border-color:#FFD700;">BankTotal 전송</button>
+      </div>
+      <div id="payTableWrap"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Share Section -->
+<div class="share-section">
+  <div class="share-header" id="shareToggle">
+    <h3>공유</h3>
+    <span class="arrow" id="shareArrow">▼</span>
+  </div>
+  <div class="share-body" id="shareBody">
+    <div class="share-btns">
+      <button class="btn" style="background:#FFE812;color:#3C1E1E;font-weight:700;" id="shareKakaoBtn">전체 카톡 공유</button>
+      <button class="btn btn-accent" id="shareImageBtn">이미지 공유</button>
+      <button class="btn" id="shareTextBtn">텍스트 공유</button>
+      <button class="btn" id="copyUrlBtn">URL 복사</button>
+    </div>
+    <div style="margin-top:8px;">
+      <div style="font-size:.75rem;color:#9090A8;margin-bottom:4px;">개별 카톡 (본인 스케줄만)</div>
+      <div id="kakaoPerEmp" style="display:flex;flex-wrap:wrap;gap:4px;"></div>
+    </div>
+    <div class="cal-section">
+      <div style="font-size:.8rem;color:#9090A8;margin-bottom:6px;">캘린더 (.ics) — 아이폰/갤럭시 호환</div>
+      <div class="cal-btns" id="calBtns"></div>
+      <button class="btn btn-sm" id="calAllBtn" style="margin-top:6px;width:100%;font-size:.8rem;">전체 캘린더 다운로드</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shift Edit Modal (텍스트+게이지 듀얼 수정) -->
+<div class="modal-overlay" id="shiftModal">
+  <div class="modal-content" style="max-width:420px;">
+    <button class="modal-close" id="shiftModalClose">&times;</button>
+    <div class="modal-title" id="shiftTitle">근무 수정</div>
+    <div class="form-group">
+      <label>직원</label>
+      <div class="emp-chips" id="shiftEmpChips"></div>
+    </div>
+    <div class="form-group">
+      <label>역할 <span id="shiftRoleNote" style="color:#707088;font-size:.65rem;"></span></label>
+      <div class="role-pills" id="shiftRolePills">
+        <div class="role-pill" data-role="주방" style="--pill-color:#E67E22;">주방</div>
+        <div class="role-pill" data-role="차배달" style="--pill-color:#4ECDC4;">차배달</div>
+        <div class="role-pill" data-role="오토바이" style="--pill-color:#FFD700;">오토바이</div>
+      </div>
+    </div>
+    <!-- 게이지형 시간 선택 -->
+    <div class="form-group">
+      <label>시간 (게이지 드래그)</label>
+      <div class="shift-gauge-wrap">
+        <div class="shift-gauge" id="shiftGauge">
+          <div class="shift-gauge-fill" id="shiftGaugeFill"></div>
+          <div class="shift-gauge-labels" id="shiftGaugeLabels"></div>
+        </div>
+        <div id="shiftGaugeTicks" style="display:flex;justify-content:space-between;font-size:.6rem;color:#707088;margin-top:2px;"></div>
+      </div>
+    </div>
+    <!-- 텍스트 시간 선택 -->
+    <div class="form-group" style="display:flex;gap:8px;align-items:center;">
+      <div style="flex:1;">
+        <label style="font-size:.7rem;">시작</label>
+        <select class="form-input" id="shiftStartSel" style="font-size:.9rem;"></select>
+      </div>
+      <span style="color:#707088;margin-top:14px;">~</span>
+      <div style="flex:1;">
+        <label style="font-size:.7rem;">종료</label>
+        <select class="form-input" id="shiftEndSel" style="font-size:.9rem;"></select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>빠른선택</label>
+      <div class="presets" id="shiftPresets">
+        <button class="preset-btn" data-start="10:00" data-end="18:00">10-18</button>
+        <button class="preset-btn" data-start="10:00" data-end="20:00">10-20</button>
+        <button class="preset-btn" data-start="17:00" data-end="03:00">17-03</button>
+        <button class="preset-btn" data-start="18:00" data-end="03:00">18-03</button>
+        <button class="preset-btn" data-start="16:00" data-end="00:00">16-24</button>
+        <button class="preset-btn" data-start="10:00" data-end="03:00">풀</button>
+      </div>
+    </div>
+    <div class="modal-footer" style="flex-wrap:wrap;">
+      <button class="btn btn-danger btn-sm" id="shiftDayoff" style="font-size:.7rem;">휴무지정</button>
+      <button class="btn btn-danger" id="shiftDelete" style="display:none;">삭제</button>
+      <button class="btn btn-gold btn-sm" id="shiftSaveFixed" style="font-size:.7rem;">고정</button>
+      <button class="btn" id="shiftCancel">취소</button>
+      <button class="btn btn-accent" id="shiftSave">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Month View Modal -->
+<div class="modal-overlay" id="monthModal">
+  <div class="modal-content">
+    <button class="modal-close" id="monthModalClose">&times;</button>
+    <div class="modal-title" id="monthModalTitle">월간 보기</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <button class="btn btn-sm nav-btn" id="monthPrev">◀</button>
+      <span id="monthModalLabel" style="font-size:1rem;font-weight:600;color:#FFD700;"></span>
+      <button class="btn btn-sm nav-btn" id="monthNext">▶</button>
+    </div>
+    <div class="month-grid" id="monthGrid"></div>
+  </div>
+</div>
+
+<!-- Employee Management Modal -->
+<div class="modal-overlay" id="empModal">
+  <div class="modal-content">
+    <button class="modal-close" id="empModalClose">&times;</button>
+    <div class="modal-title">직원관리</div>
+    <div id="empList"></div>
+    <button class="btn btn-accent" id="addEmpBtn" style="width:100%;margin-top:8px;">+ 직원 추가</button>
+    <button class="btn contact-import-btn" id="contactImportBtn">연락처에서 가져오기</button>
+  </div>
+</div>
+
+<!-- Employee Edit Modal -->
+<div class="modal-overlay" id="empEditModal">
+  <div class="modal-content">
+    <button class="modal-close" id="empEditClose">&times;</button>
+    <div class="modal-title" id="empEditTitle">직원 추가</div>
+    <div class="form-group">
+      <label>이름</label>
+      <input class="form-input" id="empName" type="text" placeholder="홍길동">
+    </div>
+    <div class="form-group">
+      <label>전화번호</label>
+      <input class="form-input" id="empPhone" type="tel" placeholder="010-0000-0000">
+    </div>
+    <div class="form-group">
+      <label>색상</label>
+      <div class="color-picker" id="colorPicker"></div>
+    </div>
+    <div class="form-group">
+      <label>역할</label>
+      <select class="form-input" id="empRole">
+        <option value="">미지정</option>
+        <option value="주방">주방</option>
+        <option value="차배달">차배달</option>
+        <option value="오토바이">오토바이</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>시급</label>
+      <input class="form-input" id="empHourlyRate" type="number" placeholder="0" min="0">
+    </div>
+    <div class="form-group">
+      <label>주간 최대 시간</label>
+      <input class="form-input" id="empMaxHours" type="number" placeholder="40" min="0" max="168">
+    </div>
+    <div class="form-group">
+      <label>선호 근무시간 <span style="font-size:.7rem;color:#9090A8;">(예: 17:00~03:00)</span></label>
+      <input class="form-input" id="empPreferredHours" type="text" placeholder="HH:MM~HH:MM">
+    </div>
+    <div class="form-group">
+      <label>불가 시간대 <span style="font-size:.7rem;color:#9090A8;">(예: 06:00~12:00)</span></label>
+      <input class="form-input" id="empUnavailableHours" type="text" placeholder="HH:MM~HH:MM">
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="empEditCancel">취소</button>
+      <button class="btn btn-accent" id="empEditSave">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- Day-off Management Modal -->
+<div class="modal-overlay" id="dayoffModal">
+  <div class="modal-content">
+    <button class="modal-close" id="dayoffModalClose">&times;</button>
+    <div class="modal-title">휴무 관리</div>
+    <div style="margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+        <select class="form-input" id="dayoffEmpSelect" style="flex:1;"></select>
+        <input class="form-input" id="dayoffDate" type="date" style="flex:1;">
+        <button class="btn btn-accent btn-sm" id="dayoffAddBtn">추가</button>
+      </div>
+      <div style="margin-bottom:8px;">
+        <textarea class="form-input" id="dayoffBulkInput" placeholder="여러 형태로 입력 가능:&#10;이원규 2/25, 2/26&#10;권연옥 3/1~3/3&#10;리 2025-03-05&#10;히오 화,목 (이번주)" rows="4" style="font-size:.8rem;"></textarea>
+        <button class="btn btn-sm" id="dayoffBulkBtn" style="width:100%;margin-top:4px;color:#FFD700;border-color:#FFD700;">일괄 등록</button>
+      </div>
+    </div>
+    <div style="font-size:.85rem;color:#FFD700;font-weight:600;margin-bottom:6px;" id="dayoffListTitle">등록된 휴무</div>
+    <div id="dayoffList" style="max-height:300px;overflow-y:auto;"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

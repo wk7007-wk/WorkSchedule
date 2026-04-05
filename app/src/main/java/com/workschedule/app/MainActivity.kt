@@ -23,8 +23,8 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private val TAG = "WorkSchedule"
-    private val WEB_URL = "https://wk7007-wk.github.io/WorkSchedule/"
-    private val FALLBACK_URL = "file:///android_asset/index.html"
+    private val LOCAL_URL = "file:///android_asset/index.html"
+    private val REMOTE_URL = "https://wk7007-wk.github.io/WorkSchedule/"
 
     // 서브폰(서버) 판별: StoreBot 설치 여부로 판단
     private fun isSubPhone(): Boolean = try {
@@ -47,6 +47,8 @@ class MainActivity : AppCompatActivity() {
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             cacheMode = WebSettings.LOAD_DEFAULT
             allowFileAccess = true
+            allowFileAccessFromFileURLs = true
+            allowUniversalAccessFromFileURLs = true
             setSupportZoom(false)
         }
 
@@ -60,7 +62,7 @@ class MainActivity : AppCompatActivity() {
                 super.onReceivedError(view, request, error)
                 if (request?.isForMainFrame == true) {
                     Log.e(TAG, "WebView load error: ${error?.description}")
-                    webView.loadUrl(FALLBACK_URL)
+                    webView.loadUrl(buildRemoteUrl())
                 }
             }
 
@@ -81,8 +83,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadPage() {
-        val url = if (isSubPhone()) "${WEB_URL}?readonly=1" else WEB_URL
+        val url = if (isSubPhone()) "${LOCAL_URL}?readonly=1" else LOCAL_URL
         webView.loadUrl(url)
+    }
+
+    private fun buildRemoteUrl(): String {
+        return if (isSubPhone()) "${REMOTE_URL}?readonly=1" else REMOTE_URL
     }
 
     override fun onBackPressed() {
