@@ -463,6 +463,37 @@ function generateAutoDayoffs(){
 }
 
 // ============================================================
+// 11b. Common employee categorization
+// ============================================================
+function categorizeEmployees(dk){
+  const empKeys=Object.keys(employees);
+  const weekOffCount={}, weekHoursMap={};
+  const mon=getMonday(currentDate);
+  for(let i=0;i<7;i++){
+    const wd=new Date(mon);wd.setDate(wd.getDate()+i);const wdk=dateKey(wd);
+    const wSched=wdk===dk?daySchedule:(weekSchedules[wdk]||{});
+    empKeys.forEach(id=>{
+      if(isDayOff(id,wdk))weekOffCount[id]=(weekOffCount[id]||0)+1;
+      const ws=wSched[id]; if(ws&&ws.start&&ws.end)weekHoursMap[id]=(weekHoursMap[id]||0)+calcHours(ws.start,ws.end);
+    });
+  }
+  const working=[],offList=[],empty=[];
+  let totalHours=0,confirmedCount=0,unconfirmedCount=0;
+  empKeys.forEach(id=>{
+    const emp=employees[id];
+    if(isDayOff(id,dk)){offList.push({id,emp});return;}
+    const shift=daySchedule[id];
+    if(shift&&shift.start){
+      const st=getShiftStatus(dk,id); const hours=calcHours(shift.start,shift.end);
+      totalHours+=hours; if(st==='confirmed')confirmedCount++;else unconfirmedCount++;
+      working.push({id,emp,shift,status:st,hours});
+    } else empty.push({id,emp});
+  });
+  working.sort((a,b)=>timeToMinutesFromDayStart(a.shift.start)-timeToMinutesFromDayStart(b.shift.start));
+  return {empKeys,working,offList,empty,totalHours,confirmedCount,unconfirmedCount,weekOffCount,weekHoursMap};
+}
+
+// ============================================================
 // 12. Render functions
 // ============================================================
 function isSectionOpen(bodyId){ const el=$(bodyId); return !!el&&el.classList.contains('open'); }
@@ -534,29 +565,7 @@ function renderBriefing(){
 function renderTimebarView(){
   const con=$('timebarContent'); if(!con)return;
   const dk=dateKey(currentDate);
-  const empKeys=Object.keys(employees);
-
-  // Weekly off count
-  const weekOffCount={};
-  const mon=getMonday(currentDate);
-  for(let i=0;i<7;i++){
-    const wd=new Date(mon);wd.setDate(wd.getDate()+i);
-    const wdk=dateKey(wd);
-    empKeys.forEach(id=>{if(isDayOff(id,wdk))weekOffCount[id]=(weekOffCount[id]||0)+1;});
-  }
-
-  const working=[],offList=[],empty=[];
-  let totalHours=0,confirmedCount=0,unconfirmedCount=0;
-  empKeys.forEach(id=>{
-    const emp=employees[id]; const off=isDayOff(id,dk); const shift=daySchedule[id];
-    if(off){offList.push({id,emp});return;}
-    if(shift&&shift.start){
-      const st=getShiftStatus(dk,id); const hours=calcHours(shift.start,shift.end);
-      totalHours+=hours; if(st==='confirmed')confirmedCount++;else unconfirmedCount++;
-      working.push({id,emp,shift,status:st,hours});
-    } else empty.push({id,emp});
-  });
-  working.sort((a,b)=>timeToMinutesFromDayStart(a.shift.start)-timeToMinutesFromDayStart(b.shift.start));
+  const {empKeys,working,offList,empty,totalHours,confirmedCount,unconfirmedCount,weekOffCount}=categorizeEmployees(dk);
 
   const _mg=calcGaugeRange(working);
   const barStart=_mg.gaugeStart, barHours=_mg.gaugeHours;
@@ -690,59 +699,16 @@ function renderTimebarView(){
 
   html+='</div>';
   con.innerHTML=html;
-
-  // Event delegation
-  con.addEventListener('click',function(e){
-    const tgt=e.target.closest('[data-action]');
-    if(tgt){
-      e.stopPropagation();
-      const a=tgt.dataset.action;
-      if(a==='confirmAll')confirmAllShifts();
-      else if(a==='status')setShiftStatus(dk,tgt.dataset.sid,tgt.dataset.st);
-      else if(a==='toggleOff')toggleDayOffFromList(tgt.dataset.oid);
-      else if(a==='confirmOff')confirmDayOff(tgt.dataset.oid);
-      return;
-    }
-    const row=e.target.closest('[data-empid]');
-    if(row)openShiftModal(row.dataset.empid);
-  });
 }
 
 // --- List View ---
 function renderListView(){
   const con=$('listContent'); if(!con)return;
   const dk=dateKey(currentDate);
-  const empKeys=Object.keys(employees);
   const m=currentDate.getMonth()+1,d=currentDate.getDate();
   const dow=DOW_KR[currentDate.getDay()];
   const confirmed=isConfirmed(dk);
-
-  const weekOffCount={},weekTotalHoursMap={};
-  const mon=getMonday(currentDate);
-  for(let i=0;i<7;i++){
-    const wd=new Date(mon);wd.setDate(wd.getDate()+i);const wdk=dateKey(wd);
-    const wSched=wdk===dk?daySchedule:(weekSchedules[wdk]||{});
-    empKeys.forEach(id=>{
-      if(isDayOff(id,wdk))weekOffCount[id]=(weekOffCount[id]||0)+1;
-      const ws=wSched[id]; if(ws&&ws.start&&ws.end)weekTotalHoursMap[id]=(weekTotalHoursMap[id]||0)+calcHours(ws.start,ws.end);
-    });
-  }
-
-  const working=[],offList=[],empty=[];
-  let totalHours=0,confirmedCount=0,unconfirmedCount=0;
-  empKeys.forEach(id=>{
-    const emp=employees[id]; const off=isDayOff(id,dk); const shift=daySchedule[id];
-    if(off){offList.push({id,emp});return;}
-    if(shift&&shift.start){
-      const st=getShiftStatus(dk,id);
-      const fix=getFixedSchedule(emp.name);
-      const isFixed=fix&&fix.type==='fixed'&&shift.start===fix.start&&shift.end===fix.end;
-      const hours=calcHours(shift.start,shift.end); totalHours+=hours;
-      if(st==='confirmed')confirmedCount++;else unconfirmedCount++;
-      working.push({id,emp,shift,status:st,isFixed,hours});
-    } else empty.push({id,emp});
-  });
-  working.sort((a,b)=>timeToMinutesFromDayStart(a.shift.start)-timeToMinutesFromDayStart(b.shift.start));
+  const {empKeys,working,offList,empty,totalHours,confirmedCount,unconfirmedCount,weekOffCount,weekHoursMap:weekTotalHoursMap}=categorizeEmployees(dk);
 
   const allCf=working.length>0&&unconfirmedCount===0;
   const boardBorder=allCf?'border:2px solid '+C_OK+';border-radius:12px;':'';
@@ -841,21 +807,6 @@ function renderListView(){
 
   html+='</div>';
   con.innerHTML=html;
-
-  con.addEventListener('click',function(e){
-    const tgt=e.target.closest('[data-action]');
-    if(tgt){
-      e.stopPropagation();
-      const a=tgt.dataset.action;
-      if(a==='confirmAll')confirmAllShifts();
-      else if(a==='status')setShiftStatus(dk,tgt.dataset.sid,tgt.dataset.st);
-      else if(a==='confirmOff')confirmDayOff(tgt.dataset.oid);
-      else if(a==='toggleOff')toggleDayOffFromList(tgt.dataset.oid);
-      return;
-    }
-    const row=e.target.closest('[data-empid]');
-    if(row)openShiftModal(row.dataset.empid);
-  });
 }
 
 // --- Week Overview ---
@@ -1483,7 +1434,30 @@ function confirmDayOff(empId){
 }
 
 // ============================================================
-// 18. Share (text + URL only)
+// 18. View event delegation (set up once, prevents listener leak)
+// ============================================================
+function setupViewDelegation(){
+  function handleViewClick(e){
+    const dk=dateKey(currentDate);
+    const tgt=e.target.closest('[data-action]');
+    if(tgt){
+      e.stopPropagation();
+      const a=tgt.dataset.action;
+      if(a==='confirmAll')confirmAllShifts();
+      else if(a==='status')setShiftStatus(dk,tgt.dataset.sid,tgt.dataset.st);
+      else if(a==='toggleOff')toggleDayOffFromList(tgt.dataset.oid);
+      else if(a==='confirmOff')confirmDayOff(tgt.dataset.oid);
+      return;
+    }
+    const row=e.target.closest('[data-empid]');
+    if(row)openShiftModal(row.dataset.empid);
+  }
+  $('timebarContent').addEventListener('click',handleViewClick);
+  $('listContent').addEventListener('click',handleViewClick);
+}
+
+// ============================================================
+// 19. Share (text + URL only)
 // ============================================================
 if($('shareTextBtn')) $('shareTextBtn').addEventListener('click',()=>{
   const empKeys=Object.keys(employees);
@@ -1507,12 +1481,8 @@ if($('copyUrlBtn')) $('copyUrlBtn').addEventListener('click',()=>{
   else{const ta=document.createElement('textarea');ta.value=url;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);showToast('URL 복사됨');}
 });
 
-// Safe no-op for removed share features (DOM elements still exist in HTML)
-if($('shareKakaoBtn')) $('shareKakaoBtn').addEventListener('click',()=>showToast('카톡 공유 기능 제거됨'));
-if($('shareImageBtn')) $('shareImageBtn').addEventListener('click',()=>showToast('이미지 공유 기능 제거됨'));
-
 // ============================================================
-// 19. Collapsible sections (session memory only)
+// 20. Collapsible sections (session memory only)
 // ============================================================
 function setupCollapsible(toggleId,arrowId,bodyId,defaultOpen){
   const body=$(bodyId),arrow=$(arrowId);
@@ -1528,10 +1498,6 @@ function setupCollapsible(toggleId,arrowId,bodyId,defaultOpen){
 }
 
 setupCollapsible('weekToggle','weekArrow','weekBody',false);
-setupCollapsible('infoToggle','infoArrow','infoBody',false);
-setupCollapsible('aiToggle','aiArrow','aiBody',false);
-setupCollapsible('payToggle','payArrow','payBody',false);
-setupCollapsible('shareToggle','shareArrow','shareBody',false);
 
 // ============================================================
 // 20. Layout Tab Switching + Swipe
@@ -1569,9 +1535,6 @@ $('monthNext').addEventListener('click',()=>{monthViewMonth++;if(monthViewMonth>
 // Refresh
 $('refreshBtn').addEventListener('click',()=>{showToast('새로고침...');location.reload();});
 
-// Contact import (safe no-op)
-if($('contactImportBtn')) $('contactImportBtn').addEventListener('click',()=>showToast('연락처 가져오기 기능 제거됨'));
-
 // Visibility change
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){connectSSE();loadData();}});
 
@@ -1587,8 +1550,7 @@ function init(){
   currentDate=new Date();
   updateDateDisplay();
   buildTimeSelects();
-  const wi=$('weatherInfo');if(wi)wi.innerHTML='<span style="color:#9090A8;">-</span>';
-  const si=$('sportsInfo');if(si)si.innerHTML='<span style="color:#9090A8;">-</span>';
+  setupViewDelegation();
   loadData();
   connectSSE();
 }
