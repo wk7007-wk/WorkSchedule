@@ -275,18 +275,20 @@ function getFixedScheduleForDate(empName, dateObj){
   const dow = d.getDay(); // 0=sun,1=mon,...6=sat
   const fs = fixedSchedules[empName];
   if(!fs || !fs.start) return null;
+  const dowStr = ['sun','mon','tue','wed','thu','fri','sat'][dow];
+  // dayTimes 오버라이드: 특정 요일만 다른 시간 지원 (예: 금요일만 24:00 퇴근)
+  const ov = fs.dayTimes && fs.dayTimes[dowStr];
+  const start = ov && ov.start ? ov.start : fs.start;
+  const end = ov && ov.end ? ov.end : fs.end;
+  const role = ov && ov.role ? ov.role : (fs.role||'');
 
   if(fs.type === 'fixed'){
-    // off array check (dow numbers)
     if(fs.off && Array.isArray(fs.off) && fs.off.includes(dow)) return null;
-    return {start:fs.start, end:fs.end, role:fs.role||'', type:'fixed'};
+    return {start, end, role, type:'fixed'};
   }
   if(fs.type === 'weekly'){
-    // days array check (string day names)
     if(!fs.days || !Array.isArray(fs.days)) return null;
-    const dayNames = fs.days;
-    const dowStr = ['sun','mon','tue','wed','thu','fri','sat'][dow];
-    if(dayNames.includes(dowStr)) return {start:fs.start, end:fs.end, role:fs.role||'', type:'fixed'};
+    if(fs.days.includes(dowStr)) return {start, end, role, type:'fixed'};
     return null;
   }
   return null;
