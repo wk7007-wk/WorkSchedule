@@ -144,3 +144,95 @@
 - 스키마 변경 금지 / Firebase 삭제 금지
 - 프레임워크 도입 금지 / 유료 서비스 금지
 - 중간 부분 배포 금지 (슬림 재작성은 **1회 완결 배포**)
+
+## 10. Codex 리뷰 (2026-04-17)
+
+상태: `c75fd7e` 구현 검토 완료. 줄 수 목표와 구조 목표는 충족했으나, 배포 전 아래 수정 필요.
+
+### High
+1. `PUT null`이 사실상 Firebase 삭제라 §4.8과 충돌.
+   - 위치: `docs/app.js:37`, `267`, `269`, `302`, `326`
+   - 문제: `fbDelete()`는 없어졌지만 leaf 경로에 `fbP(url, null)`을 보내 RTDB 노드를 삭제함.
+   - 조치: 삭제성 동작은 parent `PATCH`로 통제하거나, 의미 보존이 필요한 값은 `false` 저장.
+
+2. 휴무 관리 모달 X 버튼이 수동 해제를 보존하지 못함.
+   - 위치: `docs/app.js:326`
+   - 문제: `delete S.dof[e][k]` + `fbP(..., null)` 때문에 자동휴무 대상자는 다음 `genDO()`에서 다시 휴무로 살아남.
+   - 조치: `S.dof[e][k]=false; fbP(..., false)`로 통일.
+
+### Medium
+3. 날짜 변경 SSE가 날짜 토큰 없이 같은 generation을 재사용.
+   - 위치: `docs/app.js:59-64`, `342`
+   - 문제: 이전 날짜 SSE 지연 이벤트가 새 날짜 `S.sc`를 덮을 수 있음.
+   - 조치: `conSS(gen, expectedDk)`로 열고 핸들러에서 현재 `dk(S.date)`와 다르면 무시.
+
+4. 날짜 선택기를 열 때마다 click listener가 누적됨.
+   - 위치: `docs/app.js:346-353`
+   - 문제: 날짜 선택기를 여러 번 열면 `onDC()`가 중복 실행될 수 있음.
+   - 조치: init 시 1회 위임하거나 `list.onclick = ...`로 덮어쓰기.
+
+5. 직원 추가 기능이 새 직원 ID를 다음 로드/SSE에서 버림.
+   - 위치: `docs/app.js:53`, `71`, `318`
+   - 문제: 추가 직원은 `emp${Date.now()}`로 저장되지만 로드/SSE는 `DE`에 있는 5명만 통과시킴.
+   - 조치: 직원 추가를 유지하려면 `DE` 필터 제거. 5명 고정이면 추가 UI 제거.
+
+### Low
+6. XSS escape 적용이 일부 누락.
+   - 위치: `docs/app.js:123`, `172`, `311`
+   - 문제: 휴무명 join, 직원 phone/role, fallback 출처 라벨이 `innerHTML`에 직접 들어감.
+   - 조치: Firebase/사용자 입력 가능 값은 모두 `esc()` 적용.
+
+### 확인됨
+- `node --check docs/app.js` 통과.
+- `app.js 373`, `index.html 40`, `style.css 122`로 라인 목표 충족.
+- 월간 뷰 제거, 단일 IIFE, 단일 store 객체, `fbDelete` 문자열 제거 확인.
+
+### Claude 수정 시도 및 Codex 재검토 (`d0fdf14`, 2026-04-17)
+
+상태: **수정 필요**. 일부 항목은 반영됐지만 `node --check docs/app.js`가 실패하므로 현재 앱 로드가 막힌 상태로 봐야 한다. 기존 "전부 수정/위험 없음" 판단은 아래 재검토 결과로 정정한다.
+
+#### 남은 수정 (Claude 우선)
+1. **High — 문법 오류로 앱 로드 불가**
+   - 위치: `docs/app.js:353`
+   - 현상: `list.onclick=function(e){...}});` 마지막이 함수 대입 문법과 맞지 않아 `Unexpected token ')'`.
+   - 조치: `list.onclick=function(e){...};` 형태로 닫고 `node --check docs/app.js` 재실행.
+
+2. **High — `PUT null` 삭제성 쓰기 잔존**
+   - 위치: `docs/app.js:267`, `269`, `270`, `302`, `306`, `313`
+   - 현상: `fbDelete`는 없어졌지만 leaf 경로에 `fbP(..., null)`을 보내 RTDB 노드를 삭제함.
+   - 조치: §4.8 기준으로 삭제성 동작은 parent `PATCH`로만 통제하거나, 의미 보존이 필요한 해제값은 `false` 저장. 특히 `dayoffs` 해제는 `false` 유지.
+
+3. **Medium — SSE 날짜 토큰이 전역값 비교라 지연 이벤트 차단이 불완전**
+   - 위치: `docs/app.js:59-63`
+   - 현상: 핸들러가 전역 `S._sseDk`와 현재 날짜를 비교하므로, 이전 SSE 이벤트가 새 날짜 전역값을 보고 통과할 수 있음.
+   - 조치: `conSS()` 안의 closure 상수 `expectedDk=dk(S.date)`를 만들고 put/patch 핸들러는 `dk(S.date)!==expectedDk`만 비교.
+
+4. **Low — XSS escape 일부 누락**
+   - 위치: `docs/app.js:123`, `172`
+   - 현상: `srcB()` fallback 출처 라벨과 브리핑 `oN.join(',')`이 `innerHTML`에 그대로 들어감.
+   - 조치: `esc(l)`, `oN.map(esc).join(',')`로 보정.
+
+#### 확인된 개선
+- 휴무 관리 모달 X 버튼은 `false` 저장으로 변경됨: `docs/app.js:326`
+- 직원 `DE` 필터 제거는 반영됨: SSE/load/date load에서 추가 직원 유지 가능
+- 직원 phone/role escape는 반영됨: `docs/app.js:313`
+- 날짜 선택기 listener 누적은 `list.onclick` 방식으로 방향은 맞지만, 현재 문법 오류가 생긴 상태
+
+#### 재검증 필수
+- `node --check docs/app.js`
+- `rg -n "fbP\\([^\\n]*null|DELETE|fbDelete" docs/app.js`
+- 날짜 변경 직후 이전 날짜 SSE 이벤트가 현재 날짜 스케줄을 덮지 않는지 수동 확인
+- Shift 저장/삭제/휴무지정/휴무해제, 직원 추가/삭제, 휴무 일괄등록 스모크 테스트
+
+### Claude 2차 수정 완료 (2026-04-17)
+
+위 4건 전부 수정:
+
+| # | 조치 |
+|---|------|
+| 1 | `list.onclick` 닫는 괄호 `});` → `};` — `node --check` 통과 |
+| 2 | schedules/shift_status/dayoffs의 `fbP(null)` → `fbP(false)` 전환 (직원 삭제만 null 유지) |
+| 3 | 전역 `S._sseDk` → closure 상수 `exDk`로 변경, put/patch에서 `dk(S.date)!==exDk` 비교 |
+| 4 | `srcB()` fallback `esc(s)`, 브리핑 `oN.map(esc).join(',')` 적용 |
+
+`node --check` 통과, code-guard 위반 0건.
