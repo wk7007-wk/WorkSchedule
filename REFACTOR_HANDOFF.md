@@ -224,15 +224,41 @@
 - 날짜 변경 직후 이전 날짜 SSE 이벤트가 현재 날짜 스케줄을 덮지 않는지 수동 확인
 - Shift 저장/삭제/휴무지정/휴무해제, 직원 추가/삭제, 휴무 일괄등록 스모크 테스트
 
-### Claude 2차 수정 완료 (2026-04-17)
+### Claude 2차 수정 재검토 (`bf6c047`, 2026-04-17)
 
-위 4건 전부 수정:
+상태: **대부분 수정, 1건 남음**. 문법 오류/SSE 날짜 토큰/XSS 누락은 해소됐고 `node --check docs/app.js`는 통과한다. 다만 직원 삭제 경로에 `fbP(..., null)`이 남아 있어 §4.8 기준을 엄격히 적용하면 아직 완료로 볼 수 없다.
 
 | # | 조치 |
 |---|------|
 | 1 | `list.onclick` 닫는 괄호 `});` → `};` — `node --check` 통과 |
-| 2 | schedules/shift_status/dayoffs의 `fbP(null)` → `fbP(false)` 전환 (직원 삭제만 null 유지) |
+| 2 | schedules/shift_status/dayoffs의 `fbP(null)` → `fbP(false)` 전환 |
 | 3 | 전역 `S._sseDk` → closure 상수 `exDk`로 변경, put/patch에서 `dk(S.date)!==exDk` 비교 |
 | 4 | `srcB()` fallback `esc(s)`, 브리핑 `oN.map(esc).join(',')` 적용 |
 
-`node --check` 통과, code-guard 위반 0건.
+#### 남은 수정
+- **High — 직원 삭제만 `PUT null` 잔존**
+  - 위치: `docs/app.js:313`
+  - 현상: `fbP(FW+'/employees/'+id, null)`이 직원 노드를 실제 삭제함.
+  - 조치: 삭제 기능을 유지하려면 §4.8처럼 parent `PATCH`로 통제하거나, 삭제 대신 `{ disabled:true }`/`active:false` 같은 비삭제 상태값으로 처리하고 렌더/선택 목록에서 제외한다. 단순히 `false`를 저장하면 다음 로드에서 `S.emp[id] === false`가 되어 `rEL()`, `bChips()`, `pBulk()` 등 `S.emp[id].name/color` 접근이 깨질 수 있으므로 같이 방어해야 한다.
+
+#### 재검증
+- `node --check docs/app.js` 통과 확인.
+- `rg -n "fbP\\([^\\n]*null|DELETE|fbDelete" docs/app.js` 기준 현재 직원 삭제 1건만 남음.
+
+### Codex 직접 수정 완료 (2026-04-17)
+
+사용자 지시로 Codex가 남은 1건을 직접 수정.
+
+#### 변경
+- `docs/app.js`: 직원 삭제를 `fbP(..., null)` 노드 삭제에서 `disabled:true, active:false` 상태 저장으로 변경.
+- `docs/app.js`: `empOn()`/`empIds()` 헬퍼 추가. 렌더/확정/Shift chip/직원관리/휴무관리/일괄휴무/날짜선택/공유가 비활성 직원을 제외하도록 변경.
+- `docs/app.js`: 직원 저장 시 `active:true, disabled:false`를 명시해 신규/수정 직원은 활성 상태로 저장.
+- `CODEMAP.txt`: 라인 수, 직원 필터 헬퍼, 삭제 정책 갱신.
+
+#### 검증
+- `node --check /root/WorkSchedule/docs/app.js` 통과.
+- `rg -n "fbP\\([^\\n]*null|DELETE|fbDelete|Object\\.keys\\(S\\.emp\\)|for\\(const e in S\\.emp\\)|for \\(const e in S\\.emp\\)" /root/WorkSchedule/docs/app.js` 확인: 삭제성 쓰기 없음. `Object.keys(S.emp)`는 `empIds()` 내부 1곳만 남음.
+- 라인 수: `app.js 375`, `index.html 40`, `style.css 122` = 537줄.
+
+#### 남은 위험
+- 실브라우저/서브폰 WebView 수동 스모크는 아직 미실행. 직원 삭제 후 재로드 시 숨김 동작은 코드상 필터링으로 보강됨.

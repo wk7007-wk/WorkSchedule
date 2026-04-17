@@ -1,5 +1,5 @@
 # WorkSchedule 코드맵 (슬림 재작성 0417)
-# 3파일 분리구조: app.js 374줄 + index.html 40줄 + style.css 122줄 = 536줄
+# 3파일 분리구조: app.js 375줄 + index.html 40줄 + style.css 122줄 = 537줄
 # code-guard: 수정 전 이 맵으로 영향 범위 확인
 
 ## 파일 구조
@@ -20,17 +20,18 @@ RC/RL            역할 색상/라벨
 S                전역 상태 단일 객체 {tab,date,emp,sc,wsc,fix,dof,cf,sst,att,sse*,loaded,sec}
   → S.emp = 직원, S.sc = 당일스케줄, S.fix = 고정스케줄, S.dof = 휴무, S.att = 근태
 
-### util (16~33)
+### util (16~35)
 pad,dk,toast,openM,closeM,sameD,getMon  기본유틸
 isH,hNm,isWE   공휴일/주말 판정
+empOn,empIds    활성 직원 필터 (disabled/active=false 제외)
 fEmp            이름→empId 검색
 esc             XSS 이스케이프 (innerHTML 삽입용)
 isDayOff,gSt    휴무/상태 조회
 tm12,tmDS,cH,tPct,pTM  시간 계산
 
-### api (35~37)
+### api (37~39)
 fbG(url)         GET  — .json suffix 자동
-fbP(url,data)    PUT  — READONLY 체크 포함. data=null → 삭제 대체
+fbP(url,data)    PUT  — READONLY 체크 포함. data=null 삭제성 쓰기 금지
   ※ fbPatch, fbDelete 없음 (PUT만 사용)
 
 ### SSE (49~65)
@@ -79,10 +80,11 @@ shiftDel         삭제 → fbP(url, null)
 shiftFixed       고정값 저장 → fbP fixed_schedules
 shiftDayoff      휴무지정/해제
 
-### 직원 관리 (308~318)
+### 직원 관리 (310~320)
 rEL()            직원 목록 렌더
 oEE(id)          직원 편집 모달 (이름/전화/색상/역할/시급)
 empEditSave      저장 → fbP employees
+삭제              employees/{id}에 disabled:true, active:false 저장 (노드 삭제 금지)
 
 ### 휴무 관리 (319~335)
 rDL()            휴무 목록 렌더

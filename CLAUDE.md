@@ -27,6 +27,7 @@
 - 3색 상수: C_OK=#2ECC71, C_DEF=#9090A8, C_OFF=#E74C3C
 - 반드시 전역 스코프 선언 (함수 내부 X)
 - 휴무 해제: dayoffs[empId][dk] = false (delete 아님)
+- 직원 삭제: employees/{empId}에 disabled:true, active:false 저장 (노드 삭제 아님)
 - 스와이프 = 날짜 변경 (탭 전환 아님)
 - 기능 축소/숨김 금지 (display:none X)
 - 이모지/그림 아이콘 지양 → 색상 텍스트
