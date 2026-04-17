@@ -50,17 +50,17 @@ function gFixC(n){return gFix(n,S.date);}
 function connectSSE(){
   S.gen++;const g=S.gen;if(S.sseE){try{S.sseE.close();}catch(e){}}
   try{S.sseE=new EventSource(FW+'/employees.json');
-    S.sseE.addEventListener('put',function(e){if(g!==S.gen){S.sseE.close();return;}try{const d=JSON.parse(e.data);if(d.path==='/'){const r=d.data||{};S.emp={};for(const i in r)if(DE[i])S.emp[i]=r[i];}else{const k=d.path.replace(/^\//,'');if(!DE[k])return;if(d.data===null)delete S.emp[k];else S.emp[k]=d.data;}renderAll();}catch(x){}});
+    S.sseE.addEventListener('put',function(e){if(g!==S.gen){S.sseE.close();return;}try{const d=JSON.parse(e.data);if(d.path==='/'){S.emp=d.data||{};}else{const k=d.path.replace(/^\//,'');if(d.data===null)delete S.emp[k];else S.emp[k]=d.data;}renderAll();}catch(x){}});
     S.sseE.addEventListener('patch',function(e){if(g!==S.gen){S.sseE.close();return;}try{const d=JSON.parse(e.data),k=d.path.replace(/^\//,'');if(k&&d.data)S.emp[k]=Object.assign(S.emp[k]||{},d.data);else if(!k&&d.data)Object.assign(S.emp,d.data);renderAll();}catch(x){}});
     S.sseE.onerror=function(){if(g!==S.gen)return;try{S.sseE.close();}catch(e){} S.sseE=null;setTimeout(()=>{if(g===S.gen)connectSSE();},3000);};
   }catch(e){}
   conSS(g);
 }
 function conSS(g){
-  if(S.sseS){try{S.sseS.close();}catch(e){}} const d=dk(S.date);
+  if(S.sseS){try{S.sseS.close();}catch(e){}} const d=dk(S.date);S._sseDk=d;
   try{S.sseS=new EventSource(FW+'/schedules/'+d+'.json');
-    S.sseS.addEventListener('put',function(e){if(g!==S.gen){S.sseS.close();return;}try{const p=JSON.parse(e.data);if(p.path==='/'){S.sc=p.data||{};}else{const k=p.path.replace(/^\//,'').split('/')[0];if(p.data===null)delete S.sc[k];else if(p.path.split('/').filter(Boolean).length===1)S.sc[k]=p.data;else{if(!S.sc[k])S.sc[k]={};const s=p.path.replace(/^\//,'').split('/')[1];if(p.data===null)delete S.sc[k][s];else S.sc[k][s]=p.data;}}renderAll();}catch(x){}});
-    S.sseS.addEventListener('patch',function(e){if(g!==S.gen){S.sseS.close();return;}try{const p=JSON.parse(e.data),pts=p.path.replace(/^\//,'').split('/').filter(Boolean);if(!pts.length&&p.data)Object.keys(p.data).forEach(k=>{S.sc[k]=Object.assign(S.sc[k]||{},p.data[k]);});else if(pts.length===1&&p.data)S.sc[pts[0]]=Object.assign(S.sc[pts[0]]||{},p.data);renderAll();}catch(x){}});
+    S.sseS.addEventListener('put',function(e){if(g!==S.gen){S.sseS.close();return;}if(dk(S.date)!==S._sseDk){S.sseS.close();return;}try{const p=JSON.parse(e.data);if(p.path==='/'){S.sc=p.data||{};}else{const k=p.path.replace(/^\//,'').split('/')[0];if(p.data===null)delete S.sc[k];else if(p.path.split('/').filter(Boolean).length===1)S.sc[k]=p.data;else{if(!S.sc[k])S.sc[k]={};const s=p.path.replace(/^\//,'').split('/')[1];if(p.data===null)delete S.sc[k][s];else S.sc[k][s]=p.data;}}renderAll();}catch(x){}});
+    S.sseS.addEventListener('patch',function(e){if(g!==S.gen){S.sseS.close();return;}if(dk(S.date)!==S._sseDk){S.sseS.close();return;}try{const p=JSON.parse(e.data),pts=p.path.replace(/^\//,'').split('/').filter(Boolean);if(!pts.length&&p.data)Object.keys(p.data).forEach(k=>{S.sc[k]=Object.assign(S.sc[k]||{},p.data[k]);});else if(pts.length===1&&p.data)S.sc[pts[0]]=Object.assign(S.sc[pts[0]]||{},p.data);renderAll();}catch(x){}});
     S.sseS.onerror=function(){if(g!==S.gen)return;try{S.sseS.close();}catch(e){} S.sseS=null;setTimeout(()=>{if(g===S.gen)conSS(g);},3000);};
   }catch(e){}
 }
@@ -68,8 +68,8 @@ function conSS(g){
 async function loadData(){
   const d=dk(S.date);$('loader').style.display='flex';$('tabContent').style.display='none';
   try{const[eD,sD,fD,dD,cD,tD,aD]=await Promise.all([fbG(FW+'/employees'),fbG(FW+'/schedules/'+d),fbG(FW+'/fixed_schedules'),fbG(FW+'/dayoffs'),fbG(FW+'/confirmed'),fbG(FW+'/shift_status/'+d),fbG(FB+'/packhelper/storebot_attendance/'+d)]);
-    if(eD&&Object.keys(eD).length){const f={};for(const i in eD)if(DE[i])f[i]=eD[i];S.emp=Object.keys(f).length?f:JSON.parse(JSON.stringify(DE));}else{S.emp=JSON.parse(JSON.stringify(DE));fbP(FW+'/employees',S.emp);}
-    if(sD){const m={};for(const i in sD)if(DE[i])m[i]=sD[i];S.sc=m;}else S.sc={};
+    if(eD&&Object.keys(eD).length){S.emp=eD;}else{S.emp=JSON.parse(JSON.stringify(DE));fbP(FW+'/employees',S.emp);}
+    if(sD){S.sc=sD;}else S.sc={};
     if(fD)S.fix=fD;if(dD)S.dof=dD;if(cD)S.cf=cD;
     if(tD)Object.keys(tD).forEach(e=>{if(tD[e])S.sst[d+'_'+e]=tD[e];else delete S.sst[d+'_'+e];});
     S.att=aD||{};
@@ -308,7 +308,7 @@ $('shiftCancel').addEventListener('click',()=>closeM($('shiftModal')));$('shiftC
 // === employee management ===
 $('empMgrBtn').addEventListener('click',()=>{rEL();openM($('empModal'));});$('empClose').addEventListener('click',()=>closeM($('empModal')));
 function rEL(){const l=$('empList');l.innerHTML='';const ek=Object.keys(S.emp);if(!ek.length){l.innerHTML='<div style="padding:20px;text-align:center;color:#9090A8;">직원 없음</div>';return;}
-  ek.forEach(id=>{const e=S.emp[id],it=document.createElement('div');it.className='emp-list-item';it.innerHTML='<div class="emp-dot" style="background:'+(e.color||'#9090A8')+'"></div><div class="emp-info"><div class="name">'+esc(e.name)+'</div><div class="detail">'+(e.phone||'-')+' | '+(e.role||'미지정')+' | '+(e.hourlyRate?e.hourlyRate.toLocaleString()+'원':'-')+'</div></div><div style="display:flex;gap:6px;"><button class="btn btn-sm" data-edit="'+id+'">수정</button><button class="btn btn-sm btn-danger" data-del="'+id+'">삭제</button></div>';l.appendChild(it);});
+  ek.forEach(id=>{const e=S.emp[id],it=document.createElement('div');it.className='emp-list-item';it.innerHTML='<div class="emp-dot" style="background:'+(e.color||'#9090A8')+'"></div><div class="emp-info"><div class="name">'+esc(e.name)+'</div><div class="detail">'+esc(e.phone||'-')+' | '+esc(e.role||'미지정')+' | '+(e.hourlyRate?e.hourlyRate.toLocaleString()+'원':'-')+'</div></div><div style="display:flex;gap:6px;"><button class="btn btn-sm" data-edit="'+id+'">수정</button><button class="btn btn-sm btn-danger" data-del="'+id+'">삭제</button></div>';l.appendChild(it);});
   l.querySelectorAll('[data-edit]').forEach(b=>{b.addEventListener('click',()=>oEE(b.dataset.edit));});
   l.querySelectorAll('[data-del]').forEach(b=>{b.addEventListener('click',async()=>{if(!confirm((S.emp[b.dataset.del]?.name||'')+' 삭제?'))return;if(await fbP(FW+'/employees/'+b.dataset.del,null)){delete S.emp[b.dataset.del];rEL();renderAll();toast('삭제됨');}});});}
 let eEid=null,selC=COLORS[0];
@@ -323,7 +323,7 @@ function rDL(){const list=$('doList'),sel=$('doEmpSel');sel.innerHTML='';for(con
   if(!all.length){list.innerHTML='<div style="color:#707088;font-size:.8rem;padding:8px;">등록된 휴무 없음</div>';return;}
   let h='',last='';for(const x of all){if(x.d!==last){const d=new Date(x.d);h+='<div style="font-size:.75rem;color:#9090A8;margin-top:8px;margin-bottom:2px;">'+x.d+' ('+DOW_KR[d.getDay()]+')</div>';last=x.d;}
     const emp=S.emp[x.e];h+='<div style="display:flex;align-items:center;gap:6px;padding:4px 8px;background:#1A1A30;border-radius:6px;margin-bottom:3px;"><span style="width:8px;height:8px;border-radius:50%;background:'+(emp?emp.color:'#9090A8')+';flex-shrink:0;"></span><span style="flex:1;font-size:.85rem;">'+(emp?esc(emp.name):esc(x.e))+'</span><button class="btn btn-sm" style="min-width:30px;min-height:26px;padding:2px 6px;font-size:.7rem;color:#E74C3C;border-color:#E74C3C55;" data-dodel="'+x.e+'|'+x.d+'">✕</button></div>';}
-  list.innerHTML=h;list.querySelectorAll('[data-dodel]').forEach(b=>{b.addEventListener('click',async()=>{const[e,k]=b.dataset.dodel.split('|');if(S.dof[e])delete S.dof[e][k];fbP(FW+'/dayoffs/'+e+'/'+k,null);if(k===dk(S.date))renderAll();rDL();});});}
+  list.innerHTML=h;list.querySelectorAll('[data-dodel]').forEach(b=>{b.addEventListener('click',async()=>{const[e,k]=b.dataset.dodel.split('|');if(S.dof[e])S.dof[e][k]=false;fbP(FW+'/dayoffs/'+e+'/'+k,false);if(k===dk(S.date))renderAll();rDL();});});}
 function pBulk(text){const res=[],lines=text.split('\n').map(l=>l.trim()).filter(Boolean),yr=new Date().getFullYear(),dwM={'일':0,'월':1,'화':2,'수':3,'목':4,'금':5,'토':6};
   for(const line of lines){let mE=null,rest=line;for(const e in S.emp){const n=S.emp[e].name;if(line.startsWith(n)){mE=e;rest=line.slice(n.length).trim();break;}}if(!mE)continue;
     const dp=rest.match(/^([일월화수목금토])([,\s]+[일월화수목금토])*/);if(dp){const dws=rest.match(/[일월화수목금토]/g);if(dws){const m=getMon(new Date());dws.forEach(d=>{const t=dwM[d];if(t!==undefined){const dt=new Date(m);dt.setDate(dt.getDate()+(t===0?6:t-1));res.push({e:mE,d:dk(dt)});}});}continue;}
@@ -341,7 +341,7 @@ function showFlash(){const m=S.date.getMonth()+1,d=S.date.getDate();let el=docum
 let _dc=0;
 async function onDC(){const my=++_dc;showFlash();updD();if(S.sseS){try{S.sseS.close();}catch(e){}}conSS(S.gen);const d=dk(S.date);S.sc={};S.att={};genDO();autoFix(d);rTab();if(my!==_dc)return;
   try{const[scD,stD,cfD,atD]=await Promise.all([fbG(FW+'/schedules/'+d),fbG(FW+'/shift_status/'+d),fbG(FW+'/confirmed/'+d),fbG(FB+'/packhelper/storebot_attendance/'+d)]);if(my!==_dc)return;
-    if(scD){const m={};for(const i in scD)if(DE[i])m[i]=scD[i];S.sc=m;}if(stD)Object.keys(stD).forEach(e=>{stD[e]?S.sst[d+'_'+e]=stD[e]:delete S.sst[d+'_'+e];});
+    if(scD){S.sc=scD;}if(stD)Object.keys(stD).forEach(e=>{stD[e]?S.sst[d+'_'+e]=stD[e]:delete S.sst[d+'_'+e];});
     if(cfD!==undefined&&cfD!==null)S.cf[d]=!!cfD;else delete S.cf[d];S.att=atD||{};autoFix(d);rTab();}catch(e){console.error('onDC',e);}if(my!==_dc)return;loadWk();}
 function openDP(){const ov=$('dpOverlay'),list=$('dpList');const today=new Date();today.setHours(0,0,0,0);const selDk=dk(S.date),tDk=dk(today),ek=Object.keys(S.emp);
   let h='<div class="dp-jump"><button data-action="jumpDate" data-days="-7">◀ 1주</button><button data-action="jumpDate" data-days="0">오늘</button><button data-action="jumpDate" data-days="7">1주 ▶</button></div>';
@@ -350,7 +350,7 @@ function openDP(){const ov=$('dpOverlay'),list=$('dpList');const today=new Date(
     h+='<div class="'+(isT?'dp-item today':isSel?'dp-item selected':'dp-item')+'" data-dk="'+k+'"><span class="dp-dow" style="color:'+((d.getDay()===0||isH(d))?'#E74C3C':d.getDay()===6?'#45B7D1':'#9090A8')+';">'+dow+'</span><span class="dp-date">'+m+'/'+dd+'</span><span class="dp-summary">';
     if(wC)h+='<span style="color:#2ECC71;">'+wC+'명</span> ';if(oC)h+='<span style="color:#E74C3C;">휴'+oC+'</span>';if(isT)h+=' <span style="color:#FFD700;font-weight:700;">오늘</span>';h+='</span></div>';}
   list.innerHTML=h;ov.classList.add('open');
-  list.addEventListener('click',function(e){const jb=e.target.closest('[data-action="jumpDate"]');if(jb){const d=parseInt(jb.dataset.days);if(!d)S.date=new Date();else S.date.setDate(S.date.getDate()+d);ov.classList.remove('open');onDC();return;}const it=e.target.closest('.dp-item');if(it&&it.dataset.dk){const p=it.dataset.dk.split('-');S.date=new Date(+p[0],+p[1]-1,+p[2]);ov.classList.remove('open');onDC();}});
+  list.onclick=function(e){const jb=e.target.closest('[data-action="jumpDate"]');if(jb){const d=parseInt(jb.dataset.days);if(!d)S.date=new Date();else S.date.setDate(S.date.getDate()+d);ov.classList.remove('open');onDC();return;}const it=e.target.closest('.dp-item');if(it&&it.dataset.dk){const p=it.dataset.dk.split('-');S.date=new Date(+p[0],+p[1]-1,+p[2]);ov.classList.remove('open');onDC();}});
   ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('open');},{once:true});}
 // === delegation + tabs + swipe ===
 function setupDel(){function h(e){const d=dk(S.date),tg=e.target.closest('[data-action]');if(tg){e.stopPropagation();const a=tg.dataset.action;if(a==='confirmAll')cfAll();else if(a==='status')sSt(d,tg.dataset.sid,tg.dataset.st);else if(a==='toggleOff')togOff(tg.dataset.oid);else if(a==='confirmOff')cfOff(tg.dataset.oid);return;}const r=e.target.closest('[data-empid]');if(r)openSh(r.dataset.empid);}$('tbCon').addEventListener('click',h);$('lsCon').addEventListener('click',h);}
