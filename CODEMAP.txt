@@ -1,358 +1,126 @@
-# WorkSchedule 코드맵 (code-guard 필수 참조)
-# 수정 전 반드시 이 맵으로 영향 범위 확인
-# 파일: docs/index.html (단일 파일 6519줄, JS 1069~6516)
+# WorkSchedule 코드맵 (슬림 재작성 0417)
+# 3파일 분리구조: app.js 374줄 + index.html 40줄 + style.css 122줄 = 536줄
+# code-guard: 수정 전 이 맵으로 영향 범위 확인
 
-## 섹션 구조 (줄번호 → 역할)
+## 파일 구조
+docs/app.js      — 전체 JS (단일 IIFE)
+docs/index.html  — HTML (모달 5개 포함)
+docs/style.css   — CSS (다크테마 #1A1A30)
 
-### 상수/설정 (1069~1409)
-DAY_START_HOUR (L1085)       하루 기준시각(03:00) — 게이지·정렬·타임바 전부 연동. 변경 시 전 로직 영향
-TL_HOURS (L1093)             타임바 세로축 시간 배열 (12시 시작, 25칸)
-DEFAULT_EMPLOYEES (L1100)    기본 직원 8명 (처음 실행 시 Firebase에 저장)
-KR_HOLIDAYS / KR_HOLIDAY_NAMES (L1114~1173)  법정공휴일 Set + 이름 맵 (2026~2027)
-SHIFT_TYPES (L1196)          근무형태 색상 시스템 (새벽/오전/피크/저녁/마감/풀타임/야간/휴무)
-EMP_CAPABILITIES (L1293)     직원별 가능 역할 (수정 팝업 비활성화 판정 기준)
-ROLE_LABELS / ROLE_COLORS (L1305~1306)  역할 표시명 + 색상 상수
-STAFF_PRESETS (L1319~1356)   4개 매출구간 프리셋 (250/300/350/맥스) — 시간별 인원 기준
-WEEKDAY_REVENUE_DEFAULTS (L1408)  요일별 기본 매출구간 (0=일~6=토)
+## app.js 섹션 (줄번호 → 역할)
 
-### 고정 스케줄 (L1244~1290)
-FIXED_SCHEDULES              직원별 기본 고정 스케줄 (let — 런타임 변경 가능)
-getFixedScheduleForDate()    날짜+직원→고정스케줄 반환 (공휴일/요일 분기, 권연옥 조건부)
-  → FIXED_SCHEDULES, isWeekendOrHoliday() 의존
+### config (1~11)
+FB, FW           Firebase URL 상수
+DSH=3            하루 시작시각 — 게이지/정렬/타임바 전부 연동
+DE               기본 직원 5명 (emp1~emp9)
+HOL              공휴일 단일맵 {'yyyy-MM-dd':'이름'} (2026~2027)
+RC/RL            역할 색상/라벨
 
-### 전역 상태 (L1506~1530)
-currentDate                  현재 선택 날짜 (Date 객체)
-employees                    직원 맵 {empId: {name, phone, color, role, hourlyRate, capabilities, ...}}
-daySchedule                  당일 스케줄 {empId: {start, end, role}}
-weekSchedules                주간 스케줄 {dateStr: {empId: {...}}}
-confirmedDays                확정 날짜 {yyyy-MM-dd: true}
-shiftStatus                  보정 상태 {dk_empId: 'auto'|'confirmed'|'pending'}
-dayoffs                      휴무 {empId: {yyyy-MM-dd: true|false}}
-currentTab                   현재 탭 ('timebar'|'list')
-hourlyWeather                시간별 날씨 {hour: {t:온도, i:이모지}}
-staffSettings                매출구간+오버라이드 {preset, presetOverrides, ver}
-dailyRevenueMap              날짜별 수동 매출구간 {yyyy-MM-dd: '250'|'300'|'350'|'맥스'}
+### store (13)
+S                전역 상태 단일 객체 {tab,date,emp,sc,wsc,fix,dof,cf,sst,att,sse*,loaded,sec}
+  → S.emp = 직원, S.sc = 당일스케줄, S.fix = 고정스케줄, S.dof = 휴무, S.att = 근태
 
-### 유틸리티 (L1603~1687)
-pad(n)                       숫자 2자리 패딩
-dateStr(d) / dateKey(d)      Date→'yyyy-MM-dd'
-timeToMinutesFrom12(t)       'HH:MM'→12시 기준 분 (00~11시는 +24시간 처리) — 핵심 시간 계산
-timeToMinutesFromDayStart(t) 'HH:MM'→DAY_START_HOUR 기준 분 (정렬용)
-timeToPercent(t)             'HH:MM'→타임라인 퍼센트(0~100) — DAY_START_HOUR 기준 24h
-calcHours(start, end)        근무시간 계산 (자정 넘김 처리)
-calcGaugeRange(working)      근무자 배열 → 게이지 표시 범위 자동 계산
-isKrHoliday() / isWeekend() / isWeekendOrHoliday()  날짜 분류
+### util (16~33)
+pad,dk,toast,openM,closeM,sameD,getMon  기본유틸
+isH,hNm,isWE   공휴일/주말 판정
+fEmp            이름→empId 검색
+esc             XSS 이스케이프 (innerHTML 삽입용)
+isDayOff,gSt    휴무/상태 조회
+tm12,tmDS,cH,tPct,pTM  시간 계산
 
-### Firebase REST (L1689~1727)
-fbGet(url)                   GET .json
-fbPut(url, data)             PUT .json
-fbPatch(url, data)           PATCH .json
-fbDelete(url)                DELETE .json
-  → 모두 async, 실패 시 showToast('저장 실패')
+### api (35~37)
+fbG(url)         GET  — .json suffix 자동
+fbP(url,data)    PUT  — READONLY 체크 포함. data=null → 삭제 대체
+  ※ fbPatch, fbDelete 없음 (PUT만 사용)
 
-### 0405 정합성/성능 보강
-purgeEmployeeReferences(empId)  직원 삭제 시 오늘 이후 스케줄/휴무/보정상태 정리
-performRenderAll() / renderAll(force)  requestAnimationFrame 기반 렌더 합치기
-  → 닫힌 섹션(week/share)은 무거운 렌더 생략, 열릴 때만 강제 렌더
-MainActivity.kt              WebView가 로컬 asset 우선 로드, file URL의 Firebase 접근 허용
-app/src/main/assets/*        docs/index.html, app.js, style.css를 앱 자산으로 동기화
+### SSE (49~65)
+connectSSE()     직원 SSE + 스케줄 SSE 연결
+conSS(gen)       스케줄 SSE (날짜별, 세대관리)
+  → S.gen으로 세대 관리, 재연결 3초 backoff
 
-### localStorage 레이어 (L1729~1757)
-lsSaveEmployees / lsLoadEmployees    ws_employees
-lsSaveSchedule / lsLoadSchedule      ws_sched_{yyyy-MM-dd}
-lsDeleteShift                        날짜+직원 단건 삭제
-lsSaveDayoffs / lsLoadDayoffs        ws_dayoffs
-lsSaveConfirmed / lsLoadConfirmed    ws_confirmed
-lsSaveShiftStatus / lsLoadShiftStatus  ws_shift_status
+### 고정스케줄 (38~47)
+gFix(name,date)  = getFixedScheduleForDate — dayTimes 오버라이드 지원
+  → S.fix[name].dayTimes.{dow}.{start,end,role} 우선 적용
+  → type:'fixed' + off:[] 또는 type:'weekly' + days:[] 분기
+gFixC(name)      현재 날짜 기준 gFix 호출
 
-### SSE (L1760~1858)
-connectSSE()                 직원 SSE + 스케줄 SSE 동시 연결. sseGeneration 카운터로 구버전 핸들러 자동 폐기
-connectScheduleSSE(gen)      날짜 변경 시 스케줄 SSE만 재연결
-  → SSE 데이터 수신 → localStorage 저장 → renderAll() 호출
-  → 오류 시 3초 후 재연결
+### 데이터 로딩 (67~84)
+loadData()       초기 7개 병렬 fetch → store 세팅 → genDO → autoFix → renderAll
+loadWk()         주간 7일 스케줄+상태 fetch → S.wsc 세팅
 
-### 데이터 로드 (L1861~2001)
-loadData()                   초기화 핵심 함수
-  1) localStorage 즉시 렌더
-  2) Firebase 병합 (로컬 우선 — schedData와 localSched 합칠 때 로컬이 이긴다)
-  3) ws_init_ver=v9 체크 → 아니면 전체 스케줄/휴무 캐시 클리어
-  4) generateAutoDayoffs() + autoApplyFixed()
-loadWeekSchedules()          현재 주(월~일) 7일치 Firebase 일괄 조회 → weekSchedules 갱신
-autoApplyFixed(dk)           빈 날짜+비휴무에만 고정 스케줄 적용 (기존 입력 보존)
-resetToFixed(dk)             강제 덮어쓰기 버전 (재배치 버튼용)
+### 자동배정 (86~101)
+autoFix(dk)      빈 스케줄에 고정값 자동 입력 + 자동확정
+genDO()          56일간 자동휴무 생성 (고정스케줄 기반)
 
-### 날짜 변경 (L2076~2128)
-onDateChange()               날짜 이동 시 호출 — SSE 재연결, LS 로컬 먼저 렌더, Firebase 동기화
-  → _dateChangeId 증가로 연속 호출 시 이전 요청 자동 무시
+### 분류 (103~118)
+catE(dk)         직원을 working/off/empty로 분류 + 주간통계
+gRange(w)        타임바 게이지 범위 계산 (출퇴근+실근태 기반)
 
-### 렌더 (L2140~)
-renderAll()                  9개 서브렌더 순차 호출 (각각 try/catch 격리)
-  → updateDateDisplay → renderRevenueBar → renderBriefing → renderCurrentTab
-  → renderDateStrip → renderWeek → checkLogistics → buildCalButtons → buildKakaoPerEmp
-renderCurrentTab()           currentTab에 따라 renderTimebarView 또는 renderListView 호출
+### 근태 (120~133)
+attRow(eid,sh)   실제 출퇴근 오버레이 HTML (시간차+출처배지)
+ASC/ASL          출처별 색상/라벨맵
 
-### 주요 렌더 함수
-renderBriefing()             브리핑 패널 (KPI카드5개 + 상태한줄 + 3행인원게이지) — calcStaffing 의존
-renderTimeline()             세로 타임라인 (미사용, timebar로 대체됨)
-renderTimebarView()          타임바 뷰 (수평 간트차트) — 현재 메인 뷰
-renderListView()             리스트 뷰 — 보정 상태 중심, 확정/미확정/미입력/휴무 분류
-renderDateStrip()            하단 날짜 스트립 (60일 스크롤)
-renderWeek()                 주간 개요 (weekBody — 현재 휴무요약만 표시)
-renderMonthView()            월간 모달 — Firebase 전체 조회
-renderRevenueBar()           매출구간 선택 바 4버튼 + 인원수정버튼
-renderEmpList()              직원관리 모달 목록
-renderDayoffList()           휴무관리 모달 목록
+### 렌더 (134~264)
+renderAll()      RAF 디바운스 → doR()
+rBrief()         브리핑 패널 (4칸: 출근/총시간/인건비/휴무 + 공휴일배지)
+rTimebar()       타임바 뷰 (수평바 + 현재시각선 + 근태오버레이)
+rList()          리스트 뷰 (미니바 + 주간시간 라벨)
+renderWeek()     주간 개요 (휴무 칩)
+renderDS()       날짜 스트립 (7열 그리드 + 확정색상)
+rTab()           현재 탭에 따라 rTimebar/rList 분기
+  공통 헬퍼: progBar, stBtn, emptyRow, offRow, sectWrap
 
-### 인원/충돌 계산 (L1418~1492, L2698~2773)
-getRoleLimits(hour)          시간→역할별 min/max (프리셋 → 오버라이드 우선)
-detectConflicts(empKeys, dk) 시간대별 역할 초과/부족 감지 → {empId: [{hour,role,type,msg}], _hour_N: [...]}
-calcStaffing(empKeys, dk)    편입 로직 실행 → 시간별 {kitchen, carDel, bikeDel, total, daFill, ...충돌플래그}
-  → 전원 주방 시작 → 주방min 충족 후 초과 인력을 배달 편입 (오토바이>차 순서)
+### shift 모달 (271~307)
+openSh(eid)      모달 열기 (칩선택+게이지+프리셋+역할)
+bTS()            시간 select 옵션 생성 + 게이지 틱
+setupGauge()     터치 드래그 시간 선택
+shiftSave        저장 → fbP schedules + 자동확정
+shiftDel         삭제 → fbP(url, null)
+shiftFixed       고정값 저장 → fbP fixed_schedules
+shiftDayoff      휴무지정/해제
 
-### 수정 팝업 (L3035~3637)
-openShiftModal(empId)        근무 수정/추가 모달 열기. 기존 스케줄 로드, 휴무 상태 감지
-buildEmpChips()              직원 칩 목록 생성
-updateRolePills()            역할 필 능력 기반 활성/비활성 처리 (EMP_CAPABILITIES 의존)
-buildTimeSelects()           시작/종료 select 옵션 생성 + 게이지 눈금 생성 (DAY_START_HOUR 기준)
-setupShiftGauge()            게이지 드래그 이벤트 (터치)
-updateShiftGauge()           select 변경 → 게이지 시각화 갱신
-selectStartTime/selectEndTime  select + 게이지 동기화 진입점
-shiftSave (click)            저장: localStorage 먼저 → setShiftStatus('confirmed') → fbPut
-shiftDelete (click)          삭제: localStorage 먼저 → fbDelete
-shiftSaveFixed (click)       고정 저장: FIXED_SCHEDULES + Firebase ws_fixed_schedules
-shiftDayoff (click)          휴무 지정/해제 토글 + 고정스케줄 재적용
+### 직원 관리 (308~318)
+rEL()            직원 목록 렌더
+oEE(id)          직원 편집 모달 (이름/전화/색상/역할/시급)
+empEditSave      저장 → fbP employees
 
-### 보정 시스템 (L1529~1584)
-setShiftStatus(dk, empId, st)  상태 저장 → lsSaveShiftStatus → fbPut → renderAll + recordPattern(confirmed시)
-recordPattern()              확정 시 패턴 학습 (ws_patterns localStorage + Firebase)
-getPatternSuggestion()       요일별 과거 확정 패턴 추천 반환 (2회 이상 기록 필요)
-applyPatternSuggestion()     AI 추천 적용 + 확정
-confirmAllShifts()           전체확정 + recordPattern 일괄 + Firebase 일괄 PUT
-resetAllShifts()             전체 보정 리셋
+### 휴무 관리 (319~335)
+rDL()            휴무 목록 렌더
+pBulk(text)      일괄 휴무 텍스트 파싱 (요일/범위/ISO/슬래시)
+doAddBtn         단건 추가
+doBulkBtn        일괄 등록
 
-### 휴무 (L3880~4200)
-isDayOff(empId, dk)          휴무 여부 (dayoffs[empId][dk] truthy 체크)
-generateAutoDayoffs()        WEEKLY_DAYOFFS + PERIOD_DAYOFFS + SPECIFIC_DAYOFFS 자동 생성
-  → dayoffs[empId][dk] === undefined일 때만 생성 (수동 해제=false 보존)
-addDayOff / removeDayOff     단건 추가/삭제
-parseBulkDayoffs(text)       일괄 텍스트 파싱 (요일/범위/ISO/M/D 형태 지원)
-toggleDayOffFromList()       리스트에서 직접 휴무 토글 (해제 시 고정스케줄 재적용)
-WEEKLY_DAYOFFS (L3920)       매주 반복 휴무 정의 (리=화, 히오=월, 권연옥=일수목토)
+### 내비게이션 (336~353)
+onDC()           날짜 변경 → SSE 재연결 + 4개 병렬 fetch + autoFix
+openDP()         30일 날짜 선택기
+showFlash()      날짜 전환 플래시
 
-### 드래그 생성 (L2778~2884)
-onDragStart / onDragMove / onDragEnd   타임라인에서 드래그로 근무 생성 (현재 미사용 — 터치=팝업으로 대체)
+### 확정/상태 (266~270)
+sSt(d,e,st)      개별 확정 토글
+cfAll()          전체확정
+togOff(eid)      휴무 토글 (해제 시 고정값 복원)
+cfOff(eid)       휴무 확정
 
-### 날씨/스포츠 (L2886~2915, L5913~5975)
-loadHourlyWeather()          Gemini API → 시간별 날씨 배열 → hourlyWeather. 오늘 날짜 캐시
-loadWeatherAndSports()       날씨/경기 한줄씩 → weatherInfo, sportsInfo 업데이트
+### 공유/기타 (354~372)
+shareBtn         텍스트 공유 (이원규 제외)
+urlBtn           URL 복사
+collapsible      주간 개요 접기
+visibilitychange SSE+loadData 재호출 (reload 금지)
+init             S.date=new Date → updD → bTS → setupDel → loadData → connectSSE
 
-### AI 스케줄링 (L5987~6163)
-sendAiMessage(userMsg)       Gemini 채팅 → JSON 스케줄 파싱 → "적용하기" 버튼 생성
-buildScheduleContext()       직원목록 + 현재스케줄 + 규칙 + 날씨 컨텍스트 빌드
-getTargetDates(userMsg)      "오늘/내일/이번주" 파싱 → 날짜 배열
-applyAiSchedule(data)        AI 추천 스케줄 일괄 적용 (localStorage 먼저 → Firebase)
+## 의존성 그래프 (수정 시 영향)
+gFix ← autoFix, gFixC ← rBrief
+S.fix ← gFix, shiftFixed
+S.sc ← loadData, SSE, autoFix, shiftSave/Del/Dayoff, togOff
+S.emp ← loadData, SSE, empEditSave
+catE ← rTimebar, rList (모든 뷰 렌더)
+renderAll ← SSE put/patch, loadData, 상태변경 전부
 
-### 공유/이미지 (L5264~5860)
-shareImageBtn (click)        당일 스케줄 이미지 생성 → 미리보기 → NativeBridge or 다운로드
-shareTextBtn (click)         텍스트 클립보드 복사 (이원규 제외)
-shareKakaoBtn (click)        7일 확정 데이터 → 전체이미지 + 전원 개별.ics → NativeBridge.shareMultiFiles
-buildKakaoPerEmp()           직원별 카톡 버튼 생성 (Mode2=개별이미지/Mode3=전체이미지)
-sharePerEmployee(empId, mode)  1명 공유 (개별 또는 전체 이미지 + 1명 .ics)
-showSharePreview(imgBase64)  미리보기 모달 (Promise — true=전송/false=취소)
-buildShareImage_full()       html2canvas 기반 전체 근무표 이미지 생성
-buildShareImage_personal()   개별 직원 이미지 생성
-buildIcsForEmployee()        직원 1명 .ics 생성 (이전 공유 이력 대비 취소 이벤트 포함)
-generateICS() / downloadBlob()  범용 .ics 생성 + 파일 다운로드
-collectAllConfirmed()        7일 확정 데이터 수집 헬퍼
-
-### 급여 계산 (L6283~6471)
-calcMonthlyPay(empId, year, month)  월급 계산 (기본+야간1.5배+주휴수당)
-renderPayTable()             급여 테이블 렌더링
-payBankTotalBtn (click)      BankTotal Firebase (/banktotal/payroll/{ym}/{이름})에 PUT
-
-### 인원설정 UI (L3202~3434)
-setDailyRevenue(key)         날짜별 매출구간 수동 지정 → dailyRevenueMap 저장
-openHourLimitEdit(hour)      시간별 인원 수정 팝업 (매출구간별 오버라이드 저장)
-openRevenueEditModal()       매출구간 라벨 수정 팝업
-clearHourlyOverrides()       모든 오버라이드 초기화
-saveStaffSettings()          staffSettings → localStorage + Firebase
-
-### 기타 UI
-init()                       앱 진입점 — currentDate 초기화, buildTimeSelects, loadAiKey, loadDayoffs, loadData, connectSSE
-setupCollapsible()           접이식 섹션 (localStorage 상태 유지)
-openDatePicker()             날짜 픽커 드롭다운 (30일)
-renderCalendarView()         캘린더 뷰 렌더 (현재 탭에 없음 — 미사용)
-renderHorizontalView()       수평 뷰 (레거시 — 호환용 빈 함수, 실제 미사용)
-
----
-
-## 함수 간 의존성 (A → B = A가 B를 호출)
-
-init → loadDayoffs → lsLoadDayoffs, fbGet(FB_DAYOFFS)
-init → loadData → lsLoadEmployees/lsLoadSchedule, fbGet × 3, generateAutoDayoffs, autoApplyFixed
-init → connectSSE → connectScheduleSSE
-init → buildTimeSelects → setupShiftGauge
-init → loadAiKey → fetch(FB_BASE/banktotal/settings/gemini_key)
-
-loadData → generateAutoDayoffs → findEmpIdByName, lsSaveDayoffs
-loadData → autoApplyFixed → getFixedScheduleForDate, isDayOff, lsSaveSchedule, fbPut
-loadData → renderAll
-
-onDateChange → connectScheduleSSE, generateAutoDayoffs, autoApplyFixed, renderCurrentTab, loadWeekSchedules, updateConfirmBtn
-
-renderAll → updateDateDisplay, renderRevenueBar, renderBriefing, renderCurrentTab,
-            renderDateStrip, renderWeek, checkLogistics, buildCalButtons, buildKakaoPerEmp
-renderCurrentTab → renderTimebarView 또는 renderListView
-
-renderBriefing → calcStaffing → getRoleLimits → getActivePreset → getActivePresetKey
-renderBriefing → detectConflicts → getRoleLimits, timeToMinutesFrom12, isDayOff
-renderTimebarView → calcStaffing, detectConflicts, calcGaugeRange, getPatternSuggestion
-renderListView → calcStaffing, detectConflicts, calcGaugeRange, getPatternSuggestion, getFixedSchedule
-
-openShiftModal → buildEmpChips → daySchedule
-openShiftModal → updateRolePills → EMP_CAPABILITIES
-shiftSave(click) → lsSaveSchedule, setShiftStatus, fbPut, loadWeekSchedules
-shiftDayoff(click) → isDayOff, dayoffs, lsSaveDayoffs, fbPut, getFixedScheduleForDate, setShiftStatus, renderAll
-
-setShiftStatus → lsSaveShiftStatus, fbPut, recordPattern(confirmed시), renderAll
-confirmAllShifts → shiftStatus, lsSaveShiftStatus, recordPattern × N, fbPut, confirmedDays, renderAll
-applyPatternSuggestion → getPatternSuggestion, lsSaveSchedule, fbPut, setShiftStatus, renderAll
-toggleDayOffFromList → dayoffs, lsSaveDayoffs, fbPut/fbDelete, getFixedScheduleForDate, setShiftStatus, renderAll
-
-sendAiMessage → buildScheduleContext, getTargetDates, callGemini
-callGemini → fetch(GEMINI_URL)
-applyAiSchedule → lsLoadSchedule, lsSaveSchedule, fbPut, renderAll, loadWeekSchedules
-
-shareKakaoBtn(click) → lsLoadSchedule, getShiftStatus, buildShareImage_full, showSharePreview, buildIcsForEmployee, NativeBridge.shareMultiFiles
-sharePerEmployee → collectAllConfirmed 또는 buildShareImage_personal, buildIcsForEmployee, showSharePreview
-
-loadHourlyWeather → callGemini → geminiKey
-loadWeatherAndSports → callGemini → geminiKey
-
-calcMonthlyPay → isDayOff, lsLoadSchedule
-renderPayTable → calcMonthlyPay × N
-payBankTotalBtn(click) → fbPut(FB_BASE/banktotal/payroll/...)
-
----
-
-## 공유 상태 (변경 시 연쇄 영향)
-
-### 변경 금지 / 주의 변수
-currentDate          모든 렌더 기준. setDate로 직접 변경 후 onDateChange() 필수
-employees            SSE put/patch로 갱신. lsSaveEmployees 동기화 필수
-daySchedule          당일 스케줄 캐시. lsSaveSchedule 동기화 필수. SSE 수신 시 덮어쓰기
-weekSchedules        주간 캐시. loadWeekSchedules 완료 후 최신
-shiftStatus          확정 상태. lsSaveShiftStatus + Firebase 동기화 필수
-dayoffs              휴무. lsSaveDayoffs + Firebase 동기화 필수. false=수동해제(재생성 방지)
-confirmedDays        날짜확정. lsSaveConfirmed + Firebase 동기화 필수
-staffSettings        인원 프리셋 오버라이드. saveStaffSettings() 호출 필수
-dailyRevenueMap      날짜별 매출구간. saveDailyRevenueMap() 호출 필수
-FIXED_SCHEDULES      고정 스케줄 (let). 직접 변경 시 localStorage+Firebase도 갱신 필요
-geminiKey            날씨/AI 공통 키. loadAiKey() 비동기 로드
-hourlyWeather        날씨 데이터. renderBriefing에서 직접 참조
-sseGeneration        SSE 구버전 핸들러 폐기 카운터. connectSSE() 호출마다 증가
-
-### localStorage 키 목록
-ws_employees           직원 데이터
-ws_sched_{yyyy-MM-dd}  날짜별 스케줄
-ws_dayoffs             휴무 데이터
-ws_confirmed           날짜 확정 여부
-ws_shift_status        직원별 보정 상태
-ws_patterns            AI 학습 패턴
-ws_staff_settings      인원 프리셋+오버라이드 (ver:6 마이그레이션)
-ws_daily_revenue       날짜별 수동 매출구간
-ws_fixed_schedules     고정 스케줄 커스텀값
-ws_init_ver            초기화 버전 (현재 v9)
-ws_gemini_key          Gemini API 키 캐시
-ws_hourly_wx           시간별 날씨 캐시 (오늘 날짜 기준)
-ws_weather_cache       날씨 한줄 캐시
-ws_sports_cache        스포츠 경기 캐시
-ws_week_open / ws_info_open / ws_ai_open / ws_pay_open / ws_share_open   섹션 접힘 상태
-ws_preset_labels       매출구간 커스텀 라벨
-ws_shared_{empId}      직원별 공유 이력 (취소 .ics 생성용)
-
-### Firebase 경로
-/workschedule/employees/{empId}               직원 데이터 (SSE 연결됨)
-/workschedule/schedules/{yyyy-MM-dd}/{empId}  스케줄 (SSE 연결됨)
-/workschedule/dayoffs/{empId}/{yyyy-MM-dd}    휴무
-/workschedule/confirmed/{yyyy-MM-dd}          날짜 확정
-/workschedule/shift_status/{yyyy-MM-dd}/{empId}  보정 상태
-/workschedule/fixed_schedules/{empName}       커스텀 고정 스케줄
-/workschedule/staff_settings                  인원 프리셋 오버라이드
-/workschedule/daily_revenue                   날짜별 매출구간
-/workschedule/patterns/{key}                  AI 학습 패턴
-/banktotal/settings/gemini_key                Gemini API 키 (BankTotal 공유)
-/banktotal/payroll/{ym}/{이름}               급여 데이터 전송
-
----
-
-## 위험 수정 포인트
-
-DAY_START_HOUR (L1085)
-  → timeToMinutesFromDayStart, timeToPercent, calcGaugeRange, buildTimeSelects, getFixedScheduleForDate
-  → 변경 시 타임바 위치, 정렬, 게이지, select 옵션 전부 어긋남
-
-timeToMinutesFrom12() (L1659)
-  → calcHours, detectConflicts, calcStaffing, renderTimeline, renderTimebarView
-  → 00~11시를 +24시간으로 처리하는 핵심 로직. 변경 시 야간 근무 전체 계산 오류
-
-calcStaffing() (L2698)
-  → renderBriefing(인원게이지), renderTimeline(커버리지), renderTimebarView(합계행)
-  → 편입 로직 변경 시 브리핑/타임바/리스트 3곳 모두 영향
-
-getRoleLimits(hour) (L1418)
-  → detectConflicts, calcStaffing, renderBriefing, renderTimeline, renderTimebarView
-  → getActivePresetKey → staffSettings.presetOverrides 우선 적용. 오버라이드 키 형식 h6, h7... (숫자 키 금지 — Firebase 배열 변환됨)
-
-dayoffs[empId][dk] 해석 (L3888)
-  → isDayOff: truthy = 휴무, false = 수동해제(자동생성 방지). undefined = 미등록
-  → delete 대신 false 사용 규칙. 이 규칙 깨지면 generateAutoDayoffs가 재생성
-
-autoApplyFixed() (L2004)
-  → 기존 입력(daySchedule[empId]) 있으면 절대 덮어쓰지 않음
-  → 로직 변경 시 기존 수동 입력 덮어쓰기 위험
-
-loadData()의 병합 로직 (L1916~1928)
-  → Firebase schedData + localSched: Object.assign({}, schedData, localSched) — 로컬 우선
-  → 순서 바꾸면 서버 데이터가 로컬 덮어씀 (로컬 최우선 원칙 위반)
-
-ws_init_ver = 'v9' (L1944)
-  → 버전 변경 시 전체 스케줄/휴무 캐시 클리어 발생
-  → 신중하게 올릴 것. 올리면 기존 사용자 모든 스케줄 삭제
-
-staffSettings.ver = 6 (L1394)
-  → presetOverrides 초기화 트리거. 버전 변경 시 모든 오버라이드 날아감
-
-EMP_CAPABILITIES (L1293)
-  → updateRolePills의 disabled 판정 기준
-  → SPEC.txt 직원 능력표와 반드시 동기화
-
-WEEKLY_DAYOFFS (L3920)
-  → generateAutoDayoffs에서 56일 앞까지 자동 생성
-  → 직원 이름 기반 findEmpIdByName 의존 — 직원 이름 변경 시 반드시 여기도 수정
-
-buildIcsForEmployee()의 ws_shared_{empId} (L5601)
-  → 이전 공유 이력과 비교하여 취소 이벤트 생성
-  → 이력 없이 취소하면 상대방 캘린더에서 일정이 안 지워짐
-
-sseGeneration 카운터 (L1517, L1763)
-  → connectSSE 호출마다 증가. 구버전 핸들러는 gen !== sseGeneration 체크로 자동 종료
-  → 이 패턴 제거 시 날짜 이동 후 구버전 SSE가 새 daySchedule 덮어씀
-
-## 충돌 보호 — 출퇴근 데이터 파이프라인 (삭제/변경 금지 — code-guard 크로스체크 대상)
-#
-# 파이프라인: 카톡 → StoreBot → Firebase → WorkSchedule
-#   1. StoreBot server.py save_attendance() → /packhelper/storebot_attendance/{날짜}/{empId}.json
-#   2. WorkSchedule onDateChange() → fbGet(FB_BASE+'/packhelper/storebot_attendance/'+dk)
-#   3. dayAttendance 변수에 저장
-#   4. buildAttendanceRow(empId, shift) → 리스트/타임바 뷰에 표시
-#
-# 크로스체크: 한쪽 변경 시 반드시 양쪽 확인
-#   - StoreBot 경로 변경 → WorkSchedule fbGet 경로도 변경
-#   - WorkSchedule dayAttendance 구조 변경 → buildAttendanceRow 필드 매칭 확인
-#   - Firebase 필드명(actual_start, actual_end, actual_start_source 등) 양쪽 일치 필수
-#
-# 보호 대상:
-#   - WorkSchedule: onDateChange(L2113), dayAttendance(L1532), buildAttendanceRow(L4467)
-#   - StoreBot: save_attendance(server.py), get_attendance(server.py)
-#   - Firebase 경로: /packhelper/storebot_attendance/{날짜}/{empId}
+## Firebase 경로
+/workschedule/employees/{empId}
+/workschedule/schedules/{yyyy-MM-dd}/{empId}
+/workschedule/fixed_schedules/{한글이름}
+/workschedule/dayoffs/{empId}/{yyyy-MM-dd}
+/workschedule/confirmed/{yyyy-MM-dd}
+/workschedule/shift_status/{yyyy-MM-dd}/{empId}
+/packhelper/storebot_attendance/{yyyy-MM-dd}  ← 읽기전용
