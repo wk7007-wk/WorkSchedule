@@ -27,7 +27,7 @@
 - C&I는 GitHub Pages 배포 실패, JS 오류, Firebase sync 불일치, StoreBot 근무표 소비 오류, 반복 사용자 보정 신호를 self_fix 후보로 올린다.
 - 자동 복구는 웹 코드/문서/배포 보정과 검증까지 허용한다.
 - 직원/근무 원본을 임의 삭제하거나, localStorage 우선 정책을 깨거나, 직원 공개 화면에 쓰기 기능을 섞는 자동 복구는 금지한다.
-- CLI는 자체 작업을 만들지 않고 monitor/worker/사용자/수동 enqueue가 넣은 prompt만 실행한다.
+- CLI/LLM은 prompt envelope가 있어야 깨어난다. monitor/worker/사용자/수동 enqueue 또는 상주 판단 루프가 prompt를 주입하며, 이것은 C&I 판단 권한 제한이 아니다.
 
 ## 수정 전 질문
 - 이 변경이 근무표 입력/조회 실수를 줄이는가.
