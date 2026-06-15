@@ -1,0 +1,40 @@
+# WorkSchedule APP_INTENT.md
+
+## 만든 이유
+- 매장 근무표, 휴무, 출근기록을 직원과 운영방이 같은 기준으로 보게 한다.
+
+## 사용자 결과
+- 공식 근무스케줄 URL은 `https://wk7007-wk.github.io/WorkSchedule/`다.
+- 근무표 저장, 고정스케줄, 휴무, 출근기록이 Firebase 실패나 화면 전환 때문에 사라지면 안 된다.
+
+## 절대 기준
+- localStorage 우선, Firebase 백업/동기화 기준을 유지한다.
+- 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
+- 휴무 해제는 값을 false로 남기고 삭제하지 않는다.
+- StoreBot 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터의 저장 경계는 WorkSchedule이 가진다.
+
+## UI/동선 기준
+- 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.
+- 스와이프는 날짜 변경이며 탭 전환으로 바꾸지 않는다.
+- 직원 공개 화면과 관리자 조작 화면의 경계를 섞지 않는다.
+
+## 데이터/경계 기준
+- 주요 경로는 `/workschedule/employees`, `schedules`, `fixed_schedules`, `dayoffs`, `confirmed`, `settings`, 출근기록 경로다.
+- Firebase 쓰기 실패 시 로컬 상태가 먼저 보존되어야 한다.
+- StoreBot/근무표 PNG 경로를 바꿀 때는 StoreBotTermux와 `.agents/skills/storebot-kakao-reply` 기준을 같이 확인한다.
+
+## C&I / AI Ops 경계
+- C&I는 GitHub Pages 배포 실패, JS 오류, Firebase sync 불일치, StoreBot 근무표 소비 오류, 반복 사용자 보정 신호를 self_fix 후보로 올린다.
+- 자동 복구는 웹 코드/문서/배포 보정과 검증까지 허용한다.
+- 직원/근무 원본을 임의 삭제하거나, localStorage 우선 정책을 깨거나, 직원 공개 화면에 쓰기 기능을 섞는 자동 복구는 금지한다.
+- CLI는 자체 작업을 만들지 않고 monitor/worker/사용자/수동 enqueue가 넣은 prompt만 실행한다.
+
+## 수정 전 질문
+- 이 변경이 근무표 입력/조회 실수를 줄이는가.
+- localStorage와 Firebase의 역할이 유지되는가.
+- StoreBot 근무표 출력과 공식 URL 안내가 같이 맞는가.
+
+## 완료 기준
+- 검증: 브라우저 smoke, 저장/휴무/고정스케줄, Firebase 동기화.
+- 전달: GitHub Pages 반영 확인.
+- 남은 위험: 브라우저 캐시, Firebase 일시 실패, 직원 공개 화면 혼동.
