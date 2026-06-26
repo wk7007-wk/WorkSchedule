@@ -1,6 +1,6 @@
 # WorkSchedule 코드맵 (슬림 재작성 0417)
 # 의도 기준: APP_INTENT.md (근무스케줄/출근기록 관리)
-# 3파일 분리구조: app.js 375줄 + index.html 40줄 + style.css 122줄 = 537줄
+# 3파일 분리구조: docs/index.html + docs/app.js + docs/style.css
 # code-guard: 수정 전 이 맵으로 영향 범위 확인
 
 ## 파일 구조
@@ -12,14 +12,15 @@ docs/style.css   — CSS (다크테마 #1A1A30)
 
 ### config (1~11)
 FB, FW           Firebase URL 상수
+AUTH             프론트 인증 설정. `pinSha256`, `storeLat/storeLng`, `radiusM=150`; 좌표/PIN 미설정 기본 차단, `?authDebug=1`은 로컬 개발에서만 검증 우회
 DSH=3            하루 시작시각 — 게이지/정렬/타임바 전부 연동
 DE               기본 직원 5명 (emp1~emp9)
 HOL              공휴일 단일맵 {'yyyy-MM-dd':'이름'} (2026~2027)
 RC/RL            역할 색상/라벨
 
 ### store (13)
-S                전역 상태 단일 객체 {tab,date,emp,sc,wsc,fix,dof,cf,sst,att,sse*,loaded,sec}
-  → S.emp = 직원, S.sc = 당일스케줄, S.fix = 고정스케줄, S.dof = 휴무, S.att = 근태
+S                전역 상태 단일 객체 {tab,date,emp,sc,wsc,msc,ah,fix,dof,cf,sst,att,sse*,loaded,sec}
+  → S.emp = 직원, S.sc/wsc/msc = 당일/주간/월간스케줄, S.dof = 휴무, S.att/ah = 당일/누적 근태
 
 ### util (16~35)
 pad,dk,toast,openM,closeM,sameD,getMon  기본유틸
@@ -35,6 +36,9 @@ fbG(url)         GET  — .json suffix 자동
 fbP(url,data)    PUT  — READONLY 체크 포함. data=null 삭제성 쓰기 금지
   ※ fbPatch, fbDelete 없음 (PUT만 사용)
 
+### auth gate
+initAuthGate()   앱 초기화 전 PIN+단말 localStorage+GPS 반경 인증. 정적 프론트라 IP 인증/비밀 보호는 서버측 필요
+
 ### SSE (49~65)
 connectSSE()     직원 SSE + 스케줄 SSE 연결
 conSS(gen)       스케줄 SSE (날짜별, 세대관리)
@@ -47,8 +51,9 @@ gFix(name,date)  = getFixedScheduleForDate — dayTimes 오버라이드 지원
 gFixC(name)      현재 날짜 기준 gFix 호출
 
 ### 데이터 로딩 (67~84)
-loadData()       초기 7개 병렬 fetch → store 세팅 → genDO → autoFix → renderAll
-loadWk()         주간 7일 스케줄+상태 fetch → S.wsc 세팅
+loadData()       초기 fetch → schedules/status/attendance_history + storebot_attendance 세팅 → renderAll
+loadWk()         주간 7일 스케줄+상태+attendance_history fetch → S.wsc/S.ah 세팅
+loadMonth()      선택월 스케줄+상태+attendance_history fetch → 월별/인원별 누적 뷰 갱신
 
 ### 자동배정 (86~101)
 autoFix(dk)      빈 스케줄에 고정값 자동 입력 + 자동확정
@@ -59,17 +64,24 @@ catE(dk)         직원을 working/off/empty로 분류 + 주간통계
 gRange(w)        타임바 게이지 범위 계산 (출퇴근+실근태 기반)
 
 ### 근태 (120~133)
+cacheAtt(d,a)    `/packhelper/storebot_attendance/{date}` 읽은 값을 `/workschedule/attendance_history/{date}`에 idempotent PUT
 attRow(eid,sh)   실제 출퇴근 오버레이 HTML (시간차+출처배지)
+attStats(days,eid) 주간/월간 실제 출근/시작/종료 누적 계산
 ASC/ASL          출처별 색상/라벨맵
 
 ### 렌더 (134~264)
 renderAll()      RAF 디바운스 → doR()
+rStdPanel()      표준입력 select/date 상태 갱신
 rBrief()         브리핑 패널 (4칸: 출근/총시간/인건비/휴무 + 공휴일배지)
+rDashboard()     선택일/오늘 요약 + 역할별/미입력/실출근 요약
+rDay()           날짜별 compact list + 실출근/실퇴근 카운트
+rPeople()        주간 근무/월간 출근기록 인원별 누적
+rMonth()         선택월 날짜별 근무/확정/휴무/실출근 summary grid
 rTimebar()       타임바 뷰 (수평바 + 현재시각선 + 근태오버레이)
 rList()          리스트 뷰 (미니바 + 주간시간 라벨)
 renderWeek()     주간 개요 (휴무 칩)
 renderDS()       날짜 스트립 (7열 그리드 + 확정색상)
-rTab()           현재 탭에 따라 rTimebar/rList 분기
+rTab()           dashboard/day/people/month/timebar/list 분기
   공통 헬퍼: progBar, stBtn, emptyRow, offRow, sectWrap
 
 ### shift 모달 (271~307)
@@ -80,6 +92,9 @@ shiftSave        저장 → fbP schedules + 자동확정
 shiftDel         삭제 → fbP(url, null)
 shiftFixed       고정값 저장 → fbP fixed_schedules
 shiftDayoff      휴무지정/해제
+
+### 표준입력
+saveStd()         표준입력 저장. 근무면 schedules + shift_status confirmed + dayoffs false, 휴무면 schedules false + dayoffs true + shift_status confirmed
 
 ### 직원 관리 (310~320)
 rEL()            직원 목록 렌더
@@ -126,4 +141,5 @@ renderAll ← SSE put/patch, loadData, 상태변경 전부
 /workschedule/dayoffs/{empId}/{yyyy-MM-dd}
 /workschedule/confirmed/{yyyy-MM-dd}
 /workschedule/shift_status/{yyyy-MM-dd}/{empId}
+/workschedule/attendance_history/{yyyy-MM-dd}  ← WorkSchedule 누적 근태 캐시/SOT 후보
 /packhelper/storebot_attendance/{yyyy-MM-dd}  ← 읽기전용

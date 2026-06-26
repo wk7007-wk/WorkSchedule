@@ -1,5 +1,7 @@
 <!DOCTYPE html>
-<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"><title>근무표</title><link rel="stylesheet" href="style.css"></head><body>
+<html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"><title>근무표</title><link rel="stylesheet" href="style.css"></head><body class="auth-locked">
+<div class="auth-gate" id="authGate"><div class="auth-card"><div class="auth-title">WorkSchedule 인증</div><div class="auth-note">비밀번호와 인증된 단말, 매장 GPS 반경 확인 후 접근합니다.</div><input class="form-input" id="authPin" type="password" placeholder="PIN"><input class="form-input" id="authDevice" type="text" placeholder="단말명"><button class="btn btn-accent" id="authBtn">인증</button><div class="auth-msg" id="authMsg">매장 좌표가 설정되지 않으면 기본 접속은 차단됩니다.</div></div></div>
+<main class="ws-shell" id="appShell">
 <div style="position:sticky;top:0;z-index:100;background:#1A1A30;border-bottom:1px solid #2E2E52;">
 <div style="display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:4px;">
 <button class="btn nav-btn" id="prevW" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">◀◀</button>
@@ -11,10 +13,11 @@
 <div style="display:flex;gap:4px;"><button class="btn emp-mgr-btn" id="empMgrBtn">직원</button><button class="btn emp-mgr-btn" id="dayoffMgrBtn" style="color:#E74C3C;border-color:#E74C3C55;">휴무</button></div>
 <div style="display:flex;gap:4px;"><button class="btn btn-sm" id="shareBtn" style="font-size:.75rem;padding:4px 8px;min-width:auto;color:#9090A8;border-color:#2E2E52;">공유</button><button class="btn btn-sm" id="urlBtn" style="font-size:.75rem;padding:4px 8px;min-width:auto;color:#707088;border-color:#2E2E52;">URL</button><button class="btn btn-sm" id="refreshBtn" style="font-size:.75rem;padding:4px 8px;min-width:auto;color:#707088;border-color:#2E2E52;">↻</button></div></div></div>
 <div id="briefing" style="background:#1e1e3a;border-bottom:1px solid #2E2E52;padding:6px 4px;font-size:.75rem;"></div>
-<div class="layout-tabs" id="layoutTabs"><button class="layout-tab active" data-tab="timebar">타임바</button><button class="layout-tab" data-tab="list">리스트</button></div>
+<section class="std-panel" id="stdPanel"><div class="std-head"><div><strong>표준입력</strong><span>WorkSchedule SOT 직접 저장</span></div><label class="std-off"><input type="checkbox" id="stdOff">휴무</label></div><div class="std-grid"><label>날짜<input class="form-input" id="stdDate" type="date"></label><label>직원<select class="form-input" id="stdEmp"></select></label><label>시작<input class="form-input" id="stdStart" type="time" step="1800" value="10:00"></label><label>종료<input class="form-input" id="stdEnd" type="time" step="1800" value="18:00"></label><label>역할<select class="form-input" id="stdRole"><option value="">미지정</option><option value="주방">주방</option><option value="차배달">차배달</option><option value="오토바이">오토바이</option></select></label><button class="btn btn-accent std-save" id="stdSave">저장</button></div></section>
+<div class="layout-tabs" id="layoutTabs"><button class="layout-tab active" data-tab="dashboard">대시</button><button class="layout-tab" data-tab="day">날짜</button><button class="layout-tab" data-tab="people">인원</button><button class="layout-tab" data-tab="month">월별</button><button class="layout-tab" data-tab="timebar">타임바</button><button class="layout-tab" data-tab="list">리스트</button></div>
 <div class="date-strip" id="dateStrip"></div>
 <div class="loading" id="loader"><div class="spinner"></div>불러오는 중...</div>
-<div id="tabContent" style="display:none;"><div class="tab-panel active" id="pTimebar"><div id="tbCon"></div></div><div class="tab-panel" id="pList"><div id="lsCon"></div></div></div>
+<div id="tabContent" style="display:none;"><div class="tab-panel active" id="pDashboard"><div id="dashCon"></div></div><div class="tab-panel" id="pDay"><div id="dayCon"></div></div><div class="tab-panel" id="pPeople"><div id="peopleCon"></div></div><div class="tab-panel" id="pMonth"><div id="monthCon"></div></div><div class="tab-panel" id="pTimebar"><div id="tbCon"></div></div><div class="tab-panel" id="pList"><div id="lsCon"></div></div></div>
 <div class="date-picker-overlay" id="dpOverlay"><div class="date-picker-list" id="dpList"></div></div>
 <div class="week-section"><div class="week-header" id="weekToggle"><h3>주간 개요</h3><span class="arrow" id="weekArrow">▼</span></div><div class="week-body" id="weekBody"><div class="week-grid" id="weekGrid"></div><div class="week-offs" id="weekOffs"></div></div></div>
 <div class="modal-overlay" id="shiftModal"><div class="modal-content" style="max-width:420px;">
@@ -37,4 +40,4 @@
 <div style="margin-bottom:10px;"><div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><select class="form-input" id="doEmpSel" style="flex:1;"></select><input class="form-input" id="doDate" type="date" style="flex:1;"><button class="btn btn-accent btn-sm" id="doAddBtn">추가</button></div>
 <div style="margin-bottom:8px;"><textarea class="form-input" id="doBulk" placeholder="여러 형태로 입력 가능:&#10;이원규 2/25, 2/26&#10;권연옥 3/1~3/3&#10;리 2025-03-05&#10;히오 화,목 (이번주)" rows="4" style="font-size:.8rem;"></textarea><button class="btn btn-sm" id="doBulkBtn" style="width:100%;margin-top:4px;color:#FFD700;border-color:#FFD700;">일괄 등록</button></div></div>
 <div style="font-size:.85rem;color:#FFD700;font-weight:600;margin-bottom:6px;">등록된 휴무</div><div id="doList" style="max-height:300px;overflow-y:auto;"></div></div></div>
-<div class="toast" id="toast"></div><script src="app.js"></script></body></html>
+</main><div class="toast" id="toast"></div><script src="app.js"></script></body></html>

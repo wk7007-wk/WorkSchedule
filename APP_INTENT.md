@@ -11,7 +11,11 @@
 - localStorage 우선, Firebase 백업/동기화 기준을 유지한다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제는 값을 false로 남기고 삭제하지 않는다.
+- 표준입력은 공식 WorkSchedule 웹앱에서 `/workschedule/schedules`, `shift_status`, `dayoffs` SOT에 직접 저장한다.
+- 출근 원본 `/packhelper/storebot_attendance/{date}`는 수정하지 않고, 읽은 일자 데이터만 `/workschedule/attendance_history/{date}`에 idempotent PUT으로 보존해 누적 보기 기준으로 쓴다.
 - StoreBot 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터의 저장 경계는 WorkSchedule이 가진다.
+- HynixOps는 발주/근무표 탭형 통합 런처 이름이며, OrderHelper와 WorkSchedule 원본 SOT는 합치지 않는다.
+- 정적 프론트 인증은 PIN+단말 localStorage+매장 GPS 150m 게이트까지만 담당한다. `authDebug`는 로컬 개발에서만 유효하며, IP 인증과 실제 비밀 보호는 Firebase Hosting/Functions/Auth, VPN, Cloudflare Access 같은 서버/네트워크 단계가 필요하다.
 
 ## UI/동선 기준
 - 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.
