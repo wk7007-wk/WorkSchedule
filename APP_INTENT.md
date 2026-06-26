@@ -12,6 +12,9 @@
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제는 값을 false로 남기고 삭제하지 않는다.
 - 표준입력은 공식 WorkSchedule 웹앱에서 `/workschedule/schedules`, `shift_status`, `dayoffs` SOT에 직접 저장한다.
+- Firebase `/workschedule`이 단일 근무 데이터 원본이고, WorkSchedule UI/HynixOps/StoreBotTermux/대시보드는 소비자다.
+- 공통 해석 순서는 `dayoffs=true` → 유효한 날짜별 `schedules` → `fixed_schedules` fallback → 미입력이다.
+- 새 코드의 근무 해제/clear 값은 `false`가 기준이며, 빈 객체 `{}`는 legacy 호환으로만 본다.
 - 출근 원본 `/packhelper/storebot_attendance/{date}`는 수정하지 않고, 읽은 일자 데이터만 `/workschedule/attendance_history/{date}`에 idempotent PUT으로 보존해 누적 보기 기준으로 쓴다.
 - StoreBot 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터의 저장 경계는 WorkSchedule이 가진다.
 - HynixOps는 발주/근무표 탭형 통합 런처 이름이며, OrderHelper와 WorkSchedule 원본 SOT는 합치지 않는다.
@@ -27,6 +30,7 @@
 
 ## 데이터/경계 기준
 - 주요 경로는 `/workschedule/employees`, `schedules`, `fixed_schedules`, `dayoffs`, `confirmed`, `settings`, 출근기록 경로다.
+- 스키마 계약과 read-only 점검은 `/root/my-first-project/rules/workschedule_schema_contract.txt`와 `scripts/workschedule_schema_audit.py`를 기준으로 한다.
 - Firebase 쓰기 실패 시 로컬 상태가 먼저 보존되어야 한다.
 - StoreBot/근무표 PNG 경로를 바꿀 때는 StoreBotTermux와 `.agents/skills/storebot-kakao-reply` 기준을 같이 확인한다.
 

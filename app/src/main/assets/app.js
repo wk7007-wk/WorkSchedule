@@ -274,25 +274,40 @@ function getFixedScheduleForDate(empName, dateObj){
   const d = typeof dateObj==='string' ? new Date(dateObj.replace(/-/g,'/')) : dateObj;
   const dow = d.getDay(); // 0=sun,1=mon,...6=sat
   const fs = fixedSchedules[empName];
-  if(!fs || !fs.start) return null;
+  if(!fs) return null;
+  const dowStr = ['sun','mon','tue','wed','thu','fri','sat'][dow];
+  const override = fs.dayTimes && fs.dayTimes[dowStr];
+  const start = override && override.start ? override.start : fs.start;
+  const end = override && override.end ? override.end : fs.end;
+  const role = override && override.role ? override.role : (fs.role || '');
+  if(!start && !end) return null;
 
   if(fs.type === 'fixed'){
     // off array check (dow numbers)
     if(fs.off && Array.isArray(fs.off) && fs.off.includes(dow)) return null;
-    return {start:fs.start, end:fs.end, role:fs.role||'', type:'fixed'};
+    return {start:start, end:end, role:role, type:'fixed'};
   }
   if(fs.type === 'weekly'){
-    // days array check (string day names)
-    if(!fs.days || !Array.isArray(fs.days)) return null;
+    // dayTimes override makes that weekday active even when days omits it.
     const dayNames = fs.days;
-    const dowStr = ['sun','mon','tue','wed','thu','fri','sat'][dow];
-    if(dayNames.includes(dowStr)) return {start:fs.start, end:fs.end, role:fs.role||'', type:'fixed'};
+    if((Array.isArray(dayNames) && dayNames.includes(dowStr)) || !!override) return {start:start, end:end, role:role, type:'fixed'};
     return null;
   }
   return null;
 }
 
 function getFixedSchedule(empName){ return getFixedScheduleForDate(empName, currentDate); }
+function dateObjFromKey(dk){ const p=String(dk||'').split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
+function explicitShift(v){ return v&&typeof v==='object'&&(v.start||v.end)?v:null; }
+function scheduleMapForKey(dk){ return dk===dateKey(currentDate)?daySchedule:(weekSchedules[dk]||{}); }
+function getScheduleShift(dk, empId, map){
+  const rawMap = map || scheduleMapForKey(dk);
+  const ex = explicitShift(rawMap ? rawMap[empId] : null);
+  if(ex) return ex;
+  if(isDayOff(empId, dk)) return null;
+  const emp = employees[empId], fix = emp ? getFixedScheduleForDate(emp.name, dateObjFromKey(dk)) : null;
+  return fix&&fix.start ? {start:fix.start,end:fix.end,role:fix.role} : null;
+}
 
 // ============================================================
 // 10. Data loading
@@ -404,7 +419,7 @@ function autoApplyFixed(dk){
     if(!fix || !fix.start) continue;
     const empId = findEmpIdByName(empName);
     if(!empId || isDayOff(empId, dk)) continue;
-    if(!daySchedule[empId]){
+    if(!explicitShift(daySchedule[empId])){
       daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role};
       changed = true;
     }
@@ -457,7 +472,7 @@ function renderBriefing(){
   let workingCount=0,totalHours=0,totalCost=0,fixedCount=0,variableCount=0,emptyCount=0;
   empKeys.forEach(id=>{
     if(isDayOff(id,dk)){offToday.push(employees[id]?.name||id);return;}
-    const s=daySchedule[id];
+    const s=getScheduleShift(dk,id);
     if(s&&s.start){
       workingCount++;
       const h=calcHours(s.start,s.end); totalHours+=h; totalCost+=h*(employees[id]?.hourlyRate||0);
@@ -504,7 +519,7 @@ function renderTimebarView(){
   const working=[],offList=[],empty=[];
   let totalHours=0,confirmedCount=0,unconfirmedCount=0;
   empKeys.forEach(id=>{
-    const emp=employees[id]; const off=isDayOff(id,dk); const shift=daySchedule[id];
+    const emp=employees[id]; const off=isDayOff(id,dk); const shift=getScheduleShift(dk,id);
     if(off){offList.push({id,emp});return;}
     if(shift&&shift.start){
       const st=getShiftStatus(dk,id); const hours=calcHours(shift.start,shift.end);
@@ -677,17 +692,16 @@ function renderListView(){
   const mon=getMonday(currentDate);
   for(let i=0;i<7;i++){
     const wd=new Date(mon);wd.setDate(wd.getDate()+i);const wdk=dateKey(wd);
-    const wSched=wdk===dk?daySchedule:(weekSchedules[wdk]||{});
     empKeys.forEach(id=>{
       if(isDayOff(id,wdk))weekOffCount[id]=(weekOffCount[id]||0)+1;
-      const ws=wSched[id]; if(ws&&ws.start&&ws.end)weekTotalHoursMap[id]=(weekTotalHoursMap[id]||0)+calcHours(ws.start,ws.end);
+      const ws=getScheduleShift(wdk,id); if(ws&&ws.start&&ws.end)weekTotalHoursMap[id]=(weekTotalHoursMap[id]||0)+calcHours(ws.start,ws.end);
     });
   }
 
   const working=[],offList=[],empty=[];
   let totalHours=0,confirmedCount=0,unconfirmedCount=0;
   empKeys.forEach(id=>{
-    const emp=employees[id]; const off=isDayOff(id,dk); const shift=daySchedule[id];
+    const emp=employees[id]; const off=isDayOff(id,dk); const shift=getScheduleShift(dk,id);
     if(off){offList.push({id,emp});return;}
     if(shift&&shift.start){
       const st=getShiftStatus(dk,id);
@@ -824,8 +838,7 @@ function renderWeek(){
   empKeys.forEach(id=>{daysOff[id]=0;});
   for(let i=0;i<7;i++){
     const d=new Date(monday);d.setDate(d.getDate()+i);const dk=dateKey(d);
-    const sched=weekSchedules[dk]||{};
-    empKeys.forEach(eid=>{if(!sched[eid]||!sched[eid].start)daysOff[eid]=(daysOff[eid]||0)+1;});
+    empKeys.forEach(eid=>{if(!getScheduleShift(dk,eid))daysOff[eid]=(daysOff[eid]||0)+1;});
   }
   $weekOffs.innerHTML='';
   empKeys.forEach(eid=>{
@@ -851,8 +864,7 @@ function renderDateStrip(){
     const dk=dateKey(d); const dow=d.getDay();
     const isToday=isSameDay(d,today);const isSelected=dk===selectedDk;const isPast=d<today;
     let confirmedC=0,assignedC=0;
-    const sched=dk===selectedDk?daySchedule:(weekSchedules[dk]||{});
-    if(sched) empKeys.forEach(eid=>{if(sched[eid]&&sched[eid].start){assignedC++;if(getShiftStatus(dk,eid)==='confirmed')confirmedC++;}});
+    empKeys.forEach(eid=>{if(getScheduleShift(dk,eid)){assignedC++;if(getShiftStatus(dk,eid)==='confirmed')confirmedC++;}});
     let borderColor='#2E2E52';
     if(assignedC>0){if(confirmedC===assignedC)borderColor=C_OK;else if(confirmedC>0)borderColor=C_OK+'88';else borderColor=C_DEF;}
     const dowCls=(dow===0||isKrHoliday(d))?' sun':dow===6?' sat':'';
@@ -885,7 +897,7 @@ async function renderMonthView(){
   for(let d=1;d<=days;d++){
     const dk=monthViewYear+'-'+pad(monthViewMonth)+'-'+pad(d);
     const daySch=allSchedules[dk]||{};
-    const count=Object.keys(daySch).filter(k=>daySch[k]&&daySch[k].start).length;
+    const count=Object.keys(employees).filter(eid=>getScheduleShift(dk,eid,daySch)).length;
     const dow=new Date(monthViewYear,monthViewMonth-1,d).getDay();
     const isToday2=(today.getFullYear()===monthViewYear&&(today.getMonth()+1)===monthViewMonth&&today.getDate()===d);
     const cell=document.createElement('div');cell.className='month-day-cell';
@@ -992,11 +1004,12 @@ function buildEmpChips(){
       shiftSelectedEmpId=empId;
       $c.querySelectorAll('.emp-chip').forEach(c=>c.classList.remove('selected'));
       chip.classList.add('selected');
-      const existing=daySchedule[empId];
+      const raw=explicitShift(daySchedule[empId]);
+      const existing=getScheduleShift(dateKey(currentDate),empId);
       if(existing&&existing.start){
         selectStartTime(existing.start);selectEndTime(existing.end);
         shiftSelectedRoles=existing.role?existing.role.split(',').filter(Boolean):[];
-        updateRolePills();$('shiftDelete').style.display='';shiftEditMode=true;
+        updateRolePills();$('shiftDelete').style.display=raw?'':'none';shiftEditMode=!!raw;
       } else {$('shiftDelete').style.display='none';shiftEditMode=false;}
     });
     $c.appendChild(chip);
@@ -1015,11 +1028,12 @@ function updateRolePills(){
 function openShiftModal(empId){
   shiftSelectedEmpId=empId||null;shiftSelectedRoles=[];shiftSelectedStart=null;shiftSelectedEnd=null;shiftEditMode=false;
   buildEmpChips();
-  if(empId&&daySchedule[empId]&&daySchedule[empId].start){
-    const shift=daySchedule[empId];
+  const raw=empId?explicitShift(daySchedule[empId]):null;
+  const shift=empId?getScheduleShift(dateKey(currentDate),empId):null;
+  if(empId&&shift&&shift.start){
     shiftSelectedRoles=shift.role?shift.role.split(',').filter(Boolean):[];
-    shiftEditMode=true;selectStartTime(shift.start);selectEndTime(shift.end);
-    $('shiftDelete').style.display='';
+    shiftEditMode=!!raw;selectStartTime(shift.start);selectEndTime(shift.end);
+    $('shiftDelete').style.display=raw?'':'none';
   } else {$('shiftStartSel').selectedIndex=0;$('shiftEndSel').selectedIndex=0;updateShiftGauge();$('shiftDelete').style.display='none';}
   updateRolePills();
   const m=currentDate.getMonth()+1,d=currentDate.getDate(),dow=DOW_KR[currentDate.getDay()];
@@ -1066,7 +1080,7 @@ $('shiftDelete').addEventListener('click',async()=>{
   closeModal($shiftModal);
   delete daySchedule[shiftSelectedEmpId];
   renderAll();
-  const ok=await fbDelete(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId);
+  const ok=await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,false);
   if(ok){showToast('삭제됨');loadWeekSchedules();}
 });
 
@@ -1083,8 +1097,8 @@ $('shiftSaveFixed').addEventListener('click',async()=>{
   daySchedule[shiftSelectedEmpId]=data;
   setShiftStatus(dk,shiftSelectedEmpId,'confirmed');
   closeModal($shiftModal);
-  // 고정값 저장 성공 시에만 schedules 수동 예외 삭제 (fixed 가 이제 SOT)
-  if(fxOk) await fbDelete(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId);
+  // 고정값 저장 성공 시에만 schedules 수동 예외를 false 로 비움 (fixed 가 이제 SOT)
+  if(fxOk) await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,false);
   showToast(empName+' 고정값 변경됨');renderAll();loadWeekSchedules();
 });
 
@@ -1109,7 +1123,7 @@ $('shiftDayoff').addEventListener('click',()=>{
   } else {
     if(!dayoffs[shiftSelectedEmpId])dayoffs[shiftSelectedEmpId]={};
     dayoffs[shiftSelectedEmpId][dk]=true;
-    if(daySchedule[shiftSelectedEmpId]){delete daySchedule[shiftSelectedEmpId];fbDelete(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId);}
+    if(daySchedule[shiftSelectedEmpId]){delete daySchedule[shiftSelectedEmpId];fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,false);}
     fbPut(FB_DAYOFFS+'/'+shiftSelectedEmpId+'/'+dk,true);
     closeModal($shiftModal);showToast('휴무 지정');
   }
@@ -1209,13 +1223,14 @@ function isDayOff(empId,dk){
   const _wsc = (dk === _tdk) ? daySchedule : (weekSchedules[dk] || {});
   if(fs.type==='fixed'){
     if(fs.off && Array.isArray(fs.off) && fs.off.includes(dow)){
-      return !(_wsc[empId] && _wsc[empId].start);
+      return !explicitShift(_wsc[empId]);
     }
     return false;
   }
   if(fs.type==='weekly'){
-    if(fs.days && Array.isArray(fs.days) && !fs.days.includes(dowStr)){
-      return !(_wsc[empId] && _wsc[empId].start);
+    const override = fs.dayTimes && fs.dayTimes[dowStr];
+    if(fs.days && Array.isArray(fs.days) && !fs.days.includes(dowStr) && !override){
+      return !explicitShift(_wsc[empId]);
     }
     return false;
   }
@@ -1231,7 +1246,7 @@ async function addDayOff(empId,dk){
 }
 async function removeDayOff(empId,dk){
   if(dayoffs[empId])delete dayoffs[empId][dk];
-  fbDelete(FB_DAYOFFS+'/'+empId+'/'+dk);
+  fbPut(FB_DAYOFFS+'/'+empId+'/'+dk,false);
   if(dk===dateKey(currentDate))renderAll();
 }
 
@@ -1357,7 +1372,7 @@ function openDatePicker(){
     const isToday=dk===todayDk,isSelected=dk===selectedDk;
     const m=d.getMonth()+1,dd=d.getDate();
     let workC=0,offC=0;
-    empKeys.forEach(id=>{if(isDayOff(id,dk))offC++;else{const s=weekSchedules[dk]?.[id]||(dk===dateKey(currentDate)?daySchedule[id]:null);if(s&&s.start)workC++;}});
+    empKeys.forEach(id=>{if(isDayOff(id,dk))offC++;else{const s=getScheduleShift(dk,id);if(s&&s.start)workC++;}});
     const cls=isToday?'dp-item today':isSelected?'dp-item selected':'dp-item';
     const dowColor=(d.getDay()===0||isKrHoliday(d))?'#E74C3C':d.getDay()===6?'#45B7D1':'#9090A8';
     html+='<div class="'+cls+'" data-dk="'+dk+'"><span class="dp-dow" style="color:'+dowColor+';">'+dow+'</span><span class="dp-date">'+m+'/'+dd+'</span><span class="dp-summary">';
@@ -1385,7 +1400,7 @@ function getShiftStatus(dk,empId){return shiftStatus[dk+'_'+empId]||'auto';}
 function setShiftStatus(dk,empId,st){
   const key=dk+'_'+empId;
   if(st==='auto')delete shiftStatus[key];else shiftStatus[key]=st;
-  fbPut(FB_WS+'/shift_status/'+dk+'/'+empId,st==='auto'?null:st);
+  fbPut(FB_WS+'/shift_status/'+dk+'/'+empId,st==='auto'?false:st);
   renderAll();
 }
 
@@ -1400,8 +1415,8 @@ function resetToFixed(dk){
   const parts=dk.split('-');const dateObj=new Date(+parts[0],+parts[1]-1,+parts[2]);
   for(const empName in fixedSchedules){
     const fix=getFixedScheduleForDate(empName,dateObj);const empId=findEmpIdByName(empName);if(!empId)continue;
-    // 수동 예외로 schedules 에 저장된 값이 있으면 삭제 (고정값으로 되돌림)
-    fbDelete(FB_SCHEDULES+'/'+dk+'/'+empId);
+    // 수동 예외로 schedules 에 저장된 값이 있으면 false 로 비움 (고정값으로 되돌림)
+    fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,false);
     if(!fix||!fix.start||isDayOff(empId,dk)){delete daySchedule[empId];}
     else{daySchedule[empId]={start:fix.start,end:fix.end,role:fix.role};}
   }
@@ -1425,8 +1440,9 @@ function updateConfirmBtn(){
 function confirmAllShifts(){
   const dk=dateKey(currentDate);const fbBatch={};
   Object.keys(employees).forEach(id=>{
-    if(daySchedule[id]&&daySchedule[id].start&&!isDayOff(id,dk)){shiftStatus[dk+'_'+id]='confirmed';fbBatch[id]='confirmed';}
-    else if(!daySchedule[id]||!daySchedule[id].start){
+    const shift=getScheduleShift(dk,id);
+    if(shift&&shift.start&&!isDayOff(id,dk)){shiftStatus[dk+'_'+id]='confirmed';fbBatch[id]='confirmed';}
+    else if(!shift||!shift.start){
       if(!isDayOff(id,dk)){if(!dayoffs[id])dayoffs[id]={};dayoffs[id][dk]=true;fbPut(FB_DAYOFFS+'/'+id+'/'+dk,true);}
     }
   });
@@ -1451,7 +1467,7 @@ function toggleDayOffFromList(empId){
     showToast('휴무 해제 + 확정');
   } else {
     dayoffs[empId][dk]=true;
-    if(daySchedule[empId]){delete daySchedule[empId];fbDelete(FB_SCHEDULES+'/'+dk+'/'+empId);}
+    if(daySchedule[empId]){delete daySchedule[empId];fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,false);}
     showToast('휴무 지정');
   }
   const dval=dayoffs[empId]?.[dk];
@@ -1463,7 +1479,7 @@ function confirmDayOff(empId){
   const dk=dateKey(currentDate);
   if(!dayoffs[empId])dayoffs[empId]={};
   dayoffs[empId][dk]=true;
-  if(daySchedule[empId]){delete daySchedule[empId];fbDelete(FB_SCHEDULES+'/'+dk+'/'+empId);}
+  if(daySchedule[empId]){delete daySchedule[empId];fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,false);}
   fbPut(FB_DAYOFFS+'/'+empId+'/'+dk,true);
   showToast('휴무 확정');renderAll();
 }
@@ -1478,7 +1494,7 @@ if($('shareTextBtn')) $('shareTextBtn').addEventListener('click',()=>{
   let hasShift=false; const dk=dateKey(currentDate);
   empKeys.forEach(empId=>{
     const emp=employees[empId]; if(emp.name==='이원규')return; if(isDayOff(empId,dk))return;
-    const shift=daySchedule[empId];
+    const shift=getScheduleShift(dk,empId);
     if(shift&&shift.start){text+=emp.name+': '+shift.start+'~'+shift.end;if(shift.role)text+=' ('+shift.role+')';text+=' ['+calcHours(shift.start,shift.end)+'h]\n';hasShift=true;}
   });
   if(!hasShift)text+='(근무 없음)\n';

@@ -2,7 +2,8 @@
 # 의도 기준: APP_INTENT.md (근무스케줄/출근기록 관리)
 # 3파일 분리구조: docs/index.html + docs/app.js + docs/style.css
 # code-guard: 수정 전 이 맵으로 영향 범위 확인
-# HynixOps는 간단 입력 front, WorkSchedule은 Firebase SOT/출력/기존 상세 화면 역할
+# HynixOps/StoreBotTermux/대시보드는 소비자, WorkSchedule은 `/workschedule` SOT/출력/기존 상세 화면 역할
+# 공통 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
 
 ## 파일 구조
 docs/app.js      — 전체 JS (단일 IIFE)
@@ -30,6 +31,7 @@ empOn,empIds    활성 직원 필터 (disabled/active=false 제외)
 fEmp            이름→empId 검색
 esc             XSS 이스케이프 (innerHTML 삽입용)
 isDayOff,gSt    휴무/상태 조회
+explicitShift,getShift  유효 날짜별 근무가 없으면 fixed fallback 적용
 tm12,tmDS,cH,tPct,pTM  시간 계산
 
 ### api (37~39)
@@ -57,7 +59,7 @@ loadWk()         주간 7일 스케줄+상태+attendance_history fetch → S.wsc
 loadMonth()      선택월 스케줄+상태+attendance_history fetch → 월별/인원별 누적 뷰 갱신
 
 ### 자동배정 (86~101)
-autoFix(dk)      빈 스케줄에 고정값 자동 입력 + 자동확정
+autoFix(dk)      빈/legacy `{}` 스케줄에 고정값 자동 입력 + 자동확정
 genDO()          56일간 자동휴무 생성 (고정스케줄 기반)
 
 ### 분류 (103~118)
@@ -90,7 +92,7 @@ openSh(eid)      모달 열기 (칩선택+게이지+프리셋+역할)
 bTS()            시간 select 옵션 생성 + 게이지 틱
 setupGauge()     터치 드래그 시간 선택
 shiftSave        저장 → fbP schedules + 자동확정
-shiftDel         삭제 → fbP(url, null)
+shiftDel         삭제 → fbP(url, false)
 shiftFixed       고정값 저장 → fbP fixed_schedules
 shiftDayoff      휴무지정/해제
 
@@ -144,3 +146,6 @@ renderAll ← SSE put/patch, loadData, 상태변경 전부
 /workschedule/shift_status/{yyyy-MM-dd}/{empId}
 /workschedule/attendance_history/{yyyy-MM-dd}  ← WorkSchedule 누적 근태 캐시/SOT 후보
 /packhelper/storebot_attendance/{yyyy-MM-dd}  ← 읽기전용
+
+## 공통 스키마 점검
+/root/my-first-project/scripts/workschedule_schema_audit.py  — read-only validator/normalizer audit. `/workschedule` SOT를 여러 소비자가 같은 우선순위로 읽는지 확인
