@@ -4,7 +4,7 @@
 const FB='https://poskds-4ba60-default-rtdb.asia-southeast1.firebasedatabase.app',FW=FB+'/workschedule';
 const READONLY=new URLSearchParams(location.search).get('readonly')==='1';
 const AUTH_DEBUG=new URLSearchParams(location.search).get('authDebug')==='1'&&['','localhost','127.0.0.1'].includes(location.hostname);
-const AUTH={pinSha256:'',storeLat:null,storeLng:null,radiusM:150,storageKey:'workschedule_auth_device_v1'};
+const AUTH={pinSha256:'38083c7ee9121e17401883566a148aa5c2e2d55dc53bc4a94a026517dbff3c6b',storeLat:37.2528352,storeLng:127.4900516,radiusM:150,storageKey:'workschedule_auth_device_v1',allowedDeviceHashes:[],ipFactorReserved:true};
 const DSH=3,TLM=1440,DOW_KR=['일','월','화','수','목','금','토'],DOW_EN=['sun','mon','tue','wed','thu','fri','sat'];
 const RC={'주방':'#E67E22','차배달':'#4ECDC4','오토바이':'#FFD700'},RL={'주방':'주방','차배달':'차','오토바이':'바이크'};
 const CK='#2ECC71',CD='#9090A8',CO='#E74C3C',CB='#1A1A30';
@@ -58,33 +58,44 @@ async function cacheAtt(d,a){if(!hasObj(a))return;S.ah[d]=a;await fbP(FW+'/atten
 // === front auth gate ===
 function authMsg(m,cls){const el=$('authMsg');if(!el)return;el.textContent=m;el.className='auth-msg '+(cls||'');}
 function authStore(){try{return JSON.parse(localStorage.getItem(AUTH.storageKey)||'null');}catch(e){return null;}}
-function saveAuthDevice(name){const d={token:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random()),name:name||'단말',approvedAt:Date.now()};localStorage.setItem(AUTH.storageKey,JSON.stringify(d));return d;}
 async function sha256(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+function ensureAuthDevice(name){let d=authStore();if(!d||!d.token){d={token:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random()),name:name||'단말',createdAt:Date.now()};localStorage.setItem(AUTH.storageKey,JSON.stringify(d));return d;}if(name&&d.name!==name){d=Object.assign({},d,{name});localStorage.setItem(AUTH.storageKey,JSON.stringify(d));}return d;}
+async function deviceHashText(device){try{return await sha256(device.token);}catch(e){return '생성됨';}}
+async function hasAllowedAuthDevice(device){const hashes=AUTH.allowedDeviceHashes||[];if(!device||!device.token||!hashes.length)return false;return hashes.includes(await sha256(device.token));}
 function gpsReady(){return typeof AUTH.storeLat==='number'&&typeof AUTH.storeLng==='number';}
 function distM(a,b,c,d){const R=6371000,to=x=>x*Math.PI/180,la1=to(a),la2=to(c),dl=to(c-a),dn=to(d-b),q=Math.sin(dl/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dn/2)**2;return 2*R*Math.atan2(Math.sqrt(q),Math.sqrt(1-q));}
 function getPos(){return new Promise((res,rej)=>{if(!navigator.geolocation){rej(new Error('GPS 사용 불가'));return;}navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:true,timeout:10000,maximumAge:60000});});}
+function hasTrustedIpFactor(){return false;} // Static clients cannot trust forwarded IP headers; reserve this for server/hosting enforcement.
 async function verifyGps(){
-  if(AUTH_DEBUG)return true;
+  if(AUTH_DEBUG)return 'debug';
   if(!gpsReady())throw new Error('매장 GPS 기준 설정 필요');
   const p=await getPos(),m=distM(p.coords.latitude,p.coords.longitude,AUTH.storeLat,AUTH.storeLng);
   if(m>AUTH.radiusM)throw new Error('매장 반경 밖입니다 ('+Math.round(m)+'m)');
-  return true;
+  return 'gps';
 }
 async function verifyPin(pin){
-  if(AUTH_DEBUG)return true;
   if(!AUTH.pinSha256)throw new Error('PIN 해시 설정 필요');
   if(!pin)throw new Error('PIN을 입력해주세요');
   if(!crypto.subtle)throw new Error('이 브라우저는 PIN 검증을 지원하지 않습니다');
   if(await sha256(pin)!==AUTH.pinSha256)throw new Error('PIN이 맞지 않습니다');
   return true;
 }
+async function verifyAuthFactor(deviceName){
+  const device=ensureAuthDevice(deviceName);
+  if(await hasAllowedAuthDevice(device))return 'device';
+  if(hasTrustedIpFactor())return 'ip';
+  return await verifyGps();
+}
+function authFactorLabel(f){return f==='device'?'인증 단말':f==='gps'?'GPS':f==='debug'?'개발 GPS 우회':f==='ip'?'허용 IP':'factor';}
 function unlockApp(start){document.body.classList.remove('auth-locked');start();}
 function initAuthGate(start){
   const btn=$('authBtn'),pin=$('authPin'),dev=$('authDevice'),stored=authStore();
   if(stored?.name&&dev)dev.value=stored.name;
-  const run=async(forcePin)=>{btn.disabled=true;authMsg('GPS 확인 중...');try{if(forcePin||!authStore())await verifyPin(pin.value);await verifyGps();if(!authStore())saveAuthDevice(dev.value.trim());authMsg('인증됨','ok');unlockApp(start);}catch(e){authMsg(e.message||'인증 실패','err');}finally{btn.disabled=false;}};
-  btn.addEventListener('click',()=>run(true));pin.addEventListener('keydown',e=>{if(e.key==='Enter')run(true);});
-  if(AUTH_DEBUG)authMsg('authDebug=1: PIN/GPS 우회 가능','ok');else if(stored)run(false);else authMsg('PIN과 매장 GPS 인증이 필요합니다');
+  const run=async()=>{btn.disabled=true;authMsg('인증 확인 중...');try{await verifyPin(pin.value);const factor=await verifyAuthFactor(dev.value.trim());pin.value='';authMsg('인증됨 ('+authFactorLabel(factor)+')','ok');unlockApp(start);}catch(e){authMsg(e.message||'인증 실패','err');pin.value='';}finally{btn.disabled=false;}};
+  btn.addEventListener('click',run);pin.addEventListener('keydown',e=>{if(e.key==='Enter')run();});
+  const device=ensureAuthDevice(dev?.value?.trim()||'단말');
+  deviceHashText(device).then(id=>{if(AUTH_DEBUG)authMsg('개발 검증 모드: PIN은 필요, GPS만 우회. 단말ID '+id,'ok');else authMsg('PIN + CLI 허용 단말 또는 매장 GPS. 단말ID '+id);});
+  if(pin)pin.focus();
 }
 // === getFixedScheduleForDate ===
 function gFix(empName,dateObj){

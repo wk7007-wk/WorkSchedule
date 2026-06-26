@@ -15,7 +15,8 @@
 - 출근 원본 `/packhelper/storebot_attendance/{date}`는 수정하지 않고, 읽은 일자 데이터만 `/workschedule/attendance_history/{date}`에 idempotent PUT으로 보존해 누적 보기 기준으로 쓴다.
 - StoreBot 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터의 저장 경계는 WorkSchedule이 가진다.
 - HynixOps는 발주/근무표 탭형 통합 런처 이름이며, OrderHelper와 WorkSchedule 원본 SOT는 합치지 않는다.
-- 정적 프론트 인증은 PIN+단말 localStorage+매장 GPS 150m 게이트까지만 담당한다. `authDebug`는 로컬 개발에서만 유효하며, IP 인증과 실제 비밀 보호는 Firebase Hosting/Functions/Auth, VPN, Cloudflare Access 같은 서버/네트워크 단계가 필요하다.
+- 정적 프론트 인증은 `PIN 통과 AND (CLI 허용 단말 OR 서버/호스팅 허용 IP OR 매장 GPS 150m)` 구조다. PIN은 항상 필요하고, 단말/IP allowlist 등록은 운영자 CLI 전용이다. 웹 화면에서 PIN+GPS로 단말을 자동 허용하지 않는다.
+- IP allowlist는 CLI 기록/서버·호스팅 앞단 적용용이다. 정적 클라이언트의 임의 IP/X-Forwarded-For 값은 신뢰하지 않는다. `authDebug`는 로컬 개발에서만 GPS를 우회한다.
 
 ## UI/동선 기준
 - 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.

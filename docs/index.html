@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"><title>근무표</title><link rel="stylesheet" href="style.css"></head><body class="auth-locked">
-<div class="auth-gate" id="authGate"><div class="auth-card"><div class="auth-title">WorkSchedule 인증</div><div class="auth-note">비밀번호와 인증된 단말, 매장 GPS 반경 확인 후 접근합니다.</div><input class="form-input" id="authPin" type="password" placeholder="PIN"><input class="form-input" id="authDevice" type="text" placeholder="단말명"><button class="btn btn-accent" id="authBtn">인증</button><div class="auth-msg" id="authMsg">매장 좌표가 설정되지 않으면 기본 접속은 차단됩니다.</div></div></div>
+<div class="auth-gate" id="authGate"><div class="auth-card"><div class="auth-title">WorkSchedule 인증</div><div class="auth-note">PIN + CLI 허용 단말 또는 매장 GPS로 접근합니다.</div><input class="form-input" id="authPin" type="password" placeholder="PIN"><input class="form-input" id="authDevice" type="text" placeholder="단말명"><button class="btn btn-accent" id="authBtn">인증</button><div class="auth-msg" id="authMsg">단말/IP 허용은 운영자 CLI 등록이 필요합니다.</div></div></div>
 <main class="ws-shell" id="appShell">
 <div style="position:sticky;top:0;z-index:100;background:#1A1A30;border-bottom:1px solid #2E2E52;">
 <div style="display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:4px;">
