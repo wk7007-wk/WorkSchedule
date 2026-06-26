@@ -2,6 +2,7 @@
 # 의도 기준: APP_INTENT.md (근무스케줄/출근기록 관리)
 # 3파일 분리구조: docs/index.html + docs/app.js + docs/style.css
 # code-guard: 수정 전 이 맵으로 영향 범위 확인
+# HynixOps는 간단 입력 front, WorkSchedule은 Firebase SOT/출력/기존 상세 화면 역할
 
 ## 파일 구조
 docs/app.js      — 전체 JS (단일 IIFE)

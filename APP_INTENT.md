@@ -19,6 +19,8 @@
 - IP allowlist는 CLI 기록/서버·호스팅 앞단 적용용이다. 정적 클라이언트의 임의 IP/X-Forwarded-For 값은 신뢰하지 않는다. `authDebug`는 로컬 개발에서만 GPS를 우회한다.
 
 ## UI/동선 기준
+- HynixOps는 근무표 간단 입력 front이고, WorkSchedule은 Firebase SOT/출력/기존 상세 화면 역할을 유지한다.
+- 사용자가 HynixOps에서 근무표를 수정할 때 기존 WorkSchedule 상세 UI를 기본으로 보게 하지 않는다.
 - 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.
 - 스와이프는 날짜 변경이며 탭 전환으로 바꾸지 않는다.
 - 직원 공개 화면과 관리자 조작 화면의 경계를 섞지 않는다.
