@@ -18,15 +18,15 @@
 - 고정스케줄: SPEC.txt "고정 스케줄" 섹션 참조
 
 ## 보정 시스템
-- 보정(auto) → 확정(confirmed) → 미정(pending)
-- 수동 저장 시 자동 confirmed 전환
+- v2 status는 overrides state=shift/off/clear와 별도로 confirmed/off/clear를 기록
+- 수동 근무 저장 시 status confirmed 전환
 - 확정 2회 이상 → AI추천 표시
 
 ## 핵심 규칙
 - renderAll() 경유 필수 (renderTimeline 직접 호출 금지)
 - 3색 상수: C_OK=#2ECC71, C_DEF=#9090A8, C_OFF=#E74C3C
 - 반드시 전역 스코프 선언 (함수 내부 X)
-- 휴무 해제: dayoffs[empId][dk] = false (delete 아님)
+- 휴무 해제: overrides/{date}/{empId} state=clear (delete 아님)
 - 직원 삭제: employees/{empId}에 disabled:true, active:false 저장 (노드 삭제 아님)
 - 스와이프 = 날짜 변경 (탭 전환 아님)
 - 기능 축소/숨김 금지 (display:none X)
@@ -36,7 +36,7 @@
 - 파일: /root/WorkSchedule/docs/index.html (HTML 구조) + style.css (CSS) + app.js (JS)
 - Pages: https://wk7007-wk.github.io/WorkSchedule/
 - init_ver: v7 (캐시 초기화 버전)
-- Firebase: /workschedule/ (employees, schedules, dayoffs, confirmed, settings)
+- Firebase: /workschedule_v2/ (employees, fixed_schedules, overrides, status)
 - Gemini 키: /banktotal/settings/gemini_key.json (BankTotal 공유)
 
 ## 배포

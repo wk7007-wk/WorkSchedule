@@ -5,10 +5,9 @@
 // 1. Firebase Config
 // ============================================================
 const FB_BASE = 'https://poskds-4ba60-default-rtdb.asia-southeast1.firebasedatabase.app';
-const FB_WS = FB_BASE + '/workschedule';
+const FB_WS = FB_BASE + '/workschedule_v2';
 const FB_EMPLOYEES = FB_WS + '/employees';
-const FB_SCHEDULES = FB_WS + '/schedules';
-const FB_DAYOFFS = FB_WS + '/dayoffs';
+const FB_SCHEDULES = FB_WS + '/overrides';
 const READONLY_MODE = new URLSearchParams(location.search).get('readonly') === '1';
 
 // ============================================================
@@ -72,7 +71,7 @@ let currentDate = new Date();
 let employees = {};
 let daySchedule = {};
 let weekSchedules = {};
-let fixedSchedules = {};  // Firebase /workschedule/fixed_schedules
+let fixedSchedules = {};
 let dayoffs = {};
 let confirmedDays = {};
 let shiftStatus = {};
@@ -179,6 +178,12 @@ async function fbDelete(url){
   try{ const r=await fetch(url+'.json',{method:'DELETE'}); if(!r.ok)throw new Error(r.status); return true; }
   catch(e){ console.error('fbDelete',url,e); showToast('삭제 실패'); return false; }
 }
+function nowMeta(){const n=Date.now();return{source:'workschedule_app_asset',updated_at:new Date(n).toISOString(),updated_at_ms:n};}
+function statusRow(st,extra){return Object.assign(nowMeta(),extra||{},{status:st,state:st,confirmed:st==='confirmed'});}
+function shiftRow(s){return Object.assign(nowMeta(),{state:'shift',type:'manual_shift',shift:s,start:s.start,end:s.end,role:s.role||'',work:true,active:true,off:false,dayoff:false,clear:false});}
+function offRowData(){return Object.assign(nowMeta(),{state:'off',type:'off',shift:null,start:'',end:'',role:'',work:false,active:false,off:true,dayoff:true,clear:false});}
+function clearRow(role){return Object.assign(nowMeta(),{state:'clear',type:'clear',shift:null,start:'',end:'',role:role||'',work:false,active:false,off:false,dayoff:false,clear:true});}
+function offIndex(overrides){const out={};if(!overrides||typeof overrides!=='object')return out;Object.keys(overrides).forEach(dk=>{const day=overrides[dk];if(!day||typeof day!=='object')return;Object.keys(day).forEach(eid=>{const r=day[eid];if(r&&typeof r==='object'&&(r.state==='off'||r.off===true||r.dayoff===true)){if(!out[eid])out[eid]={};out[eid][dk]=true;}});});return out;}
 
 // ============================================================
 // 8. SSE
@@ -270,10 +275,10 @@ function connectScheduleSSE(gen){
 // ============================================================
 // 9. getFixedScheduleForDate — Firebase data based
 // ============================================================
-function getFixedScheduleForDate(empName, dateObj){
+function getFixedScheduleForDate(empId, dateObj){
   const d = typeof dateObj==='string' ? new Date(dateObj.replace(/-/g,'/')) : dateObj;
   const dow = d.getDay(); // 0=sun,1=mon,...6=sat
-  const fs = fixedSchedules[empName];
+  const fs = fixedSchedules[empId];
   if(!fs) return null;
   const dowStr = ['sun','mon','tue','wed','thu','fri','sat'][dow];
   const override = fs.dayTimes && fs.dayTimes[dowStr];
@@ -282,12 +287,13 @@ function getFixedScheduleForDate(empName, dateObj){
   const role = override && override.role ? override.role : (fs.role || '');
   if(!start && !end) return null;
 
-  if(fs.type === 'fixed'){
+  const kind = fs.kind || fs.type;
+  if(kind === 'fixed'){
     // off array check (dow numbers)
     if(fs.off && Array.isArray(fs.off) && fs.off.includes(dow)) return null;
     return {start:start, end:end, role:role, type:'fixed'};
   }
-  if(fs.type === 'weekly'){
+  if(kind === 'weekly'){
     // dayTimes override makes that weekday active even when days omits it.
     const dayNames = fs.days;
     if((Array.isArray(dayNames) && dayNames.includes(dowStr)) || !!override) return {start:start, end:end, role:role, type:'fixed'};
@@ -296,16 +302,16 @@ function getFixedScheduleForDate(empName, dateObj){
   return null;
 }
 
-function getFixedSchedule(empName){ return getFixedScheduleForDate(empName, currentDate); }
+function getFixedSchedule(empId){ return getFixedScheduleForDate(empId, currentDate); }
 function dateObjFromKey(dk){ const p=String(dk||'').split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
-function explicitShift(v){ return v&&typeof v==='object'&&(v.start||v.end)?v:null; }
+function explicitShift(v){ if(!v||typeof v!=='object')return null;const st=String(v.state||v.status||v.type||'').toLowerCase();if(st&&st!=='shift'&&st!=='manual_shift')return null;const s=v.shift&&typeof v.shift==='object'?v.shift:v;return(s.start||s.end)?{start:s.start||'',end:s.end||'',role:s.role||v.role||''}:null; }
 function scheduleMapForKey(dk){ return dk===dateKey(currentDate)?daySchedule:(weekSchedules[dk]||{}); }
 function getScheduleShift(dk, empId, map){
   const rawMap = map || scheduleMapForKey(dk);
   const ex = explicitShift(rawMap ? rawMap[empId] : null);
   if(ex) return ex;
   if(isDayOff(empId, dk)) return null;
-  const emp = employees[empId], fix = emp ? getFixedScheduleForDate(emp.name, dateObjFromKey(dk)) : null;
+  const emp = employees[empId], fix = emp ? getFixedScheduleForDate(empId, dateObjFromKey(dk)) : null;
   return fix&&fix.start ? {start:fix.start,end:fix.end,role:fix.role} : null;
 }
 
@@ -319,13 +325,12 @@ async function loadData(){
   $tabContent.style.display = 'none';
 
   try{
-    const [empData, schedData, fbFixed, fbDayoffs, fbConfirmed, fbShiftSt, fbAttendance] = await Promise.all([
+    const [empData, schedData, fbFixed, fbOverrides, fbShiftSt, fbAttendance] = await Promise.all([
       fbGet(FB_EMPLOYEES),
       fbGet(FB_SCHEDULES+'/'+dk),
       fbGet(FB_WS+'/fixed_schedules'),
-      fbGet(FB_DAYOFFS),
-      fbGet(FB_WS+'/confirmed'),
-      fbGet(FB_WS+'/shift_status/'+dk),
+      fbGet(FB_WS+'/overrides'),
+      fbGet(FB_WS+'/status/'+dk),
       fbGet(FB_BASE+'/packhelper/storebot_attendance/'+dk)
     ]);
 
@@ -351,17 +356,13 @@ async function loadData(){
     // Fixed schedules
     if(fbFixed) fixedSchedules = fbFixed;
 
-    // Dayoffs
-    if(fbDayoffs) dayoffs = fbDayoffs;
-
-    // Confirmed
-    if(fbConfirmed) confirmedDays = fbConfirmed;
+    if(fbOverrides) dayoffs = offIndex(fbOverrides);
 
     // Shift status
     if(fbShiftSt){
       Object.keys(fbShiftSt).forEach(empId => {
         const st = fbShiftSt[empId];
-        if(st) shiftStatus[dk+'_'+empId] = st; else delete shiftStatus[dk+'_'+empId];
+        if(st) shiftStatus[dk+'_'+empId] = (typeof st==='object'?(st.status||st.state||'auto'):st); else delete shiftStatus[dk+'_'+empId];
       });
     }
 
@@ -390,14 +391,14 @@ async function loadWeekSchedules(){
     const d=new Date(monday); d.setDate(d.getDate()+i);
     const dk=dateKey(d); keys.push(dk);
     schedP.push(fbGet(FB_SCHEDULES+'/'+dk));
-    statusP.push(fbGet(FB_WS+'/shift_status/'+dk));
+    statusP.push(fbGet(FB_WS+'/status/'+dk));
   }
   const [sR,stR] = await Promise.all([Promise.all(schedP),Promise.all(statusP)]);
   weekSchedules = {};
   keys.forEach((k,i)=>{
     weekSchedules[k] = sR[i]||{};
     const fbSt = stR[i];
-    if(fbSt) Object.keys(fbSt).forEach(eid=>{ if(fbSt[eid])shiftStatus[k+'_'+eid]=fbSt[eid]; else delete shiftStatus[k+'_'+eid]; });
+    if(fbSt) Object.keys(fbSt).forEach(eid=>{ const st=fbSt[eid]; if(st)shiftStatus[k+'_'+eid]=(typeof st==='object'?(st.status||st.state||'auto'):st); else delete shiftStatus[k+'_'+eid]; });
   });
   renderWeek();
   renderDateStrip();
@@ -414,16 +415,15 @@ function autoApplyFixed(dk){
   const parts = dk.split('-');
   const dateObj = new Date(+parts[0], +parts[1]-1, +parts[2]);
 
-  for(const empName in fixedSchedules){
-    const fix = getFixedScheduleForDate(empName, dateObj);
+  for(const empId in fixedSchedules){
+    const fix = getFixedScheduleForDate(empId, dateObj);
     if(!fix || !fix.start) continue;
-    const empId = findEmpIdByName(empName);
     if(!empId || isDayOff(empId, dk)) continue;
     if(!explicitShift(daySchedule[empId])){
       daySchedule[empId] = {start:fix.start, end:fix.end, role:fix.role};
       changed = true;
     }
-    // fixed 매칭 셀 = 자동 confirmed 간주 (로컬만, Firebase shift_status 쓰기 없음)
+    // fixed 매칭 셀 = 자동 confirmed 간주 (로컬만, Firebase 쓰기 없음)
     const stKey = dk+'_'+empId;
     if(shiftStatus[stKey] !== 'confirmed') shiftStatus[stKey] = 'confirmed';
   }
@@ -476,7 +476,7 @@ function renderBriefing(){
     if(s&&s.start){
       workingCount++;
       const h=calcHours(s.start,s.end); totalHours+=h; totalCost+=h*(employees[id]?.hourlyRate||0);
-      const fix=getFixedSchedule(employees[id]?.name);
+      const fix=getFixedSchedule(id);
       if(fix&&fix.type==='fixed'&&s.start===fix.start&&s.end===fix.end)fixedCount++; else variableCount++;
     } else emptyCount++;
   });
@@ -705,7 +705,7 @@ function renderListView(){
     if(off){offList.push({id,emp});return;}
     if(shift&&shift.start){
       const st=getShiftStatus(dk,id);
-      const fix=getFixedSchedule(emp.name);
+      const fix=getFixedSchedule(id);
       const isFixed=fix&&fix.type==='fixed'&&shift.start===fix.start&&shift.end===fix.end;
       const hours=calcHours(shift.start,shift.end); totalHours+=hours;
       if(st==='confirmed')confirmedCount++;else unconfirmedCount++;
@@ -1065,11 +1065,12 @@ $('shiftSave').addEventListener('click',async()=>{
   if(!shiftSelectedStart||!shiftSelectedEnd){showToast('시간을 선택해주세요');return;}
   const dk=dateKey(currentDate);
   const data={start:shiftSelectedStart,end:shiftSelectedEnd,role:shiftSelectedRoles.join(',')};
+  const row=shiftRow(data);
   closeModal($shiftModal);
-  daySchedule[shiftSelectedEmpId]=data;
+  daySchedule[shiftSelectedEmpId]=row;
   setShiftStatus(dk,shiftSelectedEmpId,'confirmed');
   renderAll();
-  const ok=await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,data);
+  const ok=await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,row);
   if(ok){showToast('저장 확정');loadWeekSchedules();}else showToast('저장 실패');
 });
 
@@ -1077,10 +1078,12 @@ $('shiftSave').addEventListener('click',async()=>{
 $('shiftDelete').addEventListener('click',async()=>{
   if(!shiftSelectedEmpId)return;
   const dk=dateKey(currentDate);
+  const row=clearRow(employees[shiftSelectedEmpId]?.role||'');
   closeModal($shiftModal);
-  delete daySchedule[shiftSelectedEmpId];
+  daySchedule[shiftSelectedEmpId]=row;
   renderAll();
-  const ok=await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,false);
+  const ok=await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,row);
+  fbPut(FB_WS+'/status/'+dk+'/'+shiftSelectedEmpId,statusRow('clear',{state:'clear'}));
   if(ok){showToast('삭제됨');loadWeekSchedules();}
 });
 
@@ -1089,16 +1092,15 @@ $('shiftSaveFixed').addEventListener('click',async()=>{
   if(!shiftSelectedEmpId||!shiftSelectedStart||!shiftSelectedEnd){showToast('시간을 선택해주세요');return;}
   const empName=employees[shiftSelectedEmpId]?.name;
   if(!empName){showToast('직원 오류');return;}
-  const newFixed={start:shiftSelectedStart,end:shiftSelectedEnd,role:shiftSelectedRoles.join(','),type:'fixed'};
-  fixedSchedules[empName]=newFixed;
-  const fxOk=await fbPut(FB_WS+'/fixed_schedules/'+encodeURIComponent(empName),newFixed);
+  const newFixed={start:shiftSelectedStart,end:shiftSelectedEnd,role:shiftSelectedRoles.join(','),kind:'fixed',type:'fixed'};
+  fixedSchedules[shiftSelectedEmpId]=newFixed;
+  const fxOk=await fbPut(FB_WS+'/fixed_schedules/'+shiftSelectedEmpId,newFixed);
   const dk=dateKey(currentDate);
-  const data={start:shiftSelectedStart,end:shiftSelectedEnd,role:shiftSelectedRoles.join(',')};
-  daySchedule[shiftSelectedEmpId]=data;
+  const row=clearRow(shiftSelectedRoles.join(','));
+  daySchedule[shiftSelectedEmpId]=row;
   setShiftStatus(dk,shiftSelectedEmpId,'confirmed');
   closeModal($shiftModal);
-  // 고정값 저장 성공 시에만 schedules 수동 예외를 false 로 비움 (fixed 가 이제 SOT)
-  if(fxOk) await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,false);
+  if(fxOk) await fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,row);
   showToast(empName+' 고정값 변경됨');renderAll();loadWeekSchedules();
 });
 
@@ -1109,22 +1111,19 @@ $('shiftDayoff').addEventListener('click',()=>{
   const isOff=isDayOff(shiftSelectedEmpId,dk);
   if(isOff){
     if(!dayoffs[shiftSelectedEmpId])dayoffs[shiftSelectedEmpId]={};
-    dayoffs[shiftSelectedEmpId][dk]=false;
-    fbPut(FB_DAYOFFS+'/'+shiftSelectedEmpId+'/'+dk,false);
-    if(daySchedule[shiftSelectedEmpId]&&daySchedule[shiftSelectedEmpId].dayoff)delete daySchedule[shiftSelectedEmpId];
-    const empName=employees[shiftSelectedEmpId]?.name||'';
-    const fix=getFixedScheduleForDate(empName,currentDate);
-    if(fix&&fix.type==='fixed'&&fix.start){
-      // 로컬 daySchedule 에만 fixed 병합 — schedules 에 쓰지 않음
-      daySchedule[shiftSelectedEmpId]={start:fix.start,end:fix.end,role:fix.role};
-      shiftStatus[dk+'_'+shiftSelectedEmpId]='confirmed';
-    }
+    delete dayoffs[shiftSelectedEmpId][dk];
+    const row=clearRow(employees[shiftSelectedEmpId]?.role||'');
+    fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,row);
+    fbPut(FB_WS+'/status/'+dk+'/'+shiftSelectedEmpId,statusRow('clear',{state:'clear'}));
+    daySchedule[shiftSelectedEmpId]=row;
     closeModal($shiftModal);showToast('휴무 해제 + 확정');
   } else {
     if(!dayoffs[shiftSelectedEmpId])dayoffs[shiftSelectedEmpId]={};
     dayoffs[shiftSelectedEmpId][dk]=true;
-    if(daySchedule[shiftSelectedEmpId]){delete daySchedule[shiftSelectedEmpId];fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,false);}
-    fbPut(FB_DAYOFFS+'/'+shiftSelectedEmpId+'/'+dk,true);
+    const row=offRowData();
+    daySchedule[shiftSelectedEmpId]=row;
+    fbPut(FB_SCHEDULES+'/'+dk+'/'+shiftSelectedEmpId,row);
+    fbPut(FB_WS+'/status/'+dk+'/'+shiftSelectedEmpId,statusRow('off'));
     closeModal($shiftModal);showToast('휴무 지정');
   }
   renderAll();
@@ -1208,29 +1207,29 @@ $('empEditSave').addEventListener('click',async()=>{
 // ============================================================
 // 15. Day-off Management Modal
 // ============================================================
-// 휴무 판정: dayoffs 명시값 우선 → false 면 수동 해제, true 면 휴무
-// 값 없으면 fixed.off 즉석 해석 (generateAutoDayoffs 제거 대체)
 function isDayOff(empId,dk){
-  const dv = dayoffs[empId] ? dayoffs[empId][dk] : undefined;
-  if(dv===true) return true;
-  if(dv===false) return false;
+  const row = scheduleMapForKey(dk)[empId];
+  if(row&&typeof row==='object'){
+    const st=String(row.state||row.status||row.type||'').toLowerCase();
+    if(st==='off'||row.off===true||row.dayoff===true)return true;
+    if(st==='shift'||st==='clear'||row.clear===true||row.cancel===true||row.deleted===true)return false;
+  }
   const emp = employees[empId]; if(!emp) return false;
-  const fs = fixedSchedules[emp.name]; if(!fs) return false;
+  const fs = fixedSchedules[empId]; if(!fs) return false;
   const dObj = (typeof dk==='string') ? new Date(dk.replace(/-/g,'/')) : dk;
   const dow = dObj.getDay();
   const dowStr = ['sun','mon','tue','wed','thu','fri','sat'][dow];
-  const _tdk = dateKey(currentDate);
-  const _wsc = (dk === _tdk) ? daySchedule : (weekSchedules[dk] || {});
-  if(fs.type==='fixed'){
+  const kind=fs.kind||fs.type;
+  if(kind==='fixed'){
     if(fs.off && Array.isArray(fs.off) && fs.off.includes(dow)){
-      return !explicitShift(_wsc[empId]);
+      return true;
     }
     return false;
   }
-  if(fs.type==='weekly'){
+  if(kind==='weekly'){
     const override = fs.dayTimes && fs.dayTimes[dowStr];
     if(fs.days && Array.isArray(fs.days) && !fs.days.includes(dowStr) && !override){
-      return !explicitShift(_wsc[empId]);
+      return true;
     }
     return false;
   }
@@ -1241,13 +1240,17 @@ function getDayOffEmployees(dk){ const r=[]; for(const eid in dayoffs)if(dayoffs
 async function addDayOff(empId,dk){
   if(!dayoffs[empId])dayoffs[empId]={};
   dayoffs[empId][dk]=true;
-  fbPut(FB_DAYOFFS+'/'+empId+'/'+dk,true);
-  if(dk===dateKey(currentDate)){renderAll();}
+  const row=offRowData();
+  fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,row);
+  fbPut(FB_WS+'/status/'+dk+'/'+empId,statusRow('off'));
+  if(dk===dateKey(currentDate)){daySchedule[empId]=row;renderAll();}
 }
 async function removeDayOff(empId,dk){
   if(dayoffs[empId])delete dayoffs[empId][dk];
-  fbPut(FB_DAYOFFS+'/'+empId+'/'+dk,false);
-  if(dk===dateKey(currentDate))renderAll();
+  const row=clearRow(employees[empId]?.role||'');
+  fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,row);
+  fbPut(FB_WS+'/status/'+dk+'/'+empId,statusRow('clear',{state:'clear'}));
+  if(dk===dateKey(currentDate)){daySchedule[empId]=row;renderAll();}
 }
 
 function parseBulkDayoffs(text){
@@ -1343,16 +1346,14 @@ async function onDateChange(){
   renderCurrentTab();
   if(myId!==_dateChangeId)return;
   try{
-    const[schedData,fbShiftSt,fbConfirmed,fbAttendance]=await Promise.all([
+    const[schedData,fbShiftSt,fbAttendance]=await Promise.all([
       fbGet(FB_SCHEDULES+'/'+dk),
-      fbGet(FB_WS+'/shift_status/'+dk),
-      fbGet(FB_WS+'/confirmed/'+dk),
+      fbGet(FB_WS+'/status/'+dk),
       fbGet(FB_BASE+'/packhelper/storebot_attendance/'+dk)
     ]);
     if(myId!==_dateChangeId)return;
     if(schedData){const merged={};for(const id in schedData)if(DEFAULT_EMPLOYEES[id])merged[id]=schedData[id];daySchedule=merged;}
-    if(fbShiftSt) Object.keys(fbShiftSt).forEach(eid=>{const st=fbShiftSt[eid];if(st)shiftStatus[dk+'_'+eid]=st;else delete shiftStatus[dk+'_'+eid];});
-    if(fbConfirmed!==undefined&&fbConfirmed!==null) confirmedDays[dk]=!!fbConfirmed; else delete confirmedDays[dk];
+    if(fbShiftSt) Object.keys(fbShiftSt).forEach(eid=>{const st=fbShiftSt[eid];if(st)shiftStatus[dk+'_'+eid]=(typeof st==='object'?(st.status||st.state||'auto'):st);else delete shiftStatus[dk+'_'+eid];});
     dayAttendance=fbAttendance||{};
     autoApplyFixed(dk);
     renderCurrentTab();
@@ -1400,7 +1401,7 @@ function getShiftStatus(dk,empId){return shiftStatus[dk+'_'+empId]||'auto';}
 function setShiftStatus(dk,empId,st){
   const key=dk+'_'+empId;
   if(st==='auto')delete shiftStatus[key];else shiftStatus[key]=st;
-  fbPut(FB_WS+'/shift_status/'+dk+'/'+empId,st==='auto'?false:st);
+  fbPut(FB_WS+'/status/'+dk+'/'+empId,st==='auto'?statusRow('auto',{state:'clear'}):statusRow(st));
   renderAll();
 }
 
@@ -1410,24 +1411,20 @@ $('resetFixedBtn').addEventListener('click',()=>{
 });
 
 function resetToFixed(dk){
-  // 로컬 메모리에만 fixed 재배치. schedules 에 자동으로 찍지 않음.
-  // (사용자 수동 입력으로 덮인 값이 있다면 삭제)
   const parts=dk.split('-');const dateObj=new Date(+parts[0],+parts[1]-1,+parts[2]);
-  for(const empName in fixedSchedules){
-    const fix=getFixedScheduleForDate(empName,dateObj);const empId=findEmpIdByName(empName);if(!empId)continue;
-    // 수동 예외로 schedules 에 저장된 값이 있으면 false 로 비움 (고정값으로 되돌림)
-    fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,false);
+  for(const empId in fixedSchedules){
+    const fix=getFixedScheduleForDate(empId,dateObj);if(!empId)continue;
+    fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,clearRow(employees[empId]?.role||''));
     if(!fix||!fix.start||isDayOff(empId,dk)){delete daySchedule[empId];}
-    else{daySchedule[empId]={start:fix.start,end:fix.end,role:fix.role};}
+    else{daySchedule[empId]=clearRow(fix.role);}
   }
   renderCurrentTab();showToast('고정 스케줄 재배치 완료');
 }
 
 $('confirmDayBtn').addEventListener('click',()=>{
   const dk=dateKey(currentDate);
-  if(confirmedDays[dk]){delete confirmedDays[dk];showToast(dk+' 작업중으로 변경');}
-  else{confirmedDays[dk]=true;showToast(dk+' 확정 완료');}
-  fbPut(FB_WS+'/confirmed/'+dk,confirmedDays[dk]||null);
+  if(confirmedDays[dk]){delete confirmedDays[dk];showToast(dk+' 작업중으로 변경');fbPut(FB_WS+'/status/'+dk+'/_date',statusRow('auto',{state:'clear',confirmed:false}));}
+  else{confirmedDays[dk]=true;showToast(dk+' 확정 완료');fbPut(FB_WS+'/status/'+dk+'/_date',statusRow('confirmed'));}
   updateConfirmBtn();
 });
 
@@ -1441,13 +1438,13 @@ function confirmAllShifts(){
   const dk=dateKey(currentDate);const fbBatch={};
   Object.keys(employees).forEach(id=>{
     const shift=getScheduleShift(dk,id);
-    if(shift&&shift.start&&!isDayOff(id,dk)){shiftStatus[dk+'_'+id]='confirmed';fbBatch[id]='confirmed';}
+    if(shift&&shift.start&&!isDayOff(id,dk)){shiftStatus[dk+'_'+id]='confirmed';fbBatch[id]=statusRow('confirmed');}
     else if(!shift||!shift.start){
-      if(!isDayOff(id,dk)){if(!dayoffs[id])dayoffs[id]={};dayoffs[id][dk]=true;fbPut(FB_DAYOFFS+'/'+id+'/'+dk,true);}
+      if(!isDayOff(id,dk)){if(!dayoffs[id])dayoffs[id]={};dayoffs[id][dk]=true;const row=offRowData();daySchedule[id]=row;fbPut(FB_SCHEDULES+'/'+dk+'/'+id,row);fbBatch[id]=statusRow('off');}
     }
   });
-  fbPut(FB_WS+'/shift_status/'+dk,fbBatch);
-  confirmedDays[dk]=true;fbPut(FB_WS+'/confirmed/'+dk,true);
+  fbPut(FB_WS+'/status/'+dk,fbBatch);
+  confirmedDays[dk]=true;fbPut(FB_WS+'/status/'+dk+'/_date',statusRow('confirmed'));
   renderAll();
 }
 
@@ -1455,23 +1452,16 @@ function toggleDayOffFromList(empId){
   const dk=dateKey(currentDate);
   if(!dayoffs[empId])dayoffs[empId]={};
   if(dayoffs[empId][dk]===true){
-    dayoffs[empId][dk]=false;
-    if(daySchedule[empId]&&daySchedule[empId].dayoff)delete daySchedule[empId];
-    const empName=employees[empId]?.name||'';
-    const fix=getFixedScheduleForDate(empName,currentDate);
-    if(fix&&fix.type==='fixed'&&fix.start){
-      // 로컬 daySchedule 에만 fixed 병합 — schedules 에 쓰지 않음
-      daySchedule[empId]={start:fix.start,end:fix.end,role:fix.role};
-      shiftStatus[dk+'_'+empId]='confirmed';
-    }
+    delete dayoffs[empId][dk];
+    daySchedule[empId]=clearRow(employees[empId]?.role||'');
+    fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,daySchedule[empId]);
+    fbPut(FB_WS+'/status/'+dk+'/'+empId,statusRow('clear',{state:'clear'}));
     showToast('휴무 해제 + 확정');
   } else {
     dayoffs[empId][dk]=true;
-    if(daySchedule[empId]){delete daySchedule[empId];fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,false);}
+    const row=offRowData();daySchedule[empId]=row;fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,row);fbPut(FB_WS+'/status/'+dk+'/'+empId,statusRow('off'));
     showToast('휴무 지정');
   }
-  const dval=dayoffs[empId]?.[dk];
-  fbPut(FB_DAYOFFS+'/'+empId+'/'+dk,dval===undefined?null:dval);
   renderAll();
 }
 
@@ -1479,8 +1469,7 @@ function confirmDayOff(empId){
   const dk=dateKey(currentDate);
   if(!dayoffs[empId])dayoffs[empId]={};
   dayoffs[empId][dk]=true;
-  if(daySchedule[empId]){delete daySchedule[empId];fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,false);}
-  fbPut(FB_DAYOFFS+'/'+empId+'/'+dk,true);
+  const row=offRowData();daySchedule[empId]=row;fbPut(FB_SCHEDULES+'/'+dk+'/'+empId,row);fbPut(FB_WS+'/status/'+dk+'/'+empId,statusRow('off'));
   showToast('휴무 확정');renderAll();
 }
 

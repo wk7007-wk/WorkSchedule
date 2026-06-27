@@ -2,7 +2,7 @@
 # 의도 기준: APP_INTENT.md (근무스케줄/출근기록 관리)
 # 3파일 분리구조: docs/index.html + docs/app.js + docs/style.css
 # code-guard: 수정 전 이 맵으로 영향 범위 확인
-# HynixOps/StoreBotTermux/대시보드는 소비자, WorkSchedule은 `/workschedule` SOT/출력/기존 상세 화면 역할
+# HynixOps/StoreBotTermux/대시보드는 소비자, WorkSchedule은 `/workschedule_v2` SOT/출력 화면 역할
 # 공통 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
 
 ## 파일 구조
@@ -54,7 +54,7 @@ gFix(name,date)  = getFixedScheduleForDate — dayTimes 오버라이드 지원
 gFixC(name)      현재 날짜 기준 gFix 호출
 
 ### 데이터 로딩 (67~84)
-loadData()       초기 fetch → schedules/status/attendance_history + storebot_attendance 세팅 → renderAll
+loadData()       초기 fetch → overrides/status/attendance_history + storebot_attendance 세팅 → renderAll
 loadWk()         주간 7일 스케줄+상태+attendance_history fetch → S.wsc/S.ah 세팅
 loadMonth()      선택월 스케줄+상태+attendance_history fetch → 월별/인원별 누적 뷰 갱신
 
@@ -67,7 +67,7 @@ catE(dk)         직원을 working/off/empty로 분류 + 주간통계
 gRange(w)        타임바 게이지 범위 계산 (출퇴근+실근태 기반)
 
 ### 근태 (120~133)
-cacheAtt(d,a)    `/packhelper/storebot_attendance/{date}` 읽은 값을 `/workschedule/attendance_history/{date}`에 idempotent PUT
+cacheAtt(d,a)    `/packhelper/storebot_attendance/{date}` 읽은 값을 `/workschedule_v2/attendance_history/{date}`에 idempotent PUT
 attRow(eid,sh)   실제 출퇴근 오버레이 HTML (시간차+출처배지)
 attStats(days,eid) 주간/월간 실제 출근/시작/종료 누적 계산
 ASC/ASL          출처별 색상/라벨맵
@@ -91,13 +91,13 @@ rTab()           dashboard/day/people/month/timebar/list 분기
 openSh(eid)      모달 열기 (칩선택+게이지+프리셋+역할)
 bTS()            시간 select 옵션 생성 + 게이지 틱
 setupGauge()     터치 드래그 시간 선택
-shiftSave        저장 → fbP schedules + 자동확정
+shiftSave        저장 → fbP overrides state=shift + status confirmed
 shiftDel         삭제 → fbP(url, false)
 shiftFixed       고정값 저장 → fbP fixed_schedules
 shiftDayoff      휴무지정/해제
 
 ### 표준입력
-saveStd()         표준입력 저장. 근무면 schedules + shift_status confirmed + dayoffs false, 휴무면 schedules false + dayoffs true + shift_status confirmed
+saveStd()         표준입력 저장. 근무면 overrides state=shift + status confirmed, 휴무면 overrides state=off + status off
 
 ### 직원 관리 (310~320)
 rEL()            직원 목록 렌더
@@ -138,14 +138,12 @@ catE ← rTimebar, rList (모든 뷰 렌더)
 renderAll ← SSE put/patch, loadData, 상태변경 전부
 
 ## Firebase 경로
-/workschedule/employees/{empId}
-/workschedule/schedules/{yyyy-MM-dd}/{empId}
-/workschedule/fixed_schedules/{한글이름}
-/workschedule/dayoffs/{empId}/{yyyy-MM-dd}
-/workschedule/confirmed/{yyyy-MM-dd}
-/workschedule/shift_status/{yyyy-MM-dd}/{empId}
-/workschedule/attendance_history/{yyyy-MM-dd}  ← WorkSchedule 누적 근태 캐시/SOT 후보
+/workschedule_v2/employees/{empId}
+/workschedule_v2/fixed_schedules/{empId}
+/workschedule_v2/overrides/{yyyy-MM-dd}/{empId}
+/workschedule_v2/status/{yyyy-MM-dd}/{empId}
+/workschedule_v2/attendance_history/{yyyy-MM-dd}  ← WorkSchedule 누적 근태 캐시/SOT 후보
 /packhelper/storebot_attendance/{yyyy-MM-dd}  ← 읽기전용
 
 ## 공통 스키마 점검
-/root/my-first-project/scripts/workschedule_schema_audit.py  — read-only validator/normalizer audit. `/workschedule` SOT를 여러 소비자가 같은 우선순위로 읽는지 확인
+/root/my-first-project/scripts/workschedule_v2_migrate.py  — v2 마이그레이션/핀 고정값 참고. 런타임 reader는 legacy fallback 없이 `/workschedule_v2`를 읽음

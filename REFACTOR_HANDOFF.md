@@ -51,12 +51,10 @@
 
 ### Firebase 경로 (전부 유지)
 ```
-/workschedule/employees/{empId}
-/workschedule/schedules/{yyyy-MM-dd}/{empId}
-/workschedule/fixed_schedules/{한글이름}     ← encodeURIComponent
-/workschedule/dayoffs/{empId}/{yyyy-MM-dd}
-/workschedule/confirmed/{yyyy-MM-dd}
-/workschedule/shift_status/{yyyy-MM-dd}/{empId}
+/workschedule_v2/employees/{empId}
+/workschedule_v2/fixed_schedules/{empId}
+/workschedule_v2/overrides/{yyyy-MM-dd}/{empId}
+/workschedule_v2/status/{yyyy-MM-dd}/{empId}
 /packhelper/storebot_attendance/{yyyy-MM-dd}   ← 읽기 전용
 ```
 
@@ -79,7 +77,7 @@
 
 ### 4.4 상태 저장소
 - **결정**: 흩어진 전역 `let`을 단일 `store` 객체로 통합.
-- **예상 필드**: `date`, `tab`, `employees`, `schedule`, `weekSchedules`, `fixed`, `dayoffs`, `confirmed`, `status`, `attendance`, `loaded`, `sse`.
+- **예상 필드**: `date`, `tab`, `employees`, `overrides`, `weekSchedules`, `fixed`, `status`, `attendance`, `loaded`, `sse`.
 - **금지**: Redux식 action/reducer 같은 과한 추상화. `resetDayState()`, `setDate()`, `dayKey()` 같은 얇은 함수만 허용.
 
 ### 4.5 월간 뷰
@@ -231,7 +229,7 @@
 | # | 조치 |
 |---|------|
 | 1 | `list.onclick` 닫는 괄호 `});` → `};` — `node --check` 통과 |
-| 2 | schedules/shift_status/dayoffs의 `fbP(null)` → `fbP(false)` 전환 |
+| 2 | v2 이전 삭제성 저장값의 false/clear 전환 |
 | 3 | 전역 `S._sseDk` → closure 상수 `exDk`로 변경, put/patch에서 `dk(S.date)!==exDk` 비교 |
 | 4 | `srcB()` fallback `esc(s)`, 브리핑 `oN.map(esc).join(',')` 적용 |
 
