@@ -6,10 +6,12 @@ const READONLY=new URLSearchParams(location.search).get('readonly')==='1';
 const AUTH_DEBUG=new URLSearchParams(location.search).get('authDebug')==='1'&&['','localhost','127.0.0.1'].includes(location.hostname);
 const AUTH={pinSha256:'38083c7ee9121e17401883566a148aa5c2e2d55dc53bc4a94a026517dbff3c6b',storeLat:37.2528352,storeLng:127.4900516,radiusM:150,storageKey:'workschedule_auth_device_v1',allowedDeviceHashes:['d21a6620a9a24efe29e7b6921076e2ccd25c6f9b977154e9f8dfe4653d21bd08','c1aa36e7f5eabff58103bbc86257f3350c222b55c0d883592e438f021721681c'],
       allowedDevices:{"d21a6620a9a24efe29e7b6921076e2ccd25c6f9b977154e9f8dfe4653d21bd08":{"enabled":true,"label":"사장","updatedAt":"2026-06-26T18:39:12+00:00"},"c1aa36e7f5eabff58103bbc86257f3350c222b55c0d883592e438f021721681c":{"enabled":true,"label":"메인피시","updatedAt":"2026-06-27T11:30:18+00:00","phoneLast4":"0000"}},ipFactorReserved:true};
-const DSH=3,TLM=1440,DOW_KR=['일','월','화','수','목','금','토'],DOW_EN=['sun','mon','tue','wed','thu','fri','sat'];
+const DSH=6,TLM=1440,DOW_KR=['일','월','화','수','목','금','토'],DOW_EN=['sun','mon','tue','wed','thu','fri','sat'];
+const WEATHER_LOCATION={name:'이천시 부발읍',lat:37.2816,lng:127.4892};
 const RC={'주방':'#E67E22','차배달':'#4ECDC4','오토바이':'#FFD700'},RL={'주방':'주방','차배달':'차','오토바이':'바이크'};
 const CK='#2ECC71',CD='#9090A8',CO='#E74C3C',CB='#1A1A30';
 const DE={emp1:{name:'이원규',phone:'',role:'',hourlyRate:9860},emp2:{name:'권연옥',phone:'',role:'',hourlyRate:9860},emp3:{name:'리',phone:'',role:'',hourlyRate:9860},emp4:{name:'히오',phone:'',role:'',hourlyRate:9860},emp9:{name:'사아야',phone:'',role:'',hourlyRate:9860}};
+const DFX={emp1:{start:'17:00',end:'06:00',role:'주방,오토바이',kind:'fixed',type:'fixed'}};
 const HOL={'2026-01-01':'신정','2026-01-28':'설날연휴','2026-01-29':'설날','2026-01-30':'설날연휴','2026-03-01':'삼일절','2026-05-05':'어린이날','2026-05-06':'대체공휴일','2026-05-24':'석가탄신일','2026-06-06':'현충일','2026-08-15':'광복절','2026-09-24':'추석연휴','2026-09-25':'추석','2026-09-26':'추석연휴','2026-10-03':'개천절','2026-10-09':'한글날','2026-12-25':'성탄절','2027-01-01':'신정','2027-02-07':'설날연휴','2027-02-08':'설날','2027-02-09':'설날연휴','2027-03-01':'삼일절','2027-05-05':'어린이날','2027-05-13':'석가탄신일','2027-06-06':'현충일','2027-08-15':'광복절','2027-08-16':'대체공휴일','2027-10-03':'개천절','2027-10-04':'추석연휴','2027-10-05':'추석','2027-10-06':'추석연휴','2027-10-09':'한글날','2027-12-25':'성탄절'};
 const COLORS=['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD','#F0A500','#6C5CE7','#A8E6CF','#FF8A5C','#EA80FC','#00BCD4'];
 // === store ===
@@ -39,7 +41,7 @@ function isOff(e,d){
     if(st==='shift'||st==='clear'||ov.clear===true||ov.cancel===true||ov.deleted===true)return false;
   }
   const emp=S.emp[e];if(!emp)return false;
-  const fx=S.fix[e];if(!fx)return false;
+  const fx=DFX[e]||S.fix[e];if(!fx)return false;
   const dObj=typeof d==='string'?new Date(d.replace(/-/g,'/')):d,dow=dObj.getDay(),ds=DOW_EN[dow];
   const fov=fx.dayTimes&&fx.dayTimes[ds];
   const kind=fx.kind||fx.type;
@@ -49,10 +51,14 @@ function isOff(e,d){
 }
 function gSt(d,e){return S.sst[d+'_'+e]||'auto';}
 function tm12(t){const[h,m]=t.split(':').map(Number);let r=h;if(r<12)r+=24;return(r-12)*60+m;}
-function tmDS(t){const[h,m]=t.split(':').map(Number);let r=h;if(r<DSH)r+=24;return(r-DSH)*60+m;}
-function cH(s,e){let a=tm12(s),b=tm12(e);if(b<=a)b+=1440;return Math.round((b-a)/60*10)/10;}
+function opMin(t){const[h,m]=t.split(':').map(Number);let r=h;if(r<DSH)r+=24;return r*60+m;}
+function spanT(s,e){const a=opMin(s);let b=opMin(e);if(b<=a)b+=TLM;return{s:a,e:b};}
+function tmDS(t){return opMin(t)-DSH*60;}
+function cH(s,e){const p=spanT(s,e);return Math.round((p.e-p.s)/60*10)/10;}
 function tPct(t){return Math.max(0,Math.min(100,tmDS(t)/TLM*100));}
 function pTM(t){if(!t)return null;const p=t.split(':');return parseInt(p[0])*60+parseInt(p[1]||0);}
+function mPct(m,r){return Math.max(0,Math.min(100,(m-r.startMin)/r.rangeMin*100));}
+function hLbl(m){return pad(Math.floor(m/60)%24);}
 // === api ===
 async function fbG(u){try{const r=await fetch(u+'.json');if(!r.ok)throw r.status;return await r.json();}catch(e){console.error('fbG',u,e);return null;}}
 async function fbP(u,d){if(READONLY){toast('읽기 전용');return false;}try{const r=await fetch(u+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});if(!r.ok)throw r.status;return true;}catch(e){console.error('fbP',e);toast('저장 실패');return false;}}
@@ -108,7 +114,7 @@ function initAuthGate(start){
 }
 // === getFixedScheduleForDate ===
 function gFix(empId,dateObj){
-  const d=typeof dateObj==='string'?new Date(dateObj.replace(/-/g,'/')):dateObj,dow=d.getDay(),fs=S.fix[empId];
+  const d=typeof dateObj==='string'?new Date(dateObj.replace(/-/g,'/')):dateObj,dow=d.getDay(),fs=DFX[empId]||S.fix[empId];
   if(!fs)return null;
   const ds=DOW_EN[dow],ov=fs.dayTimes&&fs.dayTimes[ds];
   const start=ov&&ov.start?ov.start:fs.start,end=ov&&ov.end?ov.end:fs.end,role=ov&&ov.role?ov.role:(fs.role||'');
@@ -174,10 +180,11 @@ function catE(d){
   return{ek,w,off,mt,tH,cc,uc,woC,whM};
 }
 function gRange(w){
-  if(!w||!w.length)return{gs:DSH,gh:12};let mn=48,mx=0;
-  w.forEach(x=>{let sH=parseInt(x.shift.start),eH=parseInt(x.shift.end),eM=parseInt(x.shift.end.split(':')[1]||0);if(eM>0)eH++;if(sH<DSH)sH+=24;if(eH<DSH)eH+=24;if(eH<=sH)eH+=24;if(sH<mn)mn=sH;if(eH>mx)mx=eH;});
-  if(S.att)Object.values(S.att).forEach(a=>{if(a.actual_start){let h=parseInt(a.actual_start);if(h<DSH)h+=24;if(h<mn)mn=h;}if(a.actual_end){let h=parseInt(a.actual_end),m=parseInt(a.actual_end.split(':')[1]||0);if(m>0)h++;if(h<DSH)h+=24;if(h>mx)mx=h;}});
-  let gh=mx+1-(mn-1);if(gh<6)gh=6;return{gs:mn-1,gh};
+  if(!w||!w.length)return{gs:DSH,gh:12,startMin:DSH*60,rangeMin:12*60};
+  let mn=Infinity,mx=-Infinity;
+  w.forEach(x=>{if(!x.shift||!x.shift.start||!x.shift.end)return;const p=spanT(x.shift.start,x.shift.end);if(p.s<mn)mn=p.s;if(p.e>mx)mx=p.e;});
+  if(!isFinite(mn)||!isFinite(mx)||mx<=mn)return{gs:DSH,gh:12,startMin:DSH*60,rangeMin:12*60};
+  return{gs:mn/60,gh:(mx-mn)/60,startMin:mn,rangeMin:mx-mn};
 }
 // === attendance ===
 const ASC={owner:'#2ECC71',staff:'#3498DB','staff+pair':'#4FC3F7',manual:'#E67E22',fallback:'#E67E22','fallback+pair':'#E67E22',gemini:'#9090A8','gemini+pair':'#4FC3F7',bulk:'#9090A8'};
@@ -253,7 +260,7 @@ function progBar(cc,uc,mt,w,off,tH){
 }
 function stBtn(id,isCf,sz){const s=sz||'.65';return isCf?'<span data-action="status" data-sid="'+id+'" data-st="auto" style="min-width:32px;text-align:center;font-size:'+s+'rem;padding:'+(.65/parseFloat(s)*4|0)+'px 6px;border-radius:5px;cursor:pointer;background:'+CK+';color:#fff;font-weight:700;margin-left:3px;">확</span>':'<span data-action="status" data-sid="'+id+'" data-st="confirmed" style="min-width:32px;text-align:center;font-size:'+s+'rem;padding:'+(.65/parseFloat(s)*4|0)+'px 6px;border-radius:5px;cursor:pointer;background:'+CD+'33;color:'+CD+';font-weight:700;margin-left:3px;border:1px solid '+CD+';">미</span>';}
 function emptyRow(e,isT,nP){let h='<div data-empid="'+e.id+'" style="display:flex;align-items:center;gap:4px;padding:2px 6px;cursor:pointer;"><div style="min-width:58px;font-size:.85rem;font-weight:700;color:#707088;">'+esc(e.emp.name)+'</div><div style="flex:1;position:relative;height:32px;background:#1A1A30;border-radius:4px;overflow:hidden;">';
-  if(isT)h+='<div style="position:absolute;left:'+nP+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:2;"></div>';
+  if(isT&&nP!==null)h+='<div style="position:absolute;left:'+nP+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:2;"></div>';
   return h+'<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#707088;">미입력</div></div><span data-action="confirmOff" data-oid="'+e.id+'" style="font-size:.65rem;padding:4px 7px;border-radius:5px;background:#E74C3C33;color:#E74C3C;cursor:pointer;font-weight:700;">휴확</span></div>';}
 function offRow(o,woC){const oO=woC[o.id]||0;return'<div data-empid="'+o.id+'" style="display:flex;align-items:center;gap:4px;padding:2px 6px;opacity:.4;cursor:pointer;"><div style="min-width:58px;font-size:.85rem;font-weight:700;color:#E74C3C;">'+esc(o.emp.name)+(oO?'<span style="font-size:.6rem;">('+oO+')</span>':'')+'</div><div style="flex:1;position:relative;height:32px;background:#1A1A30;border-radius:4px;overflow:hidden;"><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.65rem;color:#E74C3C;font-weight:600;">휴무</div></div><span data-action="toggleOff" data-oid="'+o.id+'" style="font-size:.65rem;padding:4px 7px;border-radius:5px;background:#333;color:#9090A8;cursor:pointer;font-weight:700;">해제</span></div>';}
 function sectWrap(items,fn){if(!items.length)return'';let h='<div style="margin-top:5px;padding-top:5px;border-top:1px solid #2E2E5240;">';items.forEach(i=>{h+=fn(i);});return h+'</div>';}
@@ -302,6 +309,7 @@ function rBrief(){
   h+=bx(tCo>0?(tCo/10000).toFixed(1)+'만':'-','#E0E0EC','인건비');
   h+=bx(oN.length,'#E74C3C','휴무')+'</div>';
   h+='<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:.65rem;">';
+  h+='<span style="color:#4ECDC4;">날씨 '+esc(WEATHER_LOCATION.name)+'</span>';
   if(isH(S.date))h+='<span style="color:#E74C3C;font-weight:700;border:1px solid #E74C3C;border-radius:3px;padding:0 3px;">'+(hNm(S.date)||'공휴일')+'</span>';
   h+='<span style="color:'+CK+';">고정'+fC+'</span>';if(vC)h+='<span style="color:#E67E22;">수동'+vC+'</span>';if(eC)h+='<span style="color:#E74C3C;font-weight:700;">미입력'+eC+'</span>';if(oN.length)h+='<span style="color:#E74C3C;">휴:'+oN.map(esc).join(',')+'</span>';
   p.innerHTML=h+'</div>';
@@ -309,9 +317,8 @@ function rBrief(){
 // === timebar ===
 function rTimebar(){
   const con=$('tbCon');if(!con)return;const d=dk(S.date),{w,off,mt,tH,cc,uc,woC}=catE(d);
-  const _g=gRange(w),bS=_g.gs,bH=_g.gh;
-  function tP(t){let[h,m]=t.split(':').map(Number);if(h<DSH)h+=24;return Math.max(0,Math.min(100,((h-bS)+m/60)/bH*100));}
-  const now=new Date(),nP=tP(pad(now.getHours())+':'+pad(now.getMinutes())),isT=dk(new Date())===d;
+  const _g=gRange(w),bH=_g.gh;
+  const now=new Date(),nM=opMin(pad(now.getHours())+':'+pad(now.getMinutes())),isT=dk(new Date())===d,nP=(nM>=_g.startMin&&nM<=_g.startMin+_g.rangeMin)?mPct(nM,_g):null;
   let h='<div style="padding:5px 6px 0;">'+progBar(cc,uc,mt.length,w.length,off.length,tH);
   if(uc)h+='<span data-action="confirmAll" style="color:'+CK+';cursor:pointer;font-weight:700;margin-left:4px;font-size:.7rem;padding:2px 8px;background:'+CK+'33;border-radius:4px;">전체확정</span>';
   else if(w.length)h+='<span style="color:'+CK+';font-weight:700;margin-left:4px;font-size:.65rem;">확정됨</span>';
@@ -319,19 +326,19 @@ function rTimebar(){
   // time header
   h+='<div style="display:flex;align-items:center;margin-bottom:2px;"><div style="min-width:58px;"></div><div style="flex:1;position:relative;height:16px;">';
   const ls=bH<=8?1:bH<=14?2:3;
-  for(let i=bS;i<=bS+bH;i+=ls){const rh=i>=24?i-24:i;h+='<span style="position:absolute;left:'+((i-bS)/bH*100)+'%;font-size:.55rem;color:#707088;transform:translateX(-50%);">'+rh+'</span>';}
+  for(let m=_g.startMin;m<=_g.startMin+_g.rangeMin;m+=ls*60){h+='<span style="position:absolute;left:'+mPct(m,_g)+'%;font-size:.55rem;color:#707088;transform:translateX(-50%);">'+hLbl(m)+'</span>';}
   h+='</div><div style="min-width:36px;"></div></div>';
   // workers
   w.forEach(x=>{
     const roles=x.shift.role?x.shift.role.split(',').filter(Boolean):[],pr=roles[0]||'주방',rc=RC[pr]||'#9090A8';
     const isCf=x.status==='confirmed',wO=woC[x.id]||0,at=S.att[x.id],hasA=at&&at.actual_start;
-    const L=tP(x.shift.start);let R=tP(x.shift.end),W=R-L;if(W<=0)W+=100;W=Math.min(W,100-L);const isN=W<30;
+    const sp=spanT(x.shift.start,x.shift.end),L=mPct(sp.s,_g),W=Math.max(.5,mPct(sp.e,_g)-L),isN=W<30;
     h+='<div data-empid="'+x.id+'" style="opacity:'+(isCf?'1':'.6')+';"><div style="display:flex;align-items:center;padding:2px 6px;cursor:pointer;">';
     h+='<div style="min-width:58px;font-size:.85rem;font-weight:700;color:'+(isCf?rc:rc+'bb')+';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+esc(x.emp.name)+(wO?'<span style="font-size:.6rem;color:'+CO+';">('+wO+')</span>':'')+'</div>';
     h+='<div style="flex:1;position:relative;height:32px;background:#1A1A30;border-radius:4px;overflow:hidden;">';
-    if(isT)h+='<div style="position:absolute;left:'+nP+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:3;"></div>';
+    if(isT&&nP!==null)h+='<div style="position:absolute;left:'+nP+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:3;"></div>';
     h+='<div style="position:absolute;left:'+L+'%;width:'+W+'%;top:1px;bottom:1px;background:'+(hasA?rc+'18':isCf?rc+'40':rc+'18')+';border-left:3px solid '+(hasA?rc+'55':isCf?rc:rc+'88')+';border-radius:3px;'+(hasA?'border:1.5px dashed '+rc+'55;':isCf?'':'border:1px dashed '+rc+'66;')+'z-index:1;"></div>';
-    if(hasA){const aL=tP(at.actual_start),aR=at.actual_end?tP(at.actual_end):aL,aW=Math.max(aR-aL,1),sc=ASC[at.actual_start_source||at.actual_end_source||'']||'#888';
+    if(hasA){const aS=opMin(at.actual_start);let aE=at.actual_end?opMin(at.actual_end):aS;if(at.actual_end&&aE<=aS)aE+=TLM;const aL=mPct(aS,_g),aW=Math.max(mPct(aE,_g)-aL,1),sc=ASC[at.actual_start_source||at.actual_end_source||'']||'#888';
       h+='<div style="position:absolute;left:'+aL+'%;width:'+aW+'%;top:5px;bottom:5px;background:'+sc+'40;border-left:3px solid '+sc+';border-radius:2px;z-index:2;"></div>';
       const sM=pTM(x.shift.start),aM=pTM(at.actual_start);if(sM!==null&&aM!==null){let df=aM-sM;if(df>720)df-=1440;if(df<-720)df+=1440;const ab=Math.abs(df);if(ab>=10)h+='<span style="position:absolute;right:2px;top:50%;transform:translateY(-50%);font-size:.45rem;color:'+(ab>=180?'#FF4444':ab>=60?'#E67E22':'#888')+';font-weight:700;z-index:3;">'+(df>0?ab+'분늦음':ab+'분일찍')+'</span>';}}
     const tL=isN?L+W+1:L,tW=isN?100-L-W-1:W;
@@ -349,7 +356,7 @@ function rTimebar(){
 function rList(){
   const con=$('lsCon');if(!con)return;const d=dk(S.date),m=S.date.getMonth()+1,dd=S.date.getDate(),dow=DOW_KR[S.date.getDay()];
   const cf=!!S.cf[d],{w,off,mt,tH,cc,uc,woC,whM}=catE(d);
-  const allCf=w.length>0&&uc===0,anyCf=cf||allCf,_g=gRange(w),GS=_g.gs,GR=_g.gh;
+  const allCf=w.length>0&&uc===0,anyCf=cf||allCf,_g=gRange(w);
   let h='<div style="padding:6px 8px;'+(allCf?'border:2px solid '+CK+';border-radius:12px;':'')+'">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;padding-bottom:5px;'+(anyCf?'border-bottom:2px solid '+CK+';':'border-bottom:1px solid #2E2E52;')+'">';
   h+='<span style="font-size:1rem;font-weight:800;color:'+(anyCf?CK:'#FFF')+';">'+m+'/'+dd+' '+dow+(anyCf?' <span style="font-size:.6rem;color:'+CK+';">확정</span>':'')+'</span>';
@@ -358,9 +365,7 @@ function rList(){
   h+='</div>'+progBar(cc,uc,mt.length,w.length,off.length,tH)+'</div></div>';
   w.forEach(x=>{
     const roles=x.shift.role?x.shift.role.split(',').filter(Boolean):[];
-    let sH=parseInt(x.shift.start),sM=parseInt(x.shift.start.split(':')[1]||0),eH=parseInt(x.shift.end),eM=parseInt(x.shift.end.split(':')[1]||0);
-    if(sH<DSH)sH+=24;if(eH<DSH)eH+=24;if(eH<=sH)eH+=24;
-    const sP=Math.max(0,((sH+sM/60)-GS)/GR*100),wP=Math.max(1,Math.min(100,((eH+eM/60)-GS)/GR*100)-sP);
+    const sp=spanT(x.shift.start,x.shift.end),sP=mPct(sp.s,_g),wP=Math.max(1,mPct(sp.e,_g)-sP);
     const isCf=x.status==='confirmed',sc=isCf?CK:CD,_lRC=RC[roles[0]||'주방']||sc,wO=woC[x.id]||0,wH=whM[x.id]||0;
     h+='<div style="margin-bottom:2px;padding:4px 6px;background:'+(isCf?CK+'10':CD+'08')+';border-left:3px solid '+_lRC+';border-radius:6px;cursor:pointer;" data-empid="'+x.id+'">';
     h+='<div style="display:flex;align-items:center;gap:4px;">';

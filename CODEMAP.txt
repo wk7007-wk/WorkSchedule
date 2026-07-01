@@ -10,14 +10,17 @@
 docs/app.js      — 전체 JS (단일 IIFE)
 docs/index.html  — HTML (모달 5개 포함)
 docs/style.css   — CSS (다크테마 #1A1A30)
+app/src/main/assets/app.js — APK 로컬 WebView asset. 06시 경계/날씨 지역/emp1 고정 fallback은 docs/app.js와 같이 유지
 
 ## app.js 섹션 (줄번호 → 역할)
 
 ### config (1~11)
 FB, FW           Firebase URL 상수
 AUTH             프론트 인증 설정. `pinSha256`, `storeLat/storeLng=37.2528352/127.4900516`, `radiusM=150`, `allowedDeviceHashes=[]`(CLI 등록 token SHA-256); `PIN AND (CLI 허용 단말 OR 서버/호스팅 허용 IP OR GPS)` 구조. allowlist 관리는 `/root/my-first-project/scripts/hynix_auth_cli.py`. `authDebug=1`은 로컬 개발에서만 GPS 우회
-DSH=3            하루 시작시각 — 게이지/정렬/타임바 전부 연동
+DSH=6            하루 시작시각 — 06시 day-boundary 기준 게이지/정렬/타임바 전부 연동
+WEATHER_LOCATION 날씨 기준 지역 `이천시 부발읍` + 근사 좌표 `37.2816,127.4892`
 DE               기본 직원 5명 (emp1~emp9)
+DFX              기본 고정근무 fallback. `emp1`(이원규/규)=매일 `17:00~06:00`
 HOL              공휴일 단일맵 {'yyyy-MM-dd':'이름'} (2026~2027)
 RC/RL            역할 색상/라벨
 
@@ -65,7 +68,7 @@ genDO()          56일간 자동휴무 생성 (고정스케줄 기반)
 
 ### 분류 (103~118)
 catE(dk)         직원을 working/off/empty로 분류 + 주간통계
-gRange(w)        타임바 게이지 범위 계산 (출퇴근+실근태 기반)
+gRange(w)        타임바/리스트 게이지 범위 계산. 06시 day-boundary 기준 당일 근무자 첫 출근~마지막 퇴근만 사용
 
 ### 근태 (120~133)
 cacheAtt(d,a)    `/packhelper/storebot_attendance/{date}` 읽은 값을 `/workschedule_v2/attendance_history/{date}`에 idempotent PUT

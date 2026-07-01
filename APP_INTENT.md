@@ -18,6 +18,9 @@
 - 출근 원본 `/packhelper/storebot_attendance/{date}`는 수정하지 않고, 읽은 일자 데이터만 `/workschedule_v2/attendance_history/{date}`에 idempotent PUT으로 보존해 누적 보기 기준으로 쓴다.
 - StoreBot 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터의 저장 경계는 WorkSchedule이 가진다.
 - HynixOps는 발주/근무표 탭형 통합 런처 이름이며, OrderHelper와 WorkSchedule 원본 SOT는 합치지 않는다.
+- 날씨 기준 지역은 `이천시 부발읍`이다. 좌표 상수는 근사 `37.2816, 127.4892`로 둔다.
+- `이원규(emp1)` 고정근무 fallback은 매일 `17:00~06:00`으로 해석한다.
+- 타임바/리스트 게이지는 06시 day-boundary 기준 선택 근무일의 당일 근무자 첫 출근~마지막 퇴근 범위만 쓴다.
 - 정적 프론트 인증은 `PIN 통과 AND (CLI 허용 단말 OR 서버/호스팅 허용 IP OR 매장 GPS 150m)` 구조다. PIN은 항상 필요하고, 단말/IP allowlist 등록은 운영자 CLI 전용이다. 웹 화면에서 PIN+GPS로 단말을 자동 허용하지 않는다.
 - IP allowlist는 CLI 기록/서버·호스팅 앞단 적용용이다. 정적 클라이언트의 임의 IP/X-Forwarded-For 값은 신뢰하지 않는다. `authDebug`는 로컬 개발에서만 GPS를 우회한다.
 

@@ -13,10 +13,11 @@ const READONLY_MODE = new URLSearchParams(location.search).get('readonly') === '
 // ============================================================
 // 2. Constants
 // ============================================================
-const DAY_START_HOUR = 3;
+const DAY_START_HOUR = 6;
 function makeHoursFrom(s){ const a=[]; for(let i=0;i<24;i++) a.push((s+i)%24); return a; }
 const ALL_HOURS = makeHoursFrom(DAY_START_HOUR);
 const TL_TOTAL_MINUTES = 24 * 60;
+const WEATHER_LOCATION = {name:'이천시 부발읍', lat:37.2816, lng:127.4892};
 const DOW_KR = ['일','월','화','수','목','금','토'];
 const DOW_MAP = {sun:0,mon:1,tue:2,wed:3,thu:4,fri:5,sat:6};
 const ROLE_COLORS = {'주방':'#E67E22','차배달':'#4ECDC4','오토바이':'#FFD700'};
@@ -35,6 +36,9 @@ const DEFAULT_EMPLOYEES = {
   emp3: {name:'리', phone:'', role:'', hourlyRate:9860, maxHours:40},
   emp4: {name:'히오', phone:'', role:'', hourlyRate:9860, maxHours:40},
   emp9: {name:'사아야', phone:'', role:'', hourlyRate:9860, maxHours:40}
+};
+const DEFAULT_FIXED_SCHEDULES = {
+  emp1: {start:'17:00', end:'06:00', role:'주방,오토바이', kind:'fixed', type:'fixed'}
 };
 
 // ============================================================
@@ -101,19 +105,30 @@ function timeToMinutesFrom12(ts){
   return (hr-12)*60+m;
 }
 function timeToMinutesFromDayStart(ts){
-  const [h,m]=ts.split(':').map(Number);
-  let hr=h; if(hr<DAY_START_HOUR) hr+=24;
-  return (hr-DAY_START_HOUR)*60+m;
+  return operationalMinute(ts)-DAY_START_HOUR*60;
 }
 function calcHours(s,e){
-  let sm=timeToMinutesFrom12(s), em=timeToMinutesFrom12(e);
-  if(em<=sm) em+=24*60;
-  return Math.round((em-sm)/60*10)/10;
+  const span=shiftSpan(s,e);
+  return Math.round((span.end-span.start)/60*10)/10;
 }
 function timeToPercent(ts){
   const mins=timeToMinutesFromDayStart(ts);
   return Math.max(0,Math.min(100,(mins/TL_TOTAL_MINUTES)*100));
 }
+function operationalMinute(ts){
+  const [h,m]=ts.split(':').map(Number);
+  let hr=h;if(hr<DAY_START_HOUR)hr+=24;
+  return hr*60+m;
+}
+function shiftSpan(s,e){
+  const start=operationalMinute(s);let end=operationalMinute(e);
+  if(end<=start)end+=TL_TOTAL_MINUTES;
+  return {start,end};
+}
+function minutePct(min,range){
+  return Math.max(0,Math.min(100,(min-range.startMinute)/range.rangeMinutes*100));
+}
+function hourLabel(min){return pad(Math.floor(min/60)%24);}
 function parseTimeMin(ts){
   if(!ts)return null;
   const p=ts.split(':');
@@ -138,23 +153,16 @@ function findEmpIdByName(name){
 }
 
 function calcGaugeRange(working){
-  if(!working||working.length===0) return {gaugeStart:DAY_START_HOUR, gaugeHours:12};
-  let minH=48,maxH=0;
+  if(!working||working.length===0) return {gaugeStart:DAY_START_HOUR, gaugeHours:12, startMinute:DAY_START_HOUR*60, rangeMinutes:12*60};
+  let minM=Infinity,maxM=-Infinity;
   working.forEach(w=>{
-    let sH=parseInt(w.shift.start.split(':')[0]), eH=parseInt(w.shift.end.split(':')[0]);
-    let eM=parseInt(w.shift.end.split(':')[1]||0); if(eM>0)eH++;
-    if(sH<DAY_START_HOUR)sH+=24; if(eH<DAY_START_HOUR)eH+=24;
-    if(eH<=sH)eH+=24;
-    if(sH<minH)minH=sH; if(eH>maxH)maxH=eH;
+    if(!w.shift||!w.shift.start||!w.shift.end)return;
+    const span=shiftSpan(w.shift.start,w.shift.end);
+    if(span.start<minM)minM=span.start;
+    if(span.end>maxM)maxM=span.end;
   });
-  if(dayAttendance){
-    Object.values(dayAttendance).forEach(att=>{
-      if(att.actual_start){let h=parseInt(att.actual_start.split(':')[0]); if(h<DAY_START_HOUR)h+=24; if(h<minH)minH=h;}
-      if(att.actual_end){let h=parseInt(att.actual_end.split(':')[0]),m2=parseInt(att.actual_end.split(':')[1]||0); if(m2>0)h++; if(h<DAY_START_HOUR)h+=24; if(h>maxH)maxH=h;}
-    });
-  }
-  const gs=minH-1, ge=maxH+1; let gh=ge-gs; if(gh<6)gh=6;
-  return {gaugeStart:gs, gaugeHours:gh};
+  if(!isFinite(minM)||!isFinite(maxM)||maxM<=minM) return {gaugeStart:DAY_START_HOUR, gaugeHours:12, startMinute:DAY_START_HOUR*60, rangeMinutes:12*60};
+  return {gaugeStart:minM/60, gaugeHours:(maxM-minM)/60, startMinute:minM, rangeMinutes:maxM-minM};
 }
 
 // ============================================================
@@ -278,7 +286,7 @@ function connectScheduleSSE(gen){
 function getFixedScheduleForDate(empId, dateObj){
   const d = typeof dateObj==='string' ? new Date(dateObj.replace(/-/g,'/')) : dateObj;
   const dow = d.getDay(); // 0=sun,1=mon,...6=sat
-  const fs = fixedSchedules[empId];
+  const fs = DEFAULT_FIXED_SCHEDULES[empId] || fixedSchedules[empId];
   if(!fs) return null;
   const dowStr = ['sun','mon','tue','wed','thu','fri','sat'][dow];
   const override = fs.dayTimes && fs.dayTimes[dowStr];
@@ -530,11 +538,11 @@ function renderTimebarView(){
   working.sort((a,b)=>timeToMinutesFromDayStart(a.shift.start)-timeToMinutesFromDayStart(b.shift.start));
 
   const _mg=calcGaugeRange(working);
-  const barStart=_mg.gaugeStart, barHours=_mg.gaugeHours;
-  function timeToPct(ts){let[h,m]=ts.split(':').map(Number);if(h<DAY_START_HOUR)h+=24;return Math.max(0,Math.min(100,((h-barStart)+m/60)/barHours*100));}
+  const barHours=_mg.gaugeHours;
 
   const nowH=new Date().getHours(),nowM=new Date().getMinutes();
-  const nowPct=timeToPct(pad(nowH)+':'+pad(nowM));
+  const nowMinute=operationalMinute(pad(nowH)+':'+pad(nowM));
+  const nowPct=(nowMinute>=_mg.startMinute&&nowMinute<=_mg.startMinute+_mg.rangeMinutes)?minutePct(nowMinute,_mg):null;
   const isToday=dateKey(new Date())===dk;
 
   let html='<div style="padding:5px 6px 0;">';
@@ -558,7 +566,7 @@ function renderTimebarView(){
   // Time header
   html+='<div style="display:flex;align-items:center;margin-bottom:2px;"><div style="min-width:58px;"></div><div style="flex:1;position:relative;height:16px;display:flex;">';
   const _labelStep=barHours<=8?1:barHours<=14?2:3;
-  for(let h=barStart;h<=barStart+barHours;h+=_labelStep){const rh=h>=24?h-24:h;const pct=(h-barStart)/barHours*100;html+='<span style="position:absolute;left:'+pct+'%;font-size:.55rem;color:#707088;transform:translateX(-50%);">'+rh+'</span>';}
+  for(let min=_mg.startMinute;min<=_mg.startMinute+_mg.rangeMinutes;min+=_labelStep*60){html+='<span style="position:absolute;left:'+minutePct(min,_mg)+'%;font-size:.55rem;color:#707088;transform:translateX(-50%);">'+hourLabel(min)+'</span>';}
   html+='</div><div style="min-width:36px;"></div></div>';
 
   // Worker bars
@@ -571,8 +579,9 @@ function renderTimebarView(){
     const att=dayAttendance[w.id];
     const hasActual=att&&att.actual_start;
 
-    const left=timeToPct(w.shift.start);
-    let right=timeToPct(w.shift.end); let width=right-left; if(width<=0)width+=100; width=Math.min(width,100-left);
+    const schedSpan=shiftSpan(w.shift.start,w.shift.end);
+    const left=minutePct(schedSpan.start,_mg);
+    const width=Math.max(.5,minutePct(schedSpan.end,_mg)-left);
     const barBg=hasActual?roleColor+'18':(isCf?roleColor+'40':roleColor+'18');
     const borderL=hasActual?roleColor+'55':(isCf?roleColor:roleColor+'88');
     const rowOp=isCf?'1':'.6';
@@ -585,15 +594,17 @@ function renderTimebarView(){
     if(wOff)html+='<span style="font-size:.6rem;color:'+C_OFF+';">('+wOff+')</span>';
     html+='</div>';
     html+='<div style="flex:1;position:relative;height:32px;background:#1A1A30;border-radius:4px;overflow:hidden;">';
-    if(isToday)html+='<div style="position:absolute;left:'+nowPct+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:3;"></div>';
+    if(isToday&&nowPct!==null)html+='<div style="position:absolute;left:'+nowPct+'%;top:0;bottom:0;width:1px;background:#FFD70066;z-index:3;"></div>';
     const isNarrow=width<30;
     const schedBorder=hasActual?'border:1.5px dashed '+roleColor+'55;':(isCf?'':'border:1px dashed '+roleColor+'66;');
     html+='<div style="position:absolute;left:'+left+'%;width:'+width+'%;top:1px;bottom:1px;background:'+barBg+';border-left:3px solid '+borderL+';border-radius:3px;'+schedBorder+'z-index:1;"></div>';
     // Actual bar
     if(hasActual){
-      const aL=timeToPct(att.actual_start);
-      const aR=att.actual_end?timeToPct(att.actual_end):aL;
-      const aW=Math.max(aR-aL,1);
+      const aStart=operationalMinute(att.actual_start);
+      let aEnd=att.actual_end?operationalMinute(att.actual_end):aStart;
+      if(att.actual_end&&aEnd<=aStart)aEnd+=TL_TOTAL_MINUTES;
+      const aL=minutePct(aStart,_mg);
+      const aW=Math.max(minutePct(aEnd,_mg)-aL,1);
       const srcC=attSrcColor(att.actual_start_source||att.actual_end_source||'');
       html+='<div style="position:absolute;left:'+aL+'%;width:'+aW+'%;top:5px;bottom:5px;background:'+srcC+'40;border-left:3px solid '+srcC+';border-radius:2px;z-index:2;"></div>';
       const sMin=parseTimeMin(w.shift.start),aMin=parseTimeMin(att.actual_start);
@@ -745,15 +756,11 @@ function renderListView(){
 
   // Workers
   const _g=calcGaugeRange(working);
-  const GS=_g.gaugeStart,GR=_g.gaugeHours;
   working.forEach(w=>{
     const roles=w.shift.role?w.shift.role.split(',').filter(Boolean):[];
-    let sH=parseInt(w.shift.start.split(':')[0]),sM=parseInt(w.shift.start.split(':')[1]||0);
-    let eH=parseInt(w.shift.end.split(':')[0]),eM=parseInt(w.shift.end.split(':')[1]||0);
-    if(sH<DAY_START_HOUR)sH+=24;if(eH<DAY_START_HOUR)eH+=24;if(eH<=sH)eH+=24;
-    const startPct=Math.max(0,((sH+sM/60)-GS)/GR*100);
-    const endPct=Math.min(100,((eH+eM/60)-GS)/GR*100);
-    const widthPct=Math.max(1,endPct-startPct);
+    const span=shiftSpan(w.shift.start,w.shift.end);
+    const startPct=minutePct(span.start,_g);
+    const widthPct=Math.max(1,minutePct(span.end,_g)-startPct);
     const isCf=w.status==='confirmed';
     const stColor=isCf?C_OK:C_DEF;
     const stBg=isCf?C_OK+'10':C_DEF+'08';
@@ -1215,7 +1222,7 @@ function isDayOff(empId,dk){
     if(st==='shift'||st==='clear'||row.clear===true||row.cancel===true||row.deleted===true)return false;
   }
   const emp = employees[empId]; if(!emp) return false;
-  const fs = fixedSchedules[empId]; if(!fs) return false;
+  const fs = DEFAULT_FIXED_SCHEDULES[empId] || fixedSchedules[empId]; if(!fs) return false;
   const dObj = (typeof dk==='string') ? new Date(dk.replace(/-/g,'/')) : dk;
   const dow = dObj.getDay();
   const dowStr = ['sun','mon','tue','wed','thu','fri','sat'][dow];
@@ -1578,7 +1585,7 @@ function init(){
   currentDate=new Date();
   updateDateDisplay();
   buildTimeSelects();
-  const wi=$('weatherInfo');if(wi)wi.innerHTML='<span style="color:#9090A8;">-</span>';
+  const wi=$('weatherInfo');if(wi)wi.innerHTML='<span style="color:#4ECDC4;">'+WEATHER_LOCATION.name+'</span>';
   const si=$('sportsInfo');if(si)si.innerHTML='<span style="color:#9090A8;">-</span>';
   loadData();
   connectSSE();
