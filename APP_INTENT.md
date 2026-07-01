@@ -25,6 +25,7 @@
 - HynixOps는 근무표 간단 입력 front이고, WorkSchedule은 Firebase SOT/출력/기존 상세 화면 역할을 유지한다.
 - 사용자가 HynixOps에서 근무표를 수정할 때 기존 WorkSchedule 상세 UI를 기본으로 보게 하지 않는다.
 - HynixOps 근무표 조정은 첫 화면의 primary action으로 열고, 편집 중에는 변경 수, 선택 셀 inspector, 기존→변경 비교, 닫기 확인, 저장 전 확인을 항상 기준으로 삼는다.
+- HynixOps 주간 패턴 적용은 선택 직원/기간의 기존 근무를 새 패턴으로 덮어쓰기 요청하되, 원본 직접 저장이 아니라 `schedule_update` safe queue로만 접수한다.
 - 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.
 - 스와이프는 날짜 변경이며 탭 전환으로 바꾸지 않는다.
 - 직원 공개 화면과 관리자 조작 화면의 경계를 섞지 않는다.
