@@ -3,7 +3,7 @@
 # 3파일 분리구조: docs/index.html + docs/app.js + docs/style.css
 # code-guard: 수정 전 이 맵으로 영향 범위 확인
 # HynixOps/StoreBotTermux/대시보드는 소비자, WorkSchedule은 `/workschedule_v2` SOT/출력 화면 역할
-# HynixOps quick edit UI: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭, safe queue 조정 front
+# HynixOps quick edit UI: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭, 저장 전 확인/기존→변경 비교가 있는 safe queue 조정 front
 # 공통 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
 
 ## 파일 구조
