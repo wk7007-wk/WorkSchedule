@@ -16,6 +16,18 @@
 - USB가 1순위다. 공장 PC는 먼저 USB `device` serial을 확인한다.
 - USB `device` 상태가 확인되기 전에는 `adb install -r`와 `dumpsys package` 검증을 진행하지 않는다.
 
+## 2026-07-02 공장 PC 실행 결과
+- request: `/packhelper/codex_ops_v2/requests/ops_1782983264896_c832aaef`
+- worker: `pc_codex_resource_01`
+- 판정: blocked
+- 공장 PC/USB 증거: `CODEX_OPS_HOST=pc`, `CODEX_OPS_NODE=pc_codex_resource_01`, USB serial `R39M30RWR2F` 단일 device
+- 설치 시도: `adb install -r app/build/outputs/apk/debug/app-debug.apk`
+- 실패 원인: `INSTALL_FAILED_VERSION_DOWNGRADE: Package Verification Result`
+- 현재 설치본: `com.workschedule.app`, `versionName=0701.2240`, `versionCode=1782945636`, `lastUpdateTime=2026-07-02 08:05:47`
+- 시도 APK: `versionName=0605.1009`, `versionCode=1780654184`
+- 금지 작업 미수행: wireless/IP:port, uninstall, `pm clear`, 데이터 삭제, 앱 실행, 카카오 발송 없음
+- 다음 기준: 동일 APK 재설치는 반복하지 않는다. 더 높은 `versionCode`의 새 APK를 빌드한 뒤 공장 PC USB 설치를 다시 요청한다.
+
 ## 공장 PC 전용 확인 항목
 ```bash
 cd /root/WorkSchedule
