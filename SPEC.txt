@@ -87,6 +87,15 @@
 - ws_employees, ws_sched_{yyyy-MM-dd}, ws_dayoffs
 - ws_confirmed, ws_shift_status, ws_patterns
 - ws_staff_settings (인원 프리셋)
+- workschedule_delivery_v1: 최신 근무표 종합 이미지 공유 준비 상태. lastChangedAtMs, lastPreparedAtMs, lastSentAtMs, cliPatchCandidate(no_live_no_write)를 보관한다.
+
+## 근무표 종합 이미지 공유
+- 스케줄 저장/상태/fixed schedule 갱신 write 성공 후 5분 idle이 지나면 최신 근무표 종합 이미지 공유 준비 상태가 된다.
+- 마지막 이미지 공유 intent 큐잉 후 6시간이 지나면 최신 근무표 기준으로 주기 공유 due가 된다.
+- 공유는 Android `NativeBridge.shareImage` 또는 브라우저 PNG 다운로드로만 연결한다. Kakao 자동 선택/자동 발송은 하지 않는다.
+- 공유 전 gate 문구는 공유 시트에서 목표 단체방을 직접 확인하라고 안내한다.
+- 날씨/뉴스 보조정보가 비어 있으면 실제 외부 호출 없이 CLI 보정 후보만 만든다. 이미지 중심은 최신 근무표이고 보조정보는 누락 시 보정 대상 섹션이다.
+- 백그라운드 자동 발송/실제 CLI 실행은 이번 앱 코드가 수행하지 않는다. 앱 실행 중 pending/due 표시와 공유 intent gate까지만 제공한다.
 
 ## Gemini API
 - 모델: gemini-2.0-flash

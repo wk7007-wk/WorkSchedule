@@ -1,6 +1,6 @@
 # WorkSchedule 코드맵 (슬림 재작성 0417)
 # 의도 기준: APP_INTENT.md (근무스케줄/출근기록 관리)
-# 3파일 분리구조: docs/index.html + docs/app.js + docs/style.css
+# 프론트 구조: docs/index.html + docs/app.js + docs/style.css + docs/schedule_delivery_logic.js
 # code-guard: 수정 전 이 맵으로 영향 범위 확인
 # HynixOps/StoreBotTermux/대시보드는 소비자, WorkSchedule은 `/workschedule_v2` SOT/출력 화면 역할
 # HynixOps quick edit UI: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭, 저장 전 확인/기존→변경 비교/주간 패턴 덮어쓰기 요약이 있는 safe queue 조정 front
@@ -8,9 +8,11 @@
 
 ## 파일 구조
 docs/app.js      — 전체 JS (단일 IIFE)
+docs/schedule_delivery_logic.js — 5분 idle/6시간 최신 근무표 공유 due 계산 순수 모듈
 docs/index.html  — HTML (모달 5개 포함)
 docs/style.css   — CSS (다크테마 #1A1A30)
 app/src/main/assets/app.js — APK 로컬 WebView asset. 06시 경계/날씨 지역/emp1 고정 fallback은 docs/app.js와 같이 유지
+app/src/main/assets/schedule_delivery_logic.js — APK asset용 동일 delivery 계산 모듈
 
 ## app.js 섹션 (줄번호 → 역할)
 
@@ -42,6 +44,12 @@ tm12,tmDS,cH,tPct,pTM  시간 계산
 fbG(url)         GET  — .json suffix 자동
 fbP(url,data)    PUT  — READONLY 체크 포함. data=null 삭제성 쓰기 금지
   ※ fbPatch, fbDelete 없음 (PUT만 사용)
+
+### schedule delivery
+schedule_delivery_logic.js  5분 idle, 추가 수정 reset, 마지막 이미지 공유 intent+6h 주기 due를 `latest_work_schedule` 기준으로 계산
+trackScheduleDeliveryWrite / SSE put·patch  overrides/status/fixed_schedules write 성공 또는 초기 스냅샷 이후 SSE 갱신 시 공유 준비 타이머 갱신
+queueCompositeShare         최신 근무표 중심 종합 PNG 생성 → NativeBridge.shareImage/ACTION_SEND image intent. Kakao 자동 선택/전송 없음
+workschedule_delivery_cli_patch  날씨/뉴스 보조정보 누락 시 localStorage에 no-live/no-write CLI 보정 후보만 기록
 
 ### auth gate
 initAuthGate()   앱 초기화 전 PIN+합집합 factor 인증. PIN은 항상 필요하고, 단말 token은 CLI allowlist 등록 시에만 factor 통과. 웹 self-enrollment 없음. IP 인증/비밀 보호는 서버측 필요
@@ -127,7 +135,7 @@ togOff(eid)      휴무 토글 (해제 시 고정값 복원)
 cfOff(eid)       휴무 확정
 
 ### 공유/기타 (354~372)
-shareBtn         텍스트 공유 (이원규 제외)
+shareBtn         최신 근무표 종합 이미지 공유 시트 gate
 urlBtn           URL 복사
 collapsible      주간 개요 접기
 visibilitychange SSE+loadData 재호출 (reload 금지)

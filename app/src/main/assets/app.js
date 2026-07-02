@@ -174,7 +174,7 @@ async function fbGet(url){
 }
 async function fbPut(url,data){
   if(READONLY_MODE){showToast('읽기 전용');return false;}
-  try{ const r=await fetch(url+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); if(!r.ok)throw new Error(r.status); return true; }
+  try{ const r=await fetch(url+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); if(!r.ok)throw new Error(r.status); trackScheduleDeliveryWrite(url); return true; }
   catch(e){ console.error('fbPut',url,e); showToast('저장 실패'); return false; }
 }
 async function fbPatch(url,data){
@@ -194,7 +194,54 @@ function clearRow(role){return Object.assign(nowMeta(),{state:'clear',type:'clea
 function offIndex(overrides){const out={};if(!overrides||typeof overrides!=='object')return out;Object.keys(overrides).forEach(dk=>{const day=overrides[dk];if(!day||typeof day!=='object')return;Object.keys(day).forEach(eid=>{const r=day[eid];if(r&&typeof r==='object'&&(r.state==='off'||r.off===true||r.dayoff===true)){if(!out[eid])out[eid]={};out[eid][dk]=true;}});});return out;}
 
 // ============================================================
-// 8. SSE
+// 8. Schedule delivery state (no live send / no external calls)
+// ============================================================
+const DELIVERY_LOGIC=window.WorkScheduleDeliveryLogic||{IDLE_MS:300000,PERIODIC_MS:21600000,computeDeliveryState:x=>Object.assign({targetKind:'latest_work_schedule',due:false,nextDueAtMs:null},x||{}),markScheduleChanged:(s,n)=>Object.assign({},s||{},{targetKind:'latest_work_schedule',lastChangedAtMs:n==null?Date.now():n,lastPreparedAtMs:null}),markShareIntentQueued:(s,n)=>Object.assign({},s||{},{targetKind:'latest_work_schedule',lastPreparedAtMs:n==null?Date.now():n,lastSentAtMs:n==null?Date.now():n})};
+const DELIVERY_STORAGE_KEY='workschedule_delivery_v1';
+let deliveryRenderTimer=null;
+function readDeliveryStore(){try{return JSON.parse(localStorage.getItem(DELIVERY_STORAGE_KEY)||'{}')||{};}catch(e){return{};}}
+function writeDeliveryStore(state){try{localStorage.setItem(DELIVERY_STORAGE_KEY,JSON.stringify(Object.assign({targetKind:'latest_work_schedule'},state||{})));}catch(e){}}
+function isScheduleDeliveryWrite(url){return url&&url.indexOf(FB_WS+'/attendance_history')<0&&(url.indexOf(FB_SCHEDULES+'/')===0||url.indexOf(FB_WS+'/status/')===0||url.indexOf(FB_WS+'/fixed_schedules')===0);}
+function markScheduleDeliveryChanged(){writeDeliveryStore(DELIVERY_LOGIC.markScheduleChanged(readDeliveryStore(),Date.now()));renderDeliveryPanel();queueDeliveryRender();}
+function trackScheduleDeliveryWrite(url){if(!isScheduleDeliveryWrite(url))return;markScheduleDeliveryChanged();}
+function getDeliveryState(now){return DELIVERY_LOGIC.computeDeliveryState(Object.assign({targetKind:'latest_work_schedule',nowMs:now||Date.now()},readDeliveryStore()));}
+function formatDeliveryClock(ms){if(!ms)return'-';const d=new Date(ms);return pad(d.getHours())+':'+pad(d.getMinutes());}
+function collectSupportGaps(){const gaps=[];if(!window.WorkScheduleSupportWeather)gaps.push('weather');if(!window.WorkScheduleSupportNews)gaps.push('news');return gaps;}
+function ensureCliPatchCandidate(gaps,reason){if(!gaps.length)return null;const state=readDeliveryStore(),now=Date.now();state.cliPatchCandidate={lane:'workschedule_delivery_cli_patch',mode:'no_live_no_write',targetKind:'latest_work_schedule',reason:reason||'pre_share_support_gap',gaps:gaps.slice(),createdAtMs:now};writeDeliveryStore(state);return state.cliPatchCandidate;}
+function renderDeliveryPanel(){
+  const status=$('deliveryStatus'),cli=$('deliveryCliStatus'),btn=$('deliveryShareBtn');if(!status||!cli)return;
+  const state=getDeliveryState(),gaps=collectSupportGaps();
+  status.classList.remove('ready','waiting');cli.classList.toggle('needs-cli',gaps.length>0);
+  if(state.due){status.textContent=(state.dueReason==='periodic'?'6시간 주기 도래':'5분 무작업 완료')+' - 최신 근무표 이미지 준비';status.classList.add('ready');ensureCliPatchCandidate(gaps,state.dueReason);}
+  else if(state.nextDueAtMs){status.textContent='최신 근무표 공유 대기 - 다음 판단 '+formatDeliveryClock(state.nextDueAtMs);status.classList.add('waiting');}
+  else{status.textContent='최신 근무표 변경 대기';}
+  cli.textContent=gaps.length?'CLI 보정 후보: '+gaps.map(x=>x==='weather'?'날씨':'뉴스').join(', ')+' (외부 호출 없음)':'보조정보 준비됨';
+  if(btn)btn.disabled=false;
+}
+function queueDeliveryRender(){clearTimeout(deliveryRenderTimer);const state=getDeliveryState(),wait=state.nextDueAtMs?Math.max(1000,Math.min(60000,state.nextDueAtMs-Date.now())):60000;deliveryRenderTimer=setTimeout(()=>{renderDeliveryPanel();queueDeliveryRender();},wait);}
+function scheduleRowsForImage(){const dk=dateKey(currentDate);return Object.keys(employees).map(id=>{const emp=employees[id]||{},off=isDayOff(id,dk),shift=off?null:getScheduleShift(dk,id);return{id,name:emp.name||id,color:emp.color||'#9090A8',off,shift};});}
+function makeCompositeScheduleImage(){
+  const rows=scheduleRowsForImage(),gaps=collectSupportGaps(),width=1080,rowH=78,height=270+rows.length*rowH+90,canvas=document.createElement('canvas'),ctx=canvas.getContext('2d'),dk=dateKey(currentDate);
+  canvas.width=width;canvas.height=height;ctx.fillStyle='#1A1A30';ctx.fillRect(0,0,width,height);
+  ctx.fillStyle='#E0E0EC';ctx.font='700 48px sans-serif';ctx.fillText('최신 근무표 종합 이미지',52,76);
+  ctx.fillStyle='#9090A8';ctx.font='28px sans-serif';ctx.fillText(dk+' ('+DOW_KR[currentDate.getDay()]+') / 공유 시트에서 목표 단체방 확인',52,118);
+  ctx.fillStyle='#242444';ctx.fillRect(52,150,width-104,58);ctx.fillStyle='#FFD700';ctx.font='700 28px sans-serif';ctx.fillText('자동 카카오 전송 없음 · 사용자가 공유 대상 직접 선택',78,187);
+  let y=235;rows.forEach(row=>{ctx.fillStyle='#242444';ctx.fillRect(52,y,width-104,rowH-12);ctx.fillStyle=row.color;ctx.fillRect(52,y,10,rowH-12);ctx.fillStyle='#FFFFFF';ctx.font='700 30px sans-serif';ctx.fillText(row.name,82,y+42);ctx.font='26px sans-serif';ctx.fillStyle=row.off?'#E74C3C':'#E0E0EC';let line=row.off?'휴무':(row.shift&&row.shift.start?row.shift.start+' ~ '+row.shift.end+'  '+(row.shift.role||'')+'  '+calcHours(row.shift.start,row.shift.end)+'h':'미입력');ctx.fillText(line,320,y+42);y+=rowH;});
+  ctx.fillStyle='#1e1e3a';ctx.fillRect(52,y+8,width-104,70);ctx.fillStyle=gaps.length?'#E67E22':'#2ECC71';ctx.font='700 26px sans-serif';ctx.fillText(gaps.length?'보조정보 CLI 보정 후보: '+gaps.map(x=>x==='weather'?'날씨':'뉴스').join(', '):'보조정보 준비됨',78,y+51);
+  return canvas.toDataURL('image/png');
+}
+function queueCompositeShare(reason){
+  const gaps=collectSupportGaps();ensureCliPatchCandidate(gaps,reason||'manual_share');
+  const message='공유 시트에서 목표 단체방을 직접 확인한 뒤 선택하세요.\n자동 카카오 전송은 하지 않습니다.'+(gaps.length?'\n\n날씨/뉴스 보조정보 누락은 CLI 보정 후보로만 기록됩니다. 실제 발송 전 보강 여부를 확인하세요.':'');
+  if(!confirm(message))return;
+  const imageBase64=makeCompositeScheduleImage();
+  if(window.NativeBridge&&window.NativeBridge.shareImage){window.NativeBridge.shareImage(imageBase64);showToast('이미지 공유 시트 열림');}
+  else{const link=document.createElement('a');link.href=imageBase64;link.download='workschedule_'+dateKey(currentDate)+'.png';document.body.appendChild(link);link.click();document.body.removeChild(link);showToast('이미지 파일 준비됨');}
+  writeDeliveryStore(DELIVERY_LOGIC.markShareIntentQueued(readDeliveryStore(),Date.now()));renderDeliveryPanel();queueDeliveryRender();
+}
+
+// ============================================================
+// 9. SSE
 // ============================================================
 function connectSSE(){
   sseGeneration++;
@@ -242,9 +289,12 @@ function connectScheduleSSE(gen){
   const dk=dateKey(currentDate);
   try{
     sseSchedule=new EventSource(FB_SCHEDULES+'/'+dk+'.json');
+    let seenInitialSchedule=false;
     sseSchedule.addEventListener('put',function(e){
       if(gen!==sseGeneration){sseSchedule.close();return;}
       try{
+        const isInitial=!seenInitialSchedule;
+        seenInitialSchedule=true;
         const d=JSON.parse(e.data);
         if(d.path==='/'){daySchedule=d.data||{};}
         else{
@@ -260,16 +310,19 @@ function connectScheduleSSE(gen){
           }
         }
         renderAll();
+        if(!isInitial)markScheduleDeliveryChanged();
       }catch(err){console.error('SSE sched',err);}
     });
     sseSchedule.addEventListener('patch',function(e){
       if(gen!==sseGeneration){sseSchedule.close();return;}
       try{
+        seenInitialSchedule=true;
         const d=JSON.parse(e.data);
         const parts=d.path.replace(/^\//,'').split('/').filter(Boolean);
         if(parts.length===0&&d.data) Object.keys(d.data).forEach(k=>{daySchedule[k]=Object.assign(daySchedule[k]||{},d.data[k]);});
         else if(parts.length===1&&d.data) daySchedule[parts[0]]=Object.assign(daySchedule[parts[0]]||{},d.data);
         renderAll();
+        markScheduleDeliveryChanged();
       }catch(err){console.error('SSE sched patch',err);}
     });
     sseSchedule.onerror=function(){
@@ -1505,9 +1558,9 @@ if($('copyUrlBtn')) $('copyUrlBtn').addEventListener('click',()=>{
   else{const ta=document.createElement('textarea');ta.value=url;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);showToast('URL 복사됨');}
 });
 
-// Safe no-op for removed share features (DOM elements still exist in HTML)
-if($('shareKakaoBtn')) $('shareKakaoBtn').addEventListener('click',()=>showToast('카톡 공유 기능 제거됨'));
-if($('shareImageBtn')) $('shareImageBtn').addEventListener('click',()=>showToast('이미지 공유 기능 제거됨'));
+if($('deliveryShareBtn')) $('deliveryShareBtn').addEventListener('click',()=>queueCompositeShare('delivery_panel'));
+if($('shareKakaoBtn')) $('shareKakaoBtn').addEventListener('click',()=>queueCompositeShare('share_section_kakao'));
+if($('shareImageBtn')) $('shareImageBtn').addEventListener('click',()=>queueCompositeShare('share_section_image'));
 
 // ============================================================
 // 19. Collapsible sections (session memory only)
@@ -1589,6 +1642,8 @@ function init(){
   const si=$('sportsInfo');if(si)si.innerHTML='<span style="color:#9090A8;">-</span>';
   loadData();
   connectSSE();
+  renderDeliveryPanel();
+  queueDeliveryRender();
 }
 
 init();

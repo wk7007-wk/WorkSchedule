@@ -378,6 +378,20 @@ body{
 }
 .pay-table tr.pay-total td:first-child{color:#2ECC71;}
 
+/* ===== Delivery Panel ===== */
+.delivery-panel{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin:6px 8px;padding:8px 10px;
+  border:1px solid #2E2E52;background:#1A1A35;border-radius:8px;
+}
+.delivery-copy{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.delivery-copy strong{font-size:.82rem;color:#E0E0EC;}
+.delivery-copy span{font-size:.68rem;color:#9090A8;line-height:1.25;}
+#deliveryStatus.ready{color:#2ECC71;font-weight:700;}
+#deliveryStatus.waiting{color:#FFD700;}
+#deliveryCliStatus.needs-cli{color:#E67E22;}
+#deliveryShareBtn{flex-shrink:0;min-width:78px;}
+
 /* ===== Share Section ===== */
 .share-section{
   margin:8px;
@@ -400,7 +414,7 @@ body{
   transition:max-height .3s ease,padding .3s ease;
   background:#1A1A35;
 }
-.share-body.open{max-height:200px;padding:12px 14px;}
+.share-body.open{max-height:260px;padding:12px 14px;}
 .share-btns{display:flex;gap:10px;flex-wrap:wrap;}
 
 /* ===== Modals ===== */

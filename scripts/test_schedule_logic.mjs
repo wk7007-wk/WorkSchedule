@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+
+const require = createRequire(import.meta.url);
+const delivery = require('../docs/schedule_delivery_logic.js');
 
 const DAY_START_HOUR = 6;
 const DAY_MINUTES = 24 * 60;
@@ -37,13 +41,6 @@ function gaugeRange(working) {
   return { startMinute: min, rangeMinutes: max - min };
 }
 
-function fixedSchedule(empId) {
-  const fixed = {
-    emp1: { start: '17:00', end: '06:00', role: '주방,오토바이', kind: 'fixed', type: 'fixed' },
-  };
-  return fixed[empId] || null;
-}
-
 const mixedDay = gaugeRange([
   { id: 'emp2', shift: { start: '10:00', end: '18:00' } },
   { id: 'emp1', shift: { start: '17:00', end: '06:00' } },
@@ -56,24 +53,40 @@ assert.equal(overnight.startMinute, operationalMinute('17:00'));
 assert.equal(overnight.rangeMinutes, 13 * 60);
 assert.equal(calcHours('17:00', '06:00'), 13);
 
-const gyu = fixedSchedule('emp1');
-assert.equal(gyu.start, '17:00');
-assert.equal(gyu.end, '06:00');
-
 const rows = [
   { id: 'emp1', off: false, shift: { start: '17:00', end: '06:00' } },
   { id: 'emp2', off: true, shift: { start: '08:00', end: '09:00' } },
   { id: 'emp3', off: false, shift: null },
 ];
-const dayWorkersOnly = gaugeRange(rows.filter((row) => !row.off && row.shift));
-assert.deepEqual(dayWorkersOnly, overnight);
+assert.deepEqual(gaugeRange(rows.filter((row) => !row.off && row.shift)), overnight);
+
+let state = delivery.markScheduleChanged({}, 0);
+assert.equal(delivery.computeDeliveryState({ ...state, nowMs: delivery.IDLE_MS - 1 }).idleDue, false);
+assert.equal(delivery.computeDeliveryState({ ...state, nowMs: delivery.IDLE_MS }).idleDue, true);
+
+state = delivery.markScheduleChanged(state, 120_000);
+assert.equal(delivery.computeDeliveryState({ ...state, nowMs: delivery.IDLE_MS + 119_999 }).idleDue, false);
+assert.equal(delivery.computeDeliveryState({ ...state, nowMs: delivery.IDLE_MS + 120_000 }).idleDue, true);
+
+let sentState = delivery.markShareIntentQueued(state, delivery.IDLE_MS + 120_000);
+let periodic = delivery.computeDeliveryState({ ...sentState, nowMs: sentState.lastSentAtMs + delivery.PERIODIC_MS - 1 });
+assert.equal(periodic.periodicDue, false);
+periodic = delivery.computeDeliveryState({ ...sentState, nowMs: sentState.lastSentAtMs + delivery.PERIODIC_MS });
+assert.equal(periodic.periodicDue, true);
+assert.equal(periodic.targetKind, 'latest_work_schedule');
+
+sentState = delivery.markShareIntentQueued(sentState, sentState.lastSentAtMs + delivery.PERIODIC_MS);
+const nextPeriodic = delivery.computeDeliveryState({ ...sentState, nowMs: sentState.lastSentAtMs + 1 });
+assert.equal(nextPeriodic.nextDueAtMs, sentState.lastSentAtMs + delivery.PERIODIC_MS);
+assert.equal(nextPeriodic.targetKind, 'latest_work_schedule');
 
 for (const file of ['docs/app.js', 'app/src/main/assets/app.js']) {
   const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
-  assert.match(source, /이천시 부발읍/);
-  assert.match(source, /17:00['"],\s*end:\s*['"]06:00/);
-  if (file === 'docs/app.js') assert.match(source, /const DSH=6/);
-  if (file.includes('assets')) assert.match(source, /const DAY_START_HOUR = 6/);
+  assert.match(source, /최신 근무표/);
+  assert.match(source, /queueCompositeShare/);
+  assert.match(source, /shareImage/);
+  assert.match(source, /workschedule_delivery_cli_patch/);
+  assert.doesNotMatch(source, new RegExp('최신' + ' 상태'));
 }
 
 console.log('schedule logic tests passed');

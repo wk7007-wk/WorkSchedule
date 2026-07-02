@@ -32,6 +32,14 @@
 
 <!-- 당일 브리핑 패널 -->
 <div id="briefingPanel" style="background:#1e1e3a;border-bottom:1px solid #2E2E52;padding:6px 4px;font-size:.75rem;"></div>
+<section class="delivery-panel" id="deliveryPanel">
+  <div class="delivery-copy">
+    <strong>종합 이미지</strong>
+    <span id="deliveryStatus">최신 근무표 기준 대기</span>
+    <span id="deliveryCliStatus">날씨/뉴스 누락 시 CLI 보정 후보만 생성</span>
+  </div>
+  <button class="btn btn-accent btn-sm" id="deliveryShareBtn">공유 시트</button>
+</section>
 
 <!-- 레이아웃 탭 -->
 <div class="layout-tabs" id="layoutTabs">
@@ -144,7 +152,7 @@
   </div>
   <div class="share-body" id="shareBody">
     <div class="share-btns">
-      <button class="btn" style="background:#FFE812;color:#3C1E1E;font-weight:700;" id="shareKakaoBtn">전체 카톡 공유</button>
+      <button class="btn" style="background:#FFE812;color:#3C1E1E;font-weight:700;" id="shareKakaoBtn">종합 이미지 공유</button>
       <button class="btn btn-accent" id="shareImageBtn">이미지 공유</button>
       <button class="btn" id="shareTextBtn">텍스트 공유</button>
       <button class="btn" id="copyUrlBtn">URL 복사</button>
@@ -321,6 +329,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="schedule_delivery_logic.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

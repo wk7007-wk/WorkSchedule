@@ -61,7 +61,7 @@ function mPct(m,r){return Math.max(0,Math.min(100,(m-r.startMin)/r.rangeMin*100)
 function hLbl(m){return pad(Math.floor(m/60)%24);}
 // === api ===
 async function fbG(u){try{const r=await fetch(u+'.json');if(!r.ok)throw r.status;return await r.json();}catch(e){console.error('fbG',u,e);return null;}}
-async function fbP(u,d){if(READONLY){toast('읽기 전용');return false;}try{const r=await fetch(u+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});if(!r.ok)throw r.status;return true;}catch(e){console.error('fbP',e);toast('저장 실패');return false;}}
+async function fbP(u,d){if(READONLY){toast('읽기 전용');return false;}try{const r=await fetch(u+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});if(!r.ok)throw r.status;trackScheduleDeliveryWrite(u);return true;}catch(e){console.error('fbP',e);toast('저장 실패');return false;}}
 function hasObj(o){return o&&typeof o==='object'&&Object.keys(o).length>0;}
 function nowMeta(){const n=Date.now();return{source:'workschedule_web',updated_at:new Date(n).toISOString(),updated_at_ms:n};}
 function statusRow(st,extra){return Object.assign(nowMeta(),extra||{},{status:st,state:st,confirmed:st==='confirmed'});}
@@ -70,6 +70,50 @@ function offRowData(){return Object.assign(nowMeta(),{state:'off',type:'off',shi
 function clearRow(role){return Object.assign(nowMeta(),{state:'clear',type:'clear',shift:null,start:'',end:'',role:role||'',work:false,active:false,off:false,dayoff:false,clear:true});}
 function offIndex(overrides){const out={};if(!overrides||typeof overrides!=='object')return out;Object.keys(overrides).forEach(d=>{const day=overrides[d];if(!day||typeof day!=='object')return;Object.keys(day).forEach(e=>{const r=day[e];if(r&&typeof r==='object'&&(r.state==='off'||r.off===true||r.dayoff===true)){if(!out[e])out[e]={};out[e][d]=true;}});});return out;}
 async function cacheAtt(d,a){if(!hasObj(a))return;S.ah[d]=a;await fbP(FW+'/attendance_history/'+d,a);}
+// === schedule delivery ===
+const DL=window.WorkScheduleDeliveryLogic||{IDLE_MS:300000,PERIODIC_MS:21600000,computeDeliveryState:x=>Object.assign({targetKind:'latest_work_schedule',due:false,nextDueAtMs:null},x||{}),markScheduleChanged:(s,n)=>Object.assign({},s||{},{targetKind:'latest_work_schedule',lastChangedAtMs:n==null?Date.now():n,lastPreparedAtMs:null}),markShareIntentQueued:(s,n)=>Object.assign({},s||{},{targetKind:'latest_work_schedule',lastPreparedAtMs:n==null?Date.now():n,lastSentAtMs:n==null?Date.now():n})};
+const DELIVERY_KEY='workschedule_delivery_v1';
+let deliveryTimer=null;
+function readDeliveryStore(){try{return JSON.parse(localStorage.getItem(DELIVERY_KEY)||'{}')||{};}catch(e){return{};}}
+function writeDeliveryStore(s){try{localStorage.setItem(DELIVERY_KEY,JSON.stringify(Object.assign({targetKind:'latest_work_schedule'},s||{})));}catch(e){}}
+function isScheduleDeliveryWrite(u){return u&&u.indexOf(FW+'/attendance_history')<0&&(u.indexOf(FW+'/overrides/')===0||u.indexOf(FW+'/status/')===0||u.indexOf(FW+'/fixed_schedules')===0);}
+function markScheduleDeliveryChanged(){writeDeliveryStore(DL.markScheduleChanged(readDeliveryStore(),Date.now()));renderDeliveryPanel();queueDeliveryRender();}
+function trackScheduleDeliveryWrite(u){if(!isScheduleDeliveryWrite(u))return;markScheduleDeliveryChanged();}
+function deliveryState(now){return DL.computeDeliveryState(Object.assign({targetKind:'latest_work_schedule',nowMs:now||Date.now()},readDeliveryStore()));}
+function fmtClock(ms){if(!ms)return'-';const d=new Date(ms);return pad(d.getHours())+':'+pad(d.getMinutes());}
+function collectSupportGaps(){const gaps=[];if(!S.supportWeather)gaps.push('weather');if(!S.supportNews)gaps.push('news');return gaps;}
+function ensureCliPatchCandidate(gaps,reason){if(!gaps.length)return null;const st=readDeliveryStore(),n=Date.now();st.cliPatchCandidate={lane:'workschedule_delivery_cli_patch',mode:'no_live_no_write',targetKind:'latest_work_schedule',reason:reason||'pre_share_support_gap',gaps:gaps.slice(),createdAtMs:n};writeDeliveryStore(st);return st.cliPatchCandidate;}
+function renderDeliveryPanel(){
+  const stEl=$('deliveryStatus'),cliEl=$('deliveryCliStatus'),btn=$('deliveryShareBtn');if(!stEl||!cliEl)return;
+  const d=deliveryState(),gaps=collectSupportGaps();
+  stEl.classList.remove('ready','waiting');cliEl.classList.toggle('needs-cli',!!gaps.length);
+  if(d.due){stEl.textContent=(d.dueReason==='periodic'?'6시간 주기 도래':'5분 무작업 완료')+' - 최신 근무표 이미지 준비';stEl.classList.add('ready');ensureCliPatchCandidate(gaps,d.dueReason);}
+  else if(d.nextDueAtMs){stEl.textContent='최신 근무표 공유 대기 - 다음 판단 '+fmtClock(d.nextDueAtMs);stEl.classList.add('waiting');}
+  else{stEl.textContent='최신 근무표 변경 대기';}
+  cliEl.textContent=gaps.length?'CLI 보정 후보: '+gaps.map(x=>x==='weather'?'날씨':'뉴스').join(', ')+' (외부 호출 없음)':'보조정보 준비됨';
+  if(btn)btn.disabled=false;
+}
+function queueDeliveryRender(){clearTimeout(deliveryTimer);const d=deliveryState(),now=Date.now(),wait=d.nextDueAtMs?Math.max(1000,Math.min(60000,d.nextDueAtMs-now)):60000;deliveryTimer=setTimeout(()=>{renderDeliveryPanel();queueDeliveryRender();},wait);}
+function scheduleRowsForImage(){const dd=dk(S.date);return empIds().map(id=>{const emp=S.emp[id]||{},off=isOff(id,dd),sh=off?null:getShift(dd,id);return{id:id,name:emp.name||id,color:emp.color||'#9090A8',off:off,shift:sh};});}
+function makeCompositeScheduleImage(){
+  const rows=scheduleRowsForImage(),gaps=collectSupportGaps(),w=1080,rowH=78,h=270+rows.length*rowH+90,c=document.createElement('canvas'),ctx=c.getContext('2d'),dd=dk(S.date);
+  c.width=w;c.height=h;ctx.fillStyle='#1A1A30';ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#E0E0EC';ctx.font='700 48px sans-serif';ctx.fillText('최신 근무표 종합 이미지',52,76);
+  ctx.fillStyle='#9090A8';ctx.font='28px sans-serif';ctx.fillText(dd+' ('+DOW_KR[S.date.getDay()]+') / 공유 시트에서 목표 단체방 확인',52,118);
+  ctx.fillStyle='#242444';ctx.fillRect(52,150,w-104,58);ctx.fillStyle='#FFD700';ctx.font='700 28px sans-serif';ctx.fillText('자동 카카오 전송 없음 · 사용자가 공유 대상 직접 선택',78,187);
+  let y=235;rows.forEach(r=>{ctx.fillStyle='#242444';ctx.fillRect(52,y,w-104,rowH-12);ctx.fillStyle=r.color;ctx.fillRect(52,y,10,rowH-12);ctx.fillStyle='#FFFFFF';ctx.font='700 30px sans-serif';ctx.fillText(r.name,82,y+42);ctx.font='26px sans-serif';ctx.fillStyle=r.off?'#E74C3C':'#E0E0EC';let line=r.off?'휴무':(r.shift&&r.shift.start?r.shift.start+' ~ '+r.shift.end+'  '+(r.shift.role||'')+'  '+cH(r.shift.start,r.shift.end)+'h':'미입력');ctx.fillText(line,320,y+42);y+=rowH;});
+  ctx.fillStyle='#1e1e3a';ctx.fillRect(52,y+8,w-104,70);ctx.fillStyle=gaps.length?'#E67E22':'#2ECC71';ctx.font='700 26px sans-serif';ctx.fillText(gaps.length?'보조정보 CLI 보정 후보: '+gaps.map(x=>x==='weather'?'날씨':'뉴스').join(', '):'보조정보 준비됨',78,y+51);
+  return c.toDataURL('image/png');
+}
+function queueCompositeShare(reason){
+  const gaps=collectSupportGaps();ensureCliPatchCandidate(gaps,reason||'manual_share');
+  const msg='공유 시트에서 목표 단체방을 직접 확인한 뒤 선택하세요.\n자동 카카오 전송은 하지 않습니다.'+(gaps.length?'\n\n날씨/뉴스 보조정보 누락은 CLI 보정 후보로만 기록됩니다. 실제 발송 전 보강 여부를 확인하세요.':'');
+  if(!confirm(msg))return;
+  const dataUrl=makeCompositeScheduleImage();
+  if(window.NativeBridge&&window.NativeBridge.shareImage){window.NativeBridge.shareImage(dataUrl);toast('이미지 공유 시트 열림');}
+  else{const a=document.createElement('a');a.href=dataUrl;a.download='workschedule_'+dk(S.date)+'.png';document.body.appendChild(a);a.click();document.body.removeChild(a);toast('이미지 파일 준비됨');}
+  writeDeliveryStore(DL.markShareIntentQueued(readDeliveryStore(),Date.now()));renderDeliveryPanel();queueDeliveryRender();
+}
 // === front auth gate ===
 function authMsg(m,cls){const el=$('authMsg');if(!el)return;el.textContent=m;el.className='auth-msg '+(cls||'');}
 function authStore(){try{return JSON.parse(localStorage.getItem(AUTH.storageKey)||'null');}catch(e){return null;}}
@@ -138,8 +182,9 @@ function connectSSE(){
 function conSS(g){
   if(S.sseS){try{S.sseS.close();}catch(e){}} const d=dk(S.date),exDk=d;
   try{S.sseS=new EventSource(FW+'/overrides/'+d+'.json');
-    S.sseS.addEventListener('put',function(e){if(g!==S.gen){S.sseS.close();return;}if(dk(S.date)!==exDk){S.sseS.close();return;}try{const p=JSON.parse(e.data);if(p.path==='/'){S.sc=p.data||{};}else{const k=p.path.replace(/^\//,'').split('/')[0];if(p.data===null)delete S.sc[k];else if(p.path.split('/').filter(Boolean).length===1)S.sc[k]=p.data;else{if(!S.sc[k])S.sc[k]={};const s=p.path.replace(/^\//,'').split('/')[1];if(p.data===null)delete S.sc[k][s];else S.sc[k][s]=p.data;}}renderAll();}catch(x){}});
-    S.sseS.addEventListener('patch',function(e){if(g!==S.gen){S.sseS.close();return;}if(dk(S.date)!==exDk){S.sseS.close();return;}try{const p=JSON.parse(e.data),pts=p.path.replace(/^\//,'').split('/').filter(Boolean);if(!pts.length&&p.data)Object.keys(p.data).forEach(k=>{S.sc[k]=Object.assign(S.sc[k]||{},p.data[k]);});else if(pts.length===1&&p.data)S.sc[pts[0]]=Object.assign(S.sc[pts[0]]||{},p.data);renderAll();}catch(x){}});
+    let seenInitial=false;
+    S.sseS.addEventListener('put',function(e){if(g!==S.gen){S.sseS.close();return;}if(dk(S.date)!==exDk){S.sseS.close();return;}try{const isInitial=!seenInitial;seenInitial=true;const p=JSON.parse(e.data);if(p.path==='/'){S.sc=p.data||{};}else{const k=p.path.replace(/^\//,'').split('/')[0];if(p.data===null)delete S.sc[k];else if(p.path.split('/').filter(Boolean).length===1)S.sc[k]=p.data;else{if(!S.sc[k])S.sc[k]={};const s=p.path.replace(/^\//,'').split('/')[1];if(p.data===null)delete S.sc[k][s];else S.sc[k][s]=p.data;}}renderAll();if(!isInitial)markScheduleDeliveryChanged();}catch(x){}});
+    S.sseS.addEventListener('patch',function(e){if(g!==S.gen){S.sseS.close();return;}if(dk(S.date)!==exDk){S.sseS.close();return;}try{seenInitial=true;const p=JSON.parse(e.data),pts=p.path.replace(/^\//,'').split('/').filter(Boolean);if(!pts.length&&p.data)Object.keys(p.data).forEach(k=>{S.sc[k]=Object.assign(S.sc[k]||{},p.data[k]);});else if(pts.length===1&&p.data)S.sc[pts[0]]=Object.assign(S.sc[pts[0]]||{},p.data);renderAll();markScheduleDeliveryChanged();}catch(x){}});
     S.sseS.onerror=function(){if(g!==S.gen)return;try{S.sseS.close();}catch(e){} S.sseS=null;setTimeout(()=>{if(g===S.gen)conSS(g);},3000);};
   }catch(e){}
 }
@@ -554,9 +599,8 @@ document.querySelectorAll('.layout-tab').forEach(t=>{t.addEventListener('click',
 let swX=0,swY=0;$('tabContent').addEventListener('touchstart',e=>{swX=e.touches[0].clientX;swY=e.touches[0].clientY;},{passive:true});
 $('tabContent').addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-swX,dy=e.changedTouches[0].clientY-swY;if(Math.abs(dx)<60||Math.abs(dy)>Math.abs(dx)*0.7)return;S.date.setDate(S.date.getDate()+(dx<0?1:-1));onDC();},{passive:true});
 // === share ===
-$('shareBtn').addEventListener('click',()=>{const ek=empIds(),m=S.date.getMonth()+1,d=S.date.getDate(),dd=dk(S.date);let t='근무표 '+m+'/'+d+' ('+DOW_KR[S.date.getDay()]+')\n─────────────\n',has=false;
-  ek.forEach(id=>{const e=S.emp[id];if(e.name==='이원규'||isOff(id,dd))return;const sh=getShift(dd,id);if(sh&&sh.start){t+=e.name+': '+sh.start+'~'+sh.end+(sh.role?' ('+sh.role+')':'')+' ['+cH(sh.start,sh.end)+'h]\n';has=true;}});
-  if(!has)t+='(근무 없음)\n';if(window.NativeBridge?.shareText)window.NativeBridge.shareText(t);else if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>toast('복사됨'));else{const a=document.createElement('textarea');a.value=t;document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);toast('복사됨');}});
+$('shareBtn').addEventListener('click',()=>queueCompositeShare('header_share'));
+$('deliveryShareBtn')?.addEventListener('click',()=>queueCompositeShare('delivery_panel'));
 $('urlBtn').addEventListener('click',()=>{if(navigator.clipboard)navigator.clipboard.writeText(location.href).then(()=>toast('URL 복사됨'));else{const a=document.createElement('textarea');a.value=location.href;document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);toast('URL 복사됨');}});
 // === collapsible + misc ===
 (function(tId,aId,bId,def){const b=$(bId),a=$(aId);if(!b||!a||!$(tId))return;if(def){b.classList.add('open');a.classList.add('open');}$(tId).addEventListener('click',()=>{const o=b.classList.toggle('open');a.classList.toggle('open',o);S.sec[bId]=o;if(o&&bId==='weekBody')renderAll(true);});})('weekToggle','weekArrow','weekBody',false);
@@ -564,5 +608,5 @@ $('refreshBtn').addEventListener('click',()=>{toast('새로고침...');location.
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!document.body.classList.contains('auth-locked')){connectSSE();loadData();}});
 [$('shiftModal'),$('empModal'),$('empEditModal')].forEach(m=>{if(m)m.addEventListener('click',e=>{if(e.target===m)closeM(m);});});
 // === init ===
-initAuthGate(()=>{S.date=new Date();updD();bTS();setupDel();loadData();connectSSE();});
+initAuthGate(()=>{S.date=new Date();updD();bTS();setupDel();loadData();connectSSE();renderDeliveryPanel();queueDeliveryRender();});
 })();
