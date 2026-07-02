@@ -46,6 +46,44 @@ const output = manual.normalizeManualEntry(
 assert.equal(output.category, 'output');
 assert.match(output.body, /하이닉스 사이트 화면과 카카오 전달용 PNG 이미지/);
 
+const firebasePayload = {
+  entries: {
+    remote_share: {
+      category: 'chat',
+      title: '공유 기준',
+      body: '카카오 공유는 PNG 파일로 직접 확인',
+      tags: ['kakao'],
+      updated_at_ms: 3,
+    },
+  },
+  pending_memos: {
+    memo_remote_order: {
+      memo: '발주 재고 부족하면 주문 단위 확인 후 처리',
+      created_at_ms: 4,
+    },
+  },
+};
+const firebaseManual = manual.normalizeFirebaseManualPayload(firebasePayload, { sourcePath: '/packhelper/ops_manual' });
+assert.equal(firebaseManual.entries.length, 1);
+assert.equal(firebaseManual.entries[0].category, 'chat');
+assert.equal(firebaseManual.memos.length, 1);
+assert.equal(firebaseManual.memos[0].category, 'order');
+
+const mergedFirebase = manual.mergeManualFromFirebasePayload([], [], firebasePayload, { sourcePath: '/packhelper/ops_manual' });
+assert.ok(mergedFirebase.some((item) => item.category === 'chat' && item.tags.includes('kakao')));
+assert.ok(mergedFirebase.some((item) => item.category === 'order' && /발주/.test(item.body)));
+
+const nestedFirebase = manual.normalizeFirebaseManualPayload({
+  data: {
+    remote_output: {
+      title: '하이닉스 출력',
+      body: '하이닉스 사이트 PNG 출력 기준',
+    },
+  },
+});
+assert.equal(nestedFirebase.entries.length, 1);
+assert.equal(nestedFirebase.entries[0].category, 'output');
+
 const conflicts = manual.detectManualConflicts([
   { title: '자동', body: '카카오 자동 발송' },
   { title: '수동', body: '자동 발송하지 않고 PNG 파일로 직접 확인' },

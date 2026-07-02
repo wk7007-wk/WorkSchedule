@@ -11,7 +11,7 @@
 
 ## 절대 기준
 - Firebase `/workschedule_v2`가 단일 근무 데이터 원본이다.
-- `localStorage`는 인증 토큰, UI 상태, 운영메뉴얼 후보, 이미지 출력 due 상태 같은 브라우저 보조 상태만 맡는다.
+- 운영메뉴얼 durable source는 Firebase `/packhelper/ops_manual`이다. WorkSchedule/HynixOps는 이 경로를 읽기 전용으로 합산하고, `localStorage`는 인증 토큰, UI 상태, 운영메뉴얼 초안 후보, 이미지 출력 due 상태 같은 브라우저 보조 상태만 맡는다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제와 근무 clear는 삭제가 아니라 명시 값으로 남긴다.
 - 표준입력은 공식 WorkSchedule 웹에서 `/workschedule_v2/overrides`, `status`에 직접 저장한다.
@@ -29,7 +29,7 @@
 - WorkSchedule 웹은 Firebase DB 상세 확인/보정/출력 화면이다.
 - HynixOps 근무표 조정은 safe queue 중심의 간단 입력 front이고, WorkSchedule 원본과 경계를 섞지 않는다.
 - 운영탭은 하이닉스 메모/운영 기준을 정리된 메뉴얼로 보여준다. 메모 원문은 기본 화면에 복사 노출하지 않는다.
-- 운영메뉴얼 구현 위치는 `docs/manual_logic.js`와 `docs/app.js` 운영탭이다. 현재 WorkSchedule이 직접 읽는 값은 브라우저 `localStorage` 후보이며, 하이닉스 사이트 메모탭/기존 메뉴얼의 실제 durable source/consumer path는 아직 확정 필요하다.
+- 운영메뉴얼 구현 위치는 `docs/manual_logic.js`와 `docs/app.js` 운영탭이다. 하이닉스 메모탭/운영메뉴얼 소비자는 `/root/my-first-project/AttendanceBoard/docs/hynix/index.html`이고, durable source는 `/packhelper/ops_manual` read-only다.
 - 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.
 - 스와이프는 날짜 변경이며 탭 전환으로 바꾸지 않는다.
 - 직원 공개 화면과 관리자 조작 화면의 경계를 섞지 않는다.

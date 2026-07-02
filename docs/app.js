@@ -2,6 +2,7 @@
 'use strict';
 // === config ===
 const FB='https://poskds-4ba60-default-rtdb.asia-southeast1.firebasedatabase.app',FW=FB+'/workschedule_v2';
+const OPS_MANUAL_URL=FB+'/packhelper/ops_manual';
 const READONLY=new URLSearchParams(location.search).get('readonly')==='1';
 const AUTH_DEBUG=new URLSearchParams(location.search).get('authDebug')==='1'&&['','localhost','127.0.0.1'].includes(location.hostname);
 const AUTH={pinSha256:'38083c7ee9121e17401883566a148aa5c2e2d55dc53bc4a94a026517dbff3c6b',storeLat:37.2528352,storeLng:127.4900516,radiusM:150,storageKey:'workschedule_auth_device_v1',allowedDeviceHashes:['d21a6620a9a24efe29e7b6921076e2ccd25c6f9b977154e9f8dfe4653d21bd08','c1aa36e7f5eabff58103bbc86257f3350c222b55c0d883592e438f021721681c'],
@@ -15,7 +16,7 @@ const DFX={emp1:{start:'17:00',end:'06:00',role:'주방,오토바이',kind:'fixe
 const HOL={'2026-01-01':'신정','2026-01-28':'설날연휴','2026-01-29':'설날','2026-01-30':'설날연휴','2026-03-01':'삼일절','2026-05-05':'어린이날','2026-05-06':'대체공휴일','2026-05-24':'석가탄신일','2026-06-06':'현충일','2026-08-15':'광복절','2026-09-24':'추석연휴','2026-09-25':'추석','2026-09-26':'추석연휴','2026-10-03':'개천절','2026-10-09':'한글날','2026-12-25':'성탄절','2027-01-01':'신정','2027-02-07':'설날연휴','2027-02-08':'설날','2027-02-09':'설날연휴','2027-03-01':'삼일절','2027-05-05':'어린이날','2027-05-13':'석가탄신일','2027-06-06':'현충일','2027-08-15':'광복절','2027-08-16':'대체공휴일','2027-10-03':'개천절','2027-10-04':'추석연휴','2027-10-05':'추석','2027-10-06':'추석연휴','2027-10-09':'한글날','2027-12-25':'성탄절'};
 const COLORS=['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD','#F0A500','#6C5CE7','#A8E6CF','#FF8A5C','#EA80FC','#00BCD4'];
 // === store ===
-const S={tab:'dashboard',date:new Date(),emp:{},sc:{},wsc:{},msc:{},mst:{},ah:{},xsc:{},xLoading:{},mKey:null,mLoading:false,fix:{},dof:{},cf:{},sst:{},att:{},sseE:null,sseS:null,gen:0,loaded:false,sec:{}};
+const S={tab:'dashboard',date:new Date(),emp:{},sc:{},wsc:{},msc:{},mst:{},ah:{},xsc:{},xLoading:{},mKey:null,mLoading:false,fix:{},dof:{},cf:{},sst:{},att:{},opsManual:{entries:[],memos:[],loaded:false},sseE:null,sseS:null,gen:0,loaded:false,sec:{}};
 const $=id=>document.getElementById(id);
 // === util ===
 function pad(n){return n<10?'0'+n:''+n;}
@@ -202,12 +203,13 @@ function conSS(g){
 // === data loading ===
 async function loadData(){
   const d=dk(S.date);$('loader').style.display='flex';$('tabContent').style.display='none';
-  try{const[eD,sD,fD,oD,tD,aD,hD]=await Promise.all([fbG(FW+'/employees'),fbG(FW+'/overrides/'+d),fbG(FW+'/fixed_schedules'),fbG(FW+'/overrides'),fbG(FW+'/status/'+d),fbG(FB+'/packhelper/storebot_attendance/'+d),fbG(FW+'/attendance_history/'+d)]);
+  try{const[eD,sD,fD,oD,tD,aD,hD,omD]=await Promise.all([fbG(FW+'/employees'),fbG(FW+'/overrides/'+d),fbG(FW+'/fixed_schedules'),fbG(FW+'/overrides'),fbG(FW+'/status/'+d),fbG(FB+'/packhelper/storebot_attendance/'+d),fbG(FW+'/attendance_history/'+d),fbG(OPS_MANUAL_URL)]);
     if(eD&&Object.keys(eD).length){S.emp=eD;}else{S.emp=JSON.parse(JSON.stringify(DE));fbP(FW+'/employees',S.emp);}
     if(sD){S.sc=sD;}else S.sc={};
     if(fD)S.fix=fD;if(oD)S.dof=offIndex(oD);
     if(tD)Object.keys(tD).forEach(e=>{const row=tD[e];if(row&&typeof row==='object')S.sst[d+'_'+e]=row.status||row.state||'auto';else if(row)S.sst[d+'_'+e]=row;else delete S.sst[d+'_'+e];});
     S.att=hasObj(aD)?aD:(hD||{});if(hasObj(S.att))S.ah[d]=S.att;if(hasObj(aD))cacheAtt(d,aD);
+    if(window.WorkScheduleManualLogic)S.opsManual=Object.assign({loaded:true},window.WorkScheduleManualLogic.normalizeFirebaseManualPayload(omD,{sourcePath:'/packhelper/ops_manual'}));
   }catch(e){console.error('loadData',e);}
   S.loaded=true;genDO();autoFix(d);$('loader').style.display='none';$('tabContent').style.display='';renderAll();loadWk();
 }
@@ -517,7 +519,8 @@ function manualTagLabel(tag){const row=(window.WorkScheduleManualLogic?.TAGS||[]
 function manualEntries(){
   const logic=window.WorkScheduleManualLogic;
   if(!logic)return [];
-  return logic.mergeManualFromMemo(readManualEntries(),readManualMemos());
+  const remote=S.opsManual||{};
+  return logic.mergeManualFromMemo([].concat(readManualEntries(),remote.entries||[]),[].concat(readManualMemos(),remote.memos||[]));
 }
 function manualChip(label,active,attr,value){
   return '<button type="button" class="ops-filter-chip'+(active?' active':'')+'" '+attr+'="'+esc(value)+'">'+esc(label)+'</button>';

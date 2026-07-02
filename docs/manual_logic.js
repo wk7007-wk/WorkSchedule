@@ -63,9 +63,70 @@
       updatedAt:0
     }
   ];
+  const FIREBASE_MANUAL_ENTRY_KEYS=['entries','manual_entries','manualEntries','items','records'];
+  const FIREBASE_MANUAL_MEMO_KEYS=['memos','memo_entries','memoEntries','pending_memos','pendingMemos','memo_candidates','memoCandidates'];
+  const FIREBASE_MANUAL_ROOT_KEYS=['latest','current','snapshot','data'];
+  const FIREBASE_MANUAL_META_KEYS=new Set(['created_at','created_at_ms','updated_at','updated_at_ms','version','schema','schema_version','source','status','meta','metadata','history']);
 
   function cleanText(value,limit){
     return String(value==null?'':value).replace(/\r/g,'\n').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,limit||4000);
+  }
+  function isPlainObject(value){
+    return value&&typeof value==='object'&&!Array.isArray(value);
+  }
+  function looksLikeManualRow(value){
+    if(!isPlainObject(value))return false;
+    return ['body','text','memo','content','summary','title','manual_category','category'].some(key=>value[key]!=null);
+  }
+  function manualRowsFromValue(value){
+    if(Array.isArray(value))return value;
+    if(isPlainObject(value)){
+      return Object.keys(value)
+        .filter(key=>!FIREBASE_MANUAL_META_KEYS.has(key))
+        .map(key=>{
+          const row=value[key];
+          return isPlainObject(row)?Object.assign({id:key},row):{id:key,body:row};
+        })
+        .filter(looksLikeManualRow);
+    }
+    return cleanText(value,4000)?[{body:value}]:[];
+  }
+  function hasManualContainers(value){
+    if(!isPlainObject(value))return false;
+    return FIREBASE_MANUAL_ENTRY_KEYS.concat(FIREBASE_MANUAL_MEMO_KEYS).some(key=>value[key]!=null);
+  }
+  function pickFirebaseManualRoot(payload){
+    if(!isPlainObject(payload))return {};
+    if(hasManualContainers(payload)||looksLikeManualRow(payload))return payload;
+    for(const key of FIREBASE_MANUAL_ROOT_KEYS){
+      if(isPlainObject(payload[key])&&(hasManualContainers(payload[key])||looksLikeManualRow(payload[key])||manualRowsFromValue(payload[key]).length))return payload[key];
+    }
+    return payload;
+  }
+  function collectFirebaseRows(root,keys){
+    return keys.flatMap(key=>manualRowsFromValue(root&&root[key]));
+  }
+  function firebaseManualSources(payload,options){
+    const root=pickFirebaseManualRoot(payload);
+    let entries=collectFirebaseRows(root,FIREBASE_MANUAL_ENTRY_KEYS);
+    let memos=collectFirebaseRows(root,FIREBASE_MANUAL_MEMO_KEYS);
+    if(!entries.length&&!memos.length&&isPlainObject(root)){
+      entries=manualRowsFromValue(root);
+    }
+    const sourcePath=cleanText(options&&options.sourcePath,160)||'/packhelper/ops_manual';
+    const decorate=(rows,sourceType)=>rows.map(row=>{
+      const item=isPlainObject(row)?Object.assign({},row):{body:row};
+      if(!item.sourceType&&!item.source_type)item.sourceType=sourceType;
+      if(!item.source_path)item.source_path=sourcePath;
+      return item;
+    });
+    return {
+      sourcePath,
+      entries:decorate(entries,'firebase_manual'),
+      memos:decorate(memos,'memo'),
+      rawEntryCount:entries.length,
+      rawMemoCount:memos.length
+    };
   }
   function uniq(list){
     const out=[],seen=new Set();
@@ -190,6 +251,13 @@
     normalized.summary=summarize(normalized.summary||normalized.body,category);
     return normalized;
   }
+  function normalizeFirebaseManualPayload(payload,options){
+    const sources=firebaseManualSources(payload,options);
+    return Object.assign({},sources,{
+      entries:sources.entries.map(item=>normalizeManualEntry(item,{sourceType:item.sourceType||item.source_type||'firebase_manual'})),
+      memos:sources.memos.map(item=>normalizeManualEntry(item,{sourceType:item.sourceType||item.source_type||'memo'}))
+    });
+  }
   function hashText(text){
     let h=2166136261;
     const value=String(text||'');
@@ -255,9 +323,9 @@
     });
   }
   function mergeManualFromMemo(existingEntries,memos,options){
-    const base=(existingEntries&&existingEntries.length?existingEntries:DEFAULT_MANUAL_ENTRIES).map(item=>normalizeManualEntry(item,{sourceType:'manual'}));
+    const base=(existingEntries&&existingEntries.length?existingEntries:DEFAULT_MANUAL_ENTRIES).map(item=>normalizeManualEntry(item,{sourceType:item&&item.sourceType||item&&item.source_type||'manual'}));
     const merged=base.slice();
-    (memos||[]).map(item=>normalizeManualEntry(item,{sourceType:'memo'})).forEach(memo=>{
+    (memos||[]).map(item=>normalizeManualEntry(item,{sourceType:item&&item.sourceType||item&&item.source_type||'memo'})).forEach(memo=>{
       let bestIndex=-1,bestScore=0;
       merged.forEach((entry,index)=>{const score=scoreMatch(entry,memo);if(score>bestScore){bestScore=score;bestIndex=index;}});
       if(bestIndex>=0&&bestScore>=4)merged[bestIndex]=mergeEntries(merged[bestIndex],memo);
@@ -265,6 +333,10 @@
     });
     const globalConflicts=detectManualConflicts(merged);
     return sortEntries(merged).map(item=>Object.assign({},item,{conflicts:uniq([].concat(item.conflicts||[],globalConflicts))}));
+  }
+  function mergeManualFromFirebasePayload(existingEntries,memos,payload,options){
+    const sources=firebaseManualSources(payload,options);
+    return mergeManualFromMemo([].concat(existingEntries||[],sources.entries),[].concat(memos||[],sources.memos),options);
   }
   function filterManualEntries(entries,filters){
     const f=filters||{},q=cleanText(f.query||'',80).toLowerCase(),cat=f.category||'all',tag=f.tag||'all';
@@ -283,6 +355,8 @@
     DEFAULT_MANUAL_ENTRIES,
     cleanText,
     normalizeManualEntry,
+    normalizeFirebaseManualPayload,
+    mergeManualFromFirebasePayload,
     mergeManualFromMemo,
     detectManualConflicts,
     filterManualEntries,

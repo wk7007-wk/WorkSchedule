@@ -9,7 +9,7 @@
 - 하이닉스 소비자: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭
 - 카톡 이미지 출력: `docs/app.js`가 최신 근무표 PNG를 만들고 웹 공유 메뉴 또는 다운로드로 넘긴다.
 - StoreBotTermux/대시보드/HynixOps는 WorkSchedule 데이터를 소비한다. 원본 저장 경계는 Firebase `/workschedule_v2`다.
-- 운영메뉴얼 조회: `docs/manual_logic.js` + `docs/app.js` 운영탭. 현재 코드가 읽는 메모 후보는 브라우저 `localStorage` 키이며, 하이닉스 사이트 메모탭/기존 메뉴얼의 실제 durable source path는 아직 확정 필요하다.
+- 운영메뉴얼 조회: `docs/manual_logic.js` + `docs/app.js` 운영탭. Firebase `/packhelper/ops_manual`을 read-only durable source로 합산하고, 브라우저 `localStorage` 키는 초안/보조 후보로만 쓴다.
 - 공통 스키마 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
 
 ## 파일 구조
@@ -44,11 +44,12 @@
 - `/workschedule_v2/status/{yyyy-MM-dd}/{empId}`
 - `/workschedule_v2/attendance_history/{yyyy-MM-dd}` — WorkSchedule 누적 근태 캐시
 - `/packhelper/storebot_attendance/{yyyy-MM-dd}` — 읽기 전용 출근 원본
+- `/packhelper/ops_manual` — 읽기 전용 운영메뉴얼 source. WorkSchedule 운영탭과 HynixOps 운영메뉴얼 탭이 소비하며, 웹은 live write를 하지 않는다.
 
 ## 데이터 경계
 - Firebase `/workschedule_v2`가 근무 데이터 단일 원본이다.
-- `localStorage`는 인증 토큰, UI/메뉴얼 후보, 이미지 출력 due 상태 같은 브라우저 보조 상태만 보관한다.
-- 운영메뉴얼 별도 Firebase source path는 현재 WorkSchedule 코드에 없다.
+- `localStorage`는 인증 토큰, UI/메뉴얼 초안 후보, 이미지 출력 due 상태 같은 브라우저 보조 상태만 보관한다.
+- 운영메뉴얼 durable source path는 `/packhelper/ops_manual`이며 WorkSchedule은 읽기 전용으로 표시한다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제/근무 clear는 삭제 대신 명시 값으로 남긴다.
 - `/packhelper/storebot_attendance`는 읽기 전용이다.
