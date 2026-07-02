@@ -5,6 +5,7 @@
 # HynixOps/StoreBotTermux/대시보드는 소비자, WorkSchedule은 `/workschedule_v2` SOT/출력 화면 역할
 # HynixOps quick edit UI: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭, 저장 전 확인/기존→변경 비교/주간 패턴 덮어쓰기 요약이 있는 safe queue 조정 front
 # 공통 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
+# 공장 PC USB 설치 큐: `FACTORY_USB_INSTALL_QUEUE.md` (서버폰 설치는 공장 PC USB ADB 1순위, 무선 재시도/카카오 발송 금지)
 
 ## 파일 구조
 docs/app.js      — 전체 JS (단일 IIFE)
