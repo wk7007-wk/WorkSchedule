@@ -15,7 +15,7 @@
 - 서버폰 설치와 연결 판정은 USB가 실제 물린 공장 PC Codex/작업자만 수행한다.
 - 비공장/불확실 호스트에서는 ADB 목록, 설치, dumpsys, 무선 연결 같은 장치 명령을 실행하지 않고 큐/요청만 남긴다.
 - ADB는 작업 전 항상 `C:\Users\wk700\platform-tools\adb.exe devices -l`로 현재 연결 장치를 확인한다.
-- `device 1` 같은 별칭이나 이전 serial을 다음 작업에 가정하지 않는다. 장치가 1대면 그 serial, 여러 대면 사용자가 지정한 serial만 `-s`로 쓴다.
+- 순번 별칭이나 이전 serial을 다음 작업에 가정하지 않는다. 장치가 1대면 그 serial, 여러 대면 사용자가 지정한 serial만 `-s`로 쓴다.
 - 전역 `ANDROID_SERIAL`은 고정하지 않는다. 필요할 때만 현재 PowerShell 세션에서 `$env:ADB_DEVICE_SERIAL="원하는_시리얼"`처럼 임시 힌트로 둔다.
 - 현재 서버폰 후보 serial은 `R39M30RWR2F`, 모델 후보는 `SM-G975N`이다. `R39M30RWR2F device`가 현재 목록에서 확인될 때만 그 serial로 설치와 `dumpsys package` 검증을 진행한다.
 
