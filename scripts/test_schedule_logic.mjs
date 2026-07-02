@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const delivery = require('../docs/schedule_delivery_logic.js');
+const hynixScheduleLogic = require('/root/my-first-project/AttendanceBoard/docs/hynix_schedule_logic.js');
 
 const DAY_START_HOUR = 6;
 const DAY_MINUTES = 24 * 60;
@@ -53,6 +54,17 @@ assert.equal(overnight.startMinute, operationalMinute('17:00'));
 assert.equal(overnight.rangeMinutes, 13 * 60);
 assert.equal(calcHours('17:00', '06:00'), 13);
 
+const staleFixed = { start: '08:00', end: '03:00', role: '주방,오토바이', kind: 'fixed', type: 'fixed' };
+const gyuEmployee = { name: '이원규', short_name: '규', aliases: ['규'] };
+const canonicalGyu = hynixScheduleLogic.canonicalFixedScheduleEntry('emp1', gyuEmployee, staleFixed);
+assert.deepEqual(canonicalGyu, { start: '17:00', end: '06:00', role: '주방,오토바이' });
+assert.deepEqual(hynixScheduleLogic.canonicalFixedScheduleEntry('emp1', gyuEmployee, null), canonicalGyu);
+assert.deepEqual(hynixScheduleLogic.canonicalFixedScheduleEntry('emp2', { name: '권연옥', short_name: '권' }, staleFixed), staleFixed);
+
+const canonicalGauge = gaugeRange([{ id: 'emp1', shift: canonicalGyu }]);
+assert.equal(canonicalGauge.startMinute, operationalMinute('17:00'));
+assert.equal(canonicalGauge.rangeMinutes, 13 * 60);
+
 const rows = [
   { id: 'emp1', off: false, shift: { start: '17:00', end: '06:00' } },
   { id: 'emp2', off: true, shift: { start: '08:00', end: '09:00' } },
@@ -85,7 +97,15 @@ assert.match(appSource, /최신 근무표/);
 assert.match(appSource, /queueCompositeShare/);
 assert.match(appSource, /navigator\.share|downloadCompositeImage/);
 assert.match(appSource, /workschedule_delivery_cli_patch/);
+assert.match(appSource, /function canonicalFixedSchedule\(empId\)/);
+assert.match(appSource, /DFX\[empId\]\|\|S\.fix\[empId\]/);
 assert.doesNotMatch(appSource, /NativeBridge|shareImage|app\/src\/main\/assets/);
 assert.doesNotMatch(appSource, new RegExp('최신' + ' 상태'));
+
+const hynixSource = readFileSync('/root/my-first-project/AttendanceBoard/docs/hynix/index.html', 'utf8');
+assert.match(hynixSource, /hynix_schedule_logic\.js/);
+assert.match(hynixSource, /window\.HynixScheduleLogic/);
+assert.match(hynixSource, /fixedScheduleEntryFor\(empId,emp,dateKey,fx,manualCell\)/);
+assert.match(hynixSource, /canonicalFixedScheduleEntry\(empId,emp,fx\)/);
 
 console.log('schedule logic tests passed');

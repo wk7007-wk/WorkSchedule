@@ -169,8 +169,11 @@ function initAuthGate(start){
   if(pin)pin.focus();
 }
 // === getFixedScheduleForDate ===
+function canonicalFixedSchedule(empId){
+  return DFX[empId]||S.fix[empId]||null;
+}
 function gFix(empId,dateObj){
-  const d=typeof dateObj==='string'?new Date(dateObj.replace(/-/g,'/')):dateObj,dow=d.getDay(),fs=DFX[empId]||S.fix[empId];
+  const d=typeof dateObj==='string'?new Date(dateObj.replace(/-/g,'/')):dateObj,dow=d.getDay(),fs=canonicalFixedSchedule(empId);
   if(!fs)return null;
   const ds=DOW_EN[dow],ov=fs.dayTimes&&fs.dayTimes[ds];
   const start=ov&&ov.start?ov.start:fs.start,end=ov&&ov.end?ov.end:fs.end,role=ov&&ov.role?ov.role:(fs.role||'');
