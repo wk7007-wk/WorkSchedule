@@ -5,15 +5,17 @@
 # HynixOps/StoreBotTermux/대시보드는 소비자, WorkSchedule은 `/workschedule_v2` SOT/출력 화면 역할
 # HynixOps quick edit UI: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭, 저장 전 확인/기존→변경 비교/주간 패턴 덮어쓰기 요약이 있는 safe queue 조정 front
 # 공통 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
-# 공장 PC USB 설치 큐: `FACTORY_USB_INSTALL_QUEUE.md` (공장 PC에 서버폰 USB 설치 요청; 연결/설치 판정은 실제 USB 연결 공장 PC만 수행, 불확실 호스트 장치 명령 금지)
+# 공장 PC USB 설치 큐: `FACTORY_USB_INSTALL_QUEUE.md` (서버폰 serial `R39M30RWR2F` 고정; 설치/검증은 실제 USB 연결 공장 PC만 수행, 불확실 호스트 장치 명령 금지)
 
 ## 파일 구조
 docs/app.js      — 전체 JS (단일 IIFE)
 docs/schedule_delivery_logic.js — 5분 idle/6시간 최신 근무표 공유 due 계산 순수 모듈
+docs/manual_logic.js — 하이닉스 메모→운영메뉴얼 병합/정규화/충돌 감지 순수 모듈
 docs/index.html  — HTML (모달 5개 포함)
 docs/style.css   — CSS (다크테마 #1A1A30)
 app/src/main/assets/app.js — APK 로컬 WebView asset. 06시 경계/날씨 지역/emp1 고정 fallback은 docs/app.js와 같이 유지
 app/src/main/assets/schedule_delivery_logic.js — APK asset용 동일 delivery 계산 모듈
+app/src/main/assets/manual_logic.js — APK asset용 동일 운영메뉴얼 병합 모듈
 
 ## app.js 섹션 (줄번호 → 역할)
 
@@ -95,6 +97,7 @@ rPeople()        주간 근무/월간 출근기록 인원별 누적
 rMonth()         선택월 날짜별 근무/확정/휴무/실출근 summary grid
 rTimebar()       타임바 뷰 (수평바 + 현재시각선 + 근태오버레이)
 rList()          리스트 뷰 (미니바 + 주간시간 라벨)
+rOpsManual()     운영탭. localStorage 운영메뉴얼/메모 후보를 정리 항목으로 병합해 검색/카테고리/태그 카드로 표시. raw memo 기본 노출 없음
 renderWeek()     주간 개요 (휴무 칩)
 renderDS()       날짜 스트립 (7열 그리드 + 확정색상)
 rTab()           dashboard/day/people/month/timebar/list 분기

@@ -1,5 +1,6 @@
 import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.TimeZone
 
 plugins {
     id("com.android.application")
@@ -14,8 +15,10 @@ android {
         applicationId = "com.workschedule.app"
         minSdk = 26
         targetSdk = 33
-        versionCode = (System.currentTimeMillis() / 1000).toInt()
-        versionName = SimpleDateFormat("MMdd.HHmm").format(Date())
+        versionCode = maxOf((System.currentTimeMillis() / 1000).toInt(), 1782945637)
+        versionName = SimpleDateFormat("MMdd.HHmm").apply {
+            timeZone = TimeZone.getTimeZone("Asia/Seoul")
+        }.format(Date())
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

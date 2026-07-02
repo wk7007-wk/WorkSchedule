@@ -1587,11 +1587,64 @@ setupCollapsible('shareToggle','shareArrow','shareBody',false);
 // ============================================================
 // 20. Layout Tab Switching + Swipe
 // ============================================================
+function escManual(value){
+  const div=document.createElement('div');
+  div.textContent=String(value==null?'':value);
+  return div.innerHTML;
+}
+function manualJson(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
+const OPS_MANUAL_KEY='hynixops_ops_manual_entries_v1';
+const OPS_MEMO_KEYS=['hynixops_ops_manual_pending_memos_v1','workschedule_hynix_ops_manual_memos_v1'];
+function manualArray(value){return Array.isArray(value)?value:(value&&typeof value==='object'?Object.keys(value).map(k=>Object.assign({id:k},value[k])):[]);}
+function readManualEntries(){return manualArray(manualJson(OPS_MANUAL_KEY));}
+function readManualMemos(){return OPS_MEMO_KEYS.flatMap(k=>manualArray(manualJson(k))).filter(item=>item&&typeof item==='object'&&String(item.body||item.text||item.memo||item.content||'').trim());}
+function manualTagLabel(tag){const row=(window.WorkScheduleManualLogic?.TAGS||[]).find(x=>x[0]===tag);return row?row[1]:tag;}
+function manualEntries(){
+  const logic=window.WorkScheduleManualLogic;
+  if(!logic)return [];
+  return logic.mergeManualFromMemo(readManualEntries(),readManualMemos());
+}
+function manualChip(label,active,attr,value){
+  return '<button type="button" class="ops-filter-chip'+(active?' active':'')+'" '+attr+'="'+escManual(value)+'">'+escManual(label)+'</button>';
+}
+function renderOpsManualView(){
+  const con=$('opsManualContent');if(!con)return;
+  const wasFocused=document.activeElement&&document.activeElement.id==='opsSearch',caret=wasFocused?document.activeElement.selectionStart:null;
+  const logic=window.WorkScheduleManualLogic,all=manualEntries();
+  const cat=sectionState.opsCat||'all',tag=sectionState.opsTag||'all',q=sectionState.opsQ||'';
+  const filtered=logic?logic.filterManualEntries(all,{category:cat,tag,query:q}):all;
+  const cats=['all'].concat((logic?.CATEGORY_ORDER||[]).filter(c=>all.some(x=>x.category===c)));
+  const tags=['all'].concat(Array.from(new Set(all.flatMap(x=>x.tags||[]))).sort((a,b)=>manualTagLabel(a).localeCompare(manualTagLabel(b),'ko')));
+  const catChips=cats.map(c=>manualChip(c==='all'?'전체':(logic?.categoryLabel(c)||c),cat===c,'data-ops-cat',c)).join('');
+  const tagChips=tags.map(t=>manualChip(t==='all'?'전체 태그':manualTagLabel(t),tag===t,'data-ops-tag',t)).join('');
+  const cards=filtered.length?filtered.map(item=>{
+    const conflicts=(item.conflicts||[]).length?'<div class="ops-conflict">확인 필요: '+escManual((item.conflicts||[]).join(' / '))+'</div>':'';
+    const tagsHtml=(item.tags||[]).slice(0,6).map(t=>'<span class="ops-tag">'+escManual(manualTagLabel(t))+'</span>').join('');
+    return '<article class="ops-manual-card" data-category="'+escManual(item.category||'etc')+'">'+
+      '<div class="ops-manual-card-head"><h3>'+escManual(item.title||'운영 기준')+'</h3><span class="ops-cat">'+escManual(item.categoryLabel||logic?.categoryLabel(item.category)||'기타')+'</span></div>'+
+      '<p class="ops-summary">'+escManual(item.summary||'')+'</p>'+
+      '<p class="ops-body">'+escManual(item.body||'')+'</p>'+
+      (tagsHtml?'<div class="ops-tags">'+tagsHtml+'</div>':'')+
+      conflicts+
+    '</article>';
+  }).join(''):'<div class="ops-empty">조건에 맞는 운영메뉴얼이 없습니다.</div>';
+  con.innerHTML='<div class="ops-manual-view">'+
+    '<div class="ops-manual-head"><div class="ops-manual-title"><strong>운영메뉴얼</strong><span class="ops-manual-count">'+filtered.length+' / '+all.length+'</span></div>'+
+    '<input class="ops-search" id="opsSearch" type="search" placeholder="메뉴얼 검색" value="'+escManual(q)+'">'+
+    '<div class="ops-chip-row">'+catChips+'</div><div class="ops-chip-row">'+tagChips+'</div></div>'+
+    '<div class="ops-manual-list">'+cards+'</div></div>';
+  const input=$('opsSearch');if(input){
+    input.addEventListener('input',e=>{sectionState.opsQ=e.target.value;renderOpsManualView();});
+    if(wasFocused){input.focus();if(caret!==null)input.setSelectionRange(caret,caret);}
+  }
+  con.querySelectorAll('[data-ops-cat]').forEach(btn=>btn.addEventListener('click',()=>{sectionState.opsCat=btn.dataset.opsCat;sectionState.opsTag='all';renderOpsManualView();}));
+  con.querySelectorAll('[data-ops-tag]').forEach(btn=>btn.addEventListener('click',()=>{sectionState.opsTag=btn.dataset.opsTag;renderOpsManualView();}));
+}
 function switchTab(tabName){
   currentTab=tabName;
   document.querySelectorAll('.layout-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tabName));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  const panelMap={list:'panelList',timebar:'panelTimebar'};
+  const panelMap={list:'panelList',timebar:'panelTimebar',ops:'panelOps'};
   const panel=$(panelMap[tabName]); if(panel)panel.classList.add('active');
   renderCurrentTab();
 }
@@ -1608,6 +1661,7 @@ $('tabContent').addEventListener('touchend',(e)=>{
 
 function renderCurrentTab(){
   if(currentTab==='list')renderListView();
+  else if(currentTab==='ops')renderOpsManualView();
   else if(currentTab==='timebar')renderTimebarView();
 }
 

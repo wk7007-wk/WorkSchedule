@@ -496,7 +496,55 @@ function renderDS(){
   con.innerHTML=h;con.querySelectorAll('.date-strip-item').forEach(el=>{el.addEventListener('click',()=>{const p=el.dataset.dk.split('-');S.date=new Date(+p[0],+p[1]-1,+p[2]);onDC();});});
   const se=con.querySelector('[data-dk="'+selDk+'"]');if(se)setTimeout(()=>se.scrollIntoView({block:'center',behavior:'auto'}),10);
 }
-function rTab(){({dashboard:rDashboard,day:rDay,people:rPeople,month:rMonth,timebar:rTimebar,list:rList}[S.tab]||rDashboard)();}
+function manualJson(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
+const OPS_MANUAL_KEY='hynixops_ops_manual_entries_v1';
+const OPS_MEMO_KEYS=['hynixops_ops_manual_pending_memos_v1','workschedule_hynix_ops_manual_memos_v1'];
+function manualArray(value){return Array.isArray(value)?value:(value&&typeof value==='object'?Object.keys(value).map(k=>Object.assign({id:k},value[k])):[]);}
+function readManualEntries(){return manualArray(manualJson(OPS_MANUAL_KEY));}
+function readManualMemos(){return OPS_MEMO_KEYS.flatMap(k=>manualArray(manualJson(k))).filter(item=>item&&typeof item==='object'&&String(item.body||item.text||item.memo||item.content||'').trim());}
+function manualTagLabel(tag){const row=(window.WorkScheduleManualLogic?.TAGS||[]).find(x=>x[0]===tag);return row?row[1]:tag;}
+function manualEntries(){
+  const logic=window.WorkScheduleManualLogic;
+  if(!logic)return [];
+  return logic.mergeManualFromMemo(readManualEntries(),readManualMemos());
+}
+function manualChip(label,active,attr,value){
+  return '<button type="button" class="ops-filter-chip'+(active?' active':'')+'" '+attr+'="'+esc(value)+'">'+esc(label)+'</button>';
+}
+function rOpsManual(){
+  const con=$('opsCon');if(!con)return;
+  const wasFocused=document.activeElement&&document.activeElement.id==='opsSearch',caret=wasFocused?document.activeElement.selectionStart:null;
+  const logic=window.WorkScheduleManualLogic,all=manualEntries();
+  const cat=S.sec.opsCat||'all',tag=S.sec.opsTag||'all',q=S.sec.opsQ||'';
+  const filtered=logic?logic.filterManualEntries(all,{category:cat,tag,query:q}):all;
+  const cats=['all'].concat((logic?.CATEGORY_ORDER||[]).filter(c=>all.some(x=>x.category===c)));
+  const tags=['all'].concat(Array.from(new Set(all.flatMap(x=>x.tags||[]))).sort((a,b)=>manualTagLabel(a).localeCompare(manualTagLabel(b),'ko')));
+  const catChips=cats.map(c=>manualChip(c==='all'?'전체':(logic?.categoryLabel(c)||c),cat===c,'data-ops-cat',c)).join('');
+  const tagChips=tags.map(t=>manualChip(t==='all'?'전체 태그':manualTagLabel(t),tag===t,'data-ops-tag',t)).join('');
+  const cards=filtered.length?filtered.map(item=>{
+    const conflicts=(item.conflicts||[]).length?'<div class="ops-conflict">확인 필요: '+esc((item.conflicts||[]).join(' / '))+'</div>':'';
+    const tagsHtml=(item.tags||[]).slice(0,6).map(t=>'<span class="ops-tag">'+esc(manualTagLabel(t))+'</span>').join('');
+    return '<article class="ops-manual-card" data-category="'+esc(item.category||'etc')+'">'+
+      '<div class="ops-manual-card-head"><h3>'+esc(item.title||'운영 기준')+'</h3><span class="ops-cat">'+esc(item.categoryLabel||logic?.categoryLabel(item.category)||'기타')+'</span></div>'+
+      '<p class="ops-summary">'+esc(item.summary||'')+'</p>'+
+      '<p class="ops-body">'+esc(item.body||'')+'</p>'+
+      (tagsHtml?'<div class="ops-tags">'+tagsHtml+'</div>':'')+
+      conflicts+
+    '</article>';
+  }).join(''):'<div class="ops-empty">조건에 맞는 운영메뉴얼이 없습니다.</div>';
+  con.innerHTML='<div class="ops-manual-view">'+
+    '<div class="ops-manual-head"><div class="ops-manual-title"><strong>운영메뉴얼</strong><span class="ops-manual-count">'+filtered.length+' / '+all.length+'</span></div>'+
+    '<input class="ops-search" id="opsSearch" type="search" placeholder="메뉴얼 검색" value="'+esc(q)+'">'+
+    '<div class="ops-chip-row">'+catChips+'</div><div class="ops-chip-row">'+tagChips+'</div></div>'+
+    '<div class="ops-manual-list">'+cards+'</div></div>';
+  const input=$('opsSearch');if(input){
+    input.addEventListener('input',e=>{S.sec.opsQ=e.target.value;rOpsManual();});
+    if(wasFocused){input.focus();if(caret!==null)input.setSelectionRange(caret,caret);}
+  }
+  con.querySelectorAll('[data-ops-cat]').forEach(btn=>btn.addEventListener('click',()=>{S.sec.opsCat=btn.dataset.opsCat;S.sec.opsTag='all';rOpsManual();}));
+  con.querySelectorAll('[data-ops-tag]').forEach(btn=>btn.addEventListener('click',()=>{S.sec.opsTag=btn.dataset.opsTag;rOpsManual();}));
+}
+function rTab(){({dashboard:rDashboard,day:rDay,people:rPeople,month:rMonth,timebar:rTimebar,list:rList,ops:rOpsManual}[S.tab]||rDashboard)();}
 // === actions ===
 function sSt(d,e,st){const k=d+'_'+e;st==='auto'?delete S.sst[k]:S.sst[k]=st;fbP(FW+'/status/'+d+'/'+e,st==='auto'?statusRow('auto',{state:'clear'}):statusRow(st));renderAll();}
 function cfAll(){const d=dk(S.date),b={};empIds().forEach(id=>{const sh=getShift(d,id);if(sh&&sh.start&&!isOff(id,d)){S.sst[d+'_'+id]='confirmed';b[id]=statusRow('confirmed');}else if(!sh||!sh.start){if(!isOff(id,d)){if(!S.dof[id])S.dof[id]={};S.dof[id][d]=true;const row=offRowData();S.sc[id]=row;b[id]=statusRow('off');fbP(FW+'/overrides/'+d+'/'+id,row);}}});fbP(FW+'/status/'+d,b);S.cf[d]=true;fbP(FW+'/status/'+d+'/_date',statusRow('confirmed'));renderAll();}
@@ -594,7 +642,7 @@ function openDP(){const ov=$('dpOverlay'),list=$('dpList');const today=new Date(
   ov.addEventListener('click',e=>{if(e.target===ov)ov.classList.remove('open');},{once:true});}
 // === delegation + tabs + swipe ===
 function setupDel(){function h(e){const d=dk(S.date),tg=e.target.closest('[data-action]');if(tg){e.stopPropagation();const a=tg.dataset.action;if(a==='confirmAll')cfAll();else if(a==='status')sSt(d,tg.dataset.sid,tg.dataset.st);else if(a==='toggleOff')togOff(tg.dataset.oid);else if(a==='confirmOff')cfOff(tg.dataset.oid);return;}const r=e.target.closest('[data-empid]');if(r)openSh(r.dataset.empid);}['tbCon','lsCon','dayCon','peopleCon'].forEach(id=>$(id)?.addEventListener('click',h));}
-function swTab(t){S.tab=t;document.querySelectorAll('.layout-tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));$({dashboard:'pDashboard',day:'pDay',people:'pPeople',month:'pMonth',list:'pList',timebar:'pTimebar'}[t])?.classList.add('active');if(t==='month')loadMonth();rTab();}
+function swTab(t){S.tab=t;document.querySelectorAll('.layout-tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));$({dashboard:'pDashboard',day:'pDay',people:'pPeople',month:'pMonth',list:'pList',timebar:'pTimebar',ops:'pOps'}[t])?.classList.add('active');if(t==='month')loadMonth();rTab();}
 document.querySelectorAll('.layout-tab').forEach(t=>{t.addEventListener('click',()=>swTab(t.dataset.tab));});
 let swX=0,swY=0;$('tabContent').addEventListener('touchstart',e=>{swX=e.touches[0].clientX;swY=e.touches[0].clientY;},{passive:true});
 $('tabContent').addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-swX,dy=e.changedTouches[0].clientY-swY;if(Math.abs(dx)<60||Math.abs(dy)>Math.abs(dx)*0.7)return;S.date.setDate(S.date.getDate()+(dx<0?1:-1));onDC();},{passive:true});

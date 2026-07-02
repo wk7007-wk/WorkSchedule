@@ -60,6 +60,7 @@
 5. 합계행, 인원체크, 주간개요
 6. 정보: 날씨+경기+물류
 7. AI 스케줄링 (Gemini), 공유 (.ics 등)
+8. 운영탭: 하이닉스 운영메뉴얼 조회. 검색 input, 카테고리 칩, 태그 칩, 메뉴얼 카드만 표시하고 내부 정리 알고리즘 설명은 노출하지 않음
 
 ## 수정 팝업
 - 텍스트 select + 게이지형 바 (양방향 동기화)
@@ -88,6 +89,8 @@
 - ws_confirmed, ws_shift_status, ws_patterns
 - ws_staff_settings (인원 프리셋)
 - workschedule_delivery_v1: 최신 근무표 종합 이미지 공유 준비 상태. lastChangedAtMs, lastPreparedAtMs, lastSentAtMs, cliPatchCandidate(no_live_no_write)를 보관한다.
+- hynixops_ops_manual_entries_v1: HynixOps에서 정리된 운영메뉴얼 후보. WorkSchedule 운영탭은 이 값과 메모 후보를 합산해 정리 항목으로 표시한다.
+- hynixops_ops_manual_pending_memos_v1 / workschedule_hynix_ops_manual_memos_v1: 메모 후보 입력 경계. raw memo는 source/audit 용도이며 기본 화면에는 정리된 메뉴얼 본문만 표시한다.
 
 ## 근무표 종합 이미지 공유
 - 스케줄 저장/상태/fixed schedule 갱신 write 성공 후 5분 idle이 지나면 최신 근무표 종합 이미지 공유 준비 상태가 된다.
