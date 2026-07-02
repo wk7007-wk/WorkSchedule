@@ -99,19 +99,30 @@ function makeCompositeScheduleImage(){
   const rows=scheduleRowsForImage(),gaps=collectSupportGaps(),w=1080,rowH=78,h=270+rows.length*rowH+90,c=document.createElement('canvas'),ctx=c.getContext('2d'),dd=dk(S.date);
   c.width=w;c.height=h;ctx.fillStyle='#1A1A30';ctx.fillRect(0,0,w,h);
   ctx.fillStyle='#E0E0EC';ctx.font='700 48px sans-serif';ctx.fillText('최신 근무표 종합 이미지',52,76);
-  ctx.fillStyle='#9090A8';ctx.font='28px sans-serif';ctx.fillText(dd+' ('+DOW_KR[S.date.getDay()]+') / 공유 시트에서 목표 단체방 확인',52,118);
-  ctx.fillStyle='#242444';ctx.fillRect(52,150,w-104,58);ctx.fillStyle='#FFD700';ctx.font='700 28px sans-serif';ctx.fillText('자동 카카오 전송 없음 · 사용자가 공유 대상 직접 선택',78,187);
+  ctx.fillStyle='#9090A8';ctx.font='28px sans-serif';ctx.fillText(dd+' ('+DOW_KR[S.date.getDay()]+') / 웹 이미지 출력 후 대상 방 확인',52,118);
+  ctx.fillStyle='#242444';ctx.fillRect(52,150,w-104,58);ctx.fillStyle='#FFD700';ctx.font='700 28px sans-serif';ctx.fillText('자동 카카오 전송 없음 · 사용자가 이미지 대상 직접 선택',78,187);
   let y=235;rows.forEach(r=>{ctx.fillStyle='#242444';ctx.fillRect(52,y,w-104,rowH-12);ctx.fillStyle=r.color;ctx.fillRect(52,y,10,rowH-12);ctx.fillStyle='#FFFFFF';ctx.font='700 30px sans-serif';ctx.fillText(r.name,82,y+42);ctx.font='26px sans-serif';ctx.fillStyle=r.off?'#E74C3C':'#E0E0EC';let line=r.off?'휴무':(r.shift&&r.shift.start?r.shift.start+' ~ '+r.shift.end+'  '+(r.shift.role||'')+'  '+cH(r.shift.start,r.shift.end)+'h':'미입력');ctx.fillText(line,320,y+42);y+=rowH;});
   ctx.fillStyle='#1e1e3a';ctx.fillRect(52,y+8,w-104,70);ctx.fillStyle=gaps.length?'#E67E22':'#2ECC71';ctx.font='700 26px sans-serif';ctx.fillText(gaps.length?'보조정보 CLI 보정 후보: '+gaps.map(x=>x==='weather'?'날씨':'뉴스').join(', '):'보조정보 준비됨',78,y+51);
   return c.toDataURL('image/png');
 }
-function queueCompositeShare(reason){
+function downloadCompositeImage(dataUrl,fileName){
+  const a=document.createElement('a');a.href=dataUrl;a.download=fileName;document.body.appendChild(a);a.click();document.body.removeChild(a);toast('PNG 이미지 파일 준비됨');
+}
+async function outputCompositeImage(dataUrl,fileName){
+  if(navigator.canShare&&typeof File==='function'){
+    try{
+      const blob=await(await fetch(dataUrl)).blob(),file=new File([blob],fileName,{type:'image/png'});
+      if(navigator.canShare({files:[file]})){await navigator.share({files:[file],title:'WorkSchedule 근무표',text:'최신 근무표 이미지'});toast('이미지 공유 요청됨');return true;}
+    }catch(e){if(e&&e.name==='AbortError')return false;console.warn('image share fallback',e);}
+  }
+  downloadCompositeImage(dataUrl,fileName);return true;
+}
+async function queueCompositeShare(reason){
   const gaps=collectSupportGaps();ensureCliPatchCandidate(gaps,reason||'manual_share');
-  const msg='공유 시트에서 목표 단체방을 직접 확인한 뒤 선택하세요.\n자동 카카오 전송은 하지 않습니다.'+(gaps.length?'\n\n날씨/뉴스 보조정보 누락은 CLI 보정 후보로만 기록됩니다. 실제 발송 전 보강 여부를 확인하세요.':'');
+  const msg='브라우저 공유 메뉴 또는 PNG 파일로 이미지를 출력합니다.\n카카오 자동 전송은 하지 않습니다.'+(gaps.length?'\n\n날씨/뉴스 보조정보 누락은 CLI 보정 후보로만 기록됩니다. 실제 발송 전 보강 여부를 확인하세요.':'');
   if(!confirm(msg))return;
   const dataUrl=makeCompositeScheduleImage();
-  if(window.NativeBridge&&window.NativeBridge.shareImage){window.NativeBridge.shareImage(dataUrl);toast('이미지 공유 시트 열림');}
-  else{const a=document.createElement('a');a.href=dataUrl;a.download='workschedule_'+dk(S.date)+'.png';document.body.appendChild(a);a.click();document.body.removeChild(a);toast('이미지 파일 준비됨');}
+  if(!await outputCompositeImage(dataUrl,'workschedule_'+dk(S.date)+'.png')){toast('이미지 출력 취소됨');return;}
   writeDeliveryStore(DL.markShareIntentQueued(readDeliveryStore(),Date.now()));renderDeliveryPanel();queueDeliveryRender();
 }
 // === front auth gate ===

@@ -1,165 +1,60 @@
-# WorkSchedule 코드맵 (슬림 재작성 0417)
-# 의도 기준: APP_INTENT.md (근무스케줄/출근기록 관리)
-# 프론트 구조: docs/index.html + docs/app.js + docs/style.css + docs/schedule_delivery_logic.js
-# code-guard: 수정 전 이 맵으로 영향 범위 확인
-# HynixOps/StoreBotTermux/대시보드는 소비자, WorkSchedule은 `/workschedule_v2` SOT/출력 화면 역할
-# HynixOps quick edit UI: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭, 저장 전 확인/기존→변경 비교/주간 패턴 덮어쓰기 요약이 있는 safe queue 조정 front
-# 공통 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
-# 공장 PC USB 설치 큐: `FACTORY_USB_INSTALL_QUEUE.md` (매 작업 전 `adb devices -l`로 실제 serial 확인; 현재 서버폰 후보 `R39M30RWR2F`; 설치/검증은 실제 USB 연결 공장 PC만 수행)
+# WorkSchedule 코드맵
+# 기준: Firebase DB 원본 + docs 웹 출력 + 카톡 PNG 이미지 출력
+# Android APK/app wrapper, Gradle 빌드, ADB 설치 큐는 사용하지 않는다.
+
+## 실행 경로
+- Firebase DB SOT: `/workschedule_v2`
+- 웹 출력: `docs/` 정적 파일, GitHub Pages `https://wk7007-wk.github.io/WorkSchedule/`
+- 하이닉스 소비자: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭
+- 카톡 이미지 출력: `docs/app.js`가 최신 근무표 PNG를 만들고 웹 공유 메뉴 또는 다운로드로 넘긴다.
+- StoreBot/대시보드/HynixOps는 WorkSchedule 데이터를 소비한다. 원본 저장 경계는 Firebase `/workschedule_v2`다.
+- 공통 스키마 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
 
 ## 파일 구조
-docs/app.js      — 전체 JS (단일 IIFE)
-docs/schedule_delivery_logic.js — 5분 idle/6시간 최신 근무표 공유 due 계산 순수 모듈
-docs/manual_logic.js — 하이닉스 메모→운영메뉴얼 병합/정규화/충돌 감지 순수 모듈
-docs/index.html  — HTML (모달 5개 포함)
-docs/style.css   — CSS (다크테마 #1A1A30)
-app/src/main/assets/app.js — APK 로컬 WebView asset. 06시 경계/날씨 지역/emp1 고정 fallback은 docs/app.js와 같이 유지
-app/src/main/assets/schedule_delivery_logic.js — APK asset용 동일 delivery 계산 모듈
-app/src/main/assets/manual_logic.js — APK asset용 동일 운영메뉴얼 병합 모듈
+- `docs/index.html` — WorkSchedule 웹 UI, 인증 gate, 표준입력, 종합 이미지 출력 버튼
+- `docs/app.js` — 단일 IIFE 웹 로직. Firebase fetch/write, SSE, 렌더, 이미지 출력
+- `docs/style.css` — WorkSchedule 웹 스타일
+- `docs/schedule_delivery_logic.js` — 5분 idle/6시간 최신 근무표 이미지 출력 due 계산 순수 모듈
+- `docs/manual_logic.js` — 하이닉스 메모 -> 운영메뉴얼 병합/정규화/충돌 감지 순수 모듈
+- `scripts/test_schedule_logic.mjs` — delivery 상태 계산 + docs 이미지 출력 경로 회귀 테스트
+- `scripts/test_manual_logic.mjs` — 운영메뉴얼 병합/출력 분류 회귀 테스트
+- `APP_INTENT.md` — 앱이 아니라 Firebase DB 기반 웹/이미지 출력 도구라는 의도 SOT
+- `SPEC.txt` — 근무표 상세 스펙
+- `CLAUDE.md` — WorkSchedule 전용 작업 규칙
+- `REFACTOR_HANDOFF.md` — 과거 슬림 재작성 기록. 현 기준과 충돌하면 `APP_INTENT.md`/현재 코드 우선
 
-## app.js 섹션 (줄번호 → 역할)
-
-### config (1~11)
-FB, FW           Firebase URL 상수
-AUTH             프론트 인증 설정. `pinSha256`, `storeLat/storeLng=37.2528352/127.4900516`, `radiusM=150`, `allowedDeviceHashes=[]`(CLI 등록 token SHA-256); `PIN AND (CLI 허용 단말 OR 서버/호스팅 허용 IP OR GPS)` 구조. allowlist 관리는 `/root/my-first-project/scripts/hynix_auth_cli.py`. `authDebug=1`은 로컬 개발에서만 GPS 우회
-DSH=6            하루 시작시각 — 06시 day-boundary 기준 게이지/정렬/타임바 전부 연동
-WEATHER_LOCATION 날씨 기준 지역 `이천시 부발읍` + 근사 좌표 `37.2816,127.4892`
-DE               기본 직원 5명 (emp1~emp9)
-DFX              기본 고정근무 fallback. `emp1`(이원규/규)=매일 `17:00~06:00`
-HOL              공휴일 단일맵 {'yyyy-MM-dd':'이름'} (2026~2027)
-RC/RL            역할 색상/라벨
-
-### store (13)
-S                전역 상태 단일 객체 {tab,date,emp,sc,wsc,msc,ah,fix,dof,cf,sst,att,sse*,loaded,sec}
-  → S.emp = 직원, S.sc/wsc/msc = 당일/주간/월간스케줄, S.dof = 휴무, S.att/ah = 당일/누적 근태
-
-### util (16~35)
-pad,dk,toast,openM,closeM,sameD,getMon  기본유틸
-isH,hNm,isWE   공휴일/주말 판정
-empOn,empIds    활성 직원 필터 (disabled/active=false 제외)
-fEmp            이름→empId 검색
-esc             XSS 이스케이프 (innerHTML 삽입용)
-isDayOff,gSt    휴무/상태 조회
-explicitShift,getShift  유효 날짜별 근무가 없으면 fixed fallback 적용
-tm12,tmDS,cH,tPct,pTM  시간 계산
-
-### api (37~39)
-fbG(url)         GET  — .json suffix 자동
-fbP(url,data)    PUT  — READONLY 체크 포함. data=null 삭제성 쓰기 금지
-  ※ fbPatch, fbDelete 없음 (PUT만 사용)
-
-### schedule delivery
-schedule_delivery_logic.js  5분 idle, 추가 수정 reset, 마지막 이미지 공유 intent+6h 주기 due를 `latest_work_schedule` 기준으로 계산
-trackScheduleDeliveryWrite / SSE put·patch  overrides/status/fixed_schedules write 성공 또는 초기 스냅샷 이후 SSE 갱신 시 공유 준비 타이머 갱신
-queueCompositeShare         최신 근무표 중심 종합 PNG 생성 → NativeBridge.shareImage/ACTION_SEND image intent. Kakao 자동 선택/전송 없음
-workschedule_delivery_cli_patch  날씨/뉴스 보조정보 누락 시 localStorage에 no-live/no-write CLI 보정 후보만 기록
-
-### auth gate
-initAuthGate()   앱 초기화 전 PIN+합집합 factor 인증. PIN은 항상 필요하고, 단말 token은 CLI allowlist 등록 시에만 factor 통과. 웹 self-enrollment 없음. IP 인증/비밀 보호는 서버측 필요
-
-### SSE (49~65)
-connectSSE()     직원 SSE + 스케줄 SSE 연결
-conSS(gen)       스케줄 SSE (날짜별, 세대관리)
-  → S.gen으로 세대 관리, 재연결 3초 backoff
-
-### 고정스케줄 (38~47)
-gFix(name,date)  = getFixedScheduleForDate — dayTimes 오버라이드 지원
-  → S.fix[name].dayTimes.{dow}.{start,end,role} 우선 적용
-  → type:'fixed' + off:[] 또는 type:'weekly' + days:[] 분기
-gFixC(name)      현재 날짜 기준 gFix 호출
-
-### 데이터 로딩 (67~84)
-loadData()       초기 fetch → overrides/status/attendance_history + storebot_attendance 세팅 → renderAll
-loadWk()         주간 7일 스케줄+상태+attendance_history fetch → S.wsc/S.ah 세팅
-loadMonth()      선택월 스케줄+상태+attendance_history fetch → 월별/인원별 누적 뷰 갱신
-
-### 자동배정 (86~101)
-autoFix(dk)      빈/legacy `{}` 스케줄에 고정값 자동 입력 + 자동확정
-genDO()          56일간 자동휴무 생성 (고정스케줄 기반)
-
-### 분류 (103~118)
-catE(dk)         직원을 working/off/empty로 분류 + 주간통계
-gRange(w)        타임바/리스트 게이지 범위 계산. 06시 day-boundary 기준 당일 근무자 첫 출근~마지막 퇴근만 사용
-
-### 근태 (120~133)
-cacheAtt(d,a)    `/packhelper/storebot_attendance/{date}` 읽은 값을 `/workschedule_v2/attendance_history/{date}`에 idempotent PUT
-attRow(eid,sh)   실제 출퇴근 오버레이 HTML (시간차+출처배지)
-attStats(days,eid) 주간/월간 실제 출근/시작/종료 누적 계산
-ASC/ASL          출처별 색상/라벨맵
-
-### 렌더 (134~264)
-renderAll()      RAF 디바운스 → doR()
-rStdPanel()      표준입력 select/date 상태 갱신
-rBrief()         브리핑 패널 (4칸: 출근/총시간/인건비/휴무 + 공휴일배지)
-rDashboard()     선택일/오늘 요약 + 역할별/미입력/실출근 요약
-rDay()           날짜별 compact list + 실출근/실퇴근 카운트
-rPeople()        주간 근무/월간 출근기록 인원별 누적
-rMonth()         선택월 날짜별 근무/확정/휴무/실출근 summary grid
-rTimebar()       타임바 뷰 (수평바 + 현재시각선 + 근태오버레이)
-rList()          리스트 뷰 (미니바 + 주간시간 라벨)
-rOpsManual()     운영탭. localStorage 운영메뉴얼/메모 후보를 정리 항목으로 병합해 검색/카테고리/태그 카드로 표시. raw memo 기본 노출 없음
-renderWeek()     주간 개요 (휴무 칩)
-renderDS()       날짜 스트립 (7열 그리드 + 확정색상)
-rTab()           dashboard/day/people/month/timebar/list 분기
-  공통 헬퍼: progBar, stBtn, emptyRow, offRow, sectWrap
-
-### shift 모달 (271~307)
-openSh(eid)      모달 열기 (칩선택+게이지+프리셋+역할)
-bTS()            시간 select 옵션 생성 + 게이지 틱
-setupGauge()     터치 드래그 시간 선택
-shiftSave        저장 → fbP overrides state=shift + status confirmed
-shiftDel         삭제 → fbP(url, false)
-shiftFixed       고정값 저장 → fbP fixed_schedules
-shiftDayoff      휴무지정/해제
-
-### 표준입력
-saveStd()         표준입력 저장. 근무면 overrides state=shift + status confirmed, 휴무면 overrides state=off + status off
-
-### 직원 관리 (310~320)
-rEL()            직원 목록 렌더
-oEE(id)          직원 편집 모달 (이름/전화/색상/역할/시급)
-empEditSave      저장 → fbP employees
-삭제              employees/{id}에 disabled:true, active:false 저장 (노드 삭제 금지)
-
-### 휴무 관리 (319~335)
-rDL()            휴무 목록 렌더
-pBulk(text)      일괄 휴무 텍스트 파싱 (요일/범위/ISO/슬래시)
-doAddBtn         단건 추가
-doBulkBtn        일괄 등록
-
-### 내비게이션 (336~353)
-onDC()           날짜 변경 → SSE 재연결 + 4개 병렬 fetch + autoFix
-openDP()         30일 날짜 선택기
-showFlash()      날짜 전환 플래시
-
-### 확정/상태 (266~270)
-sSt(d,e,st)      개별 확정 토글
-cfAll()          전체확정
-togOff(eid)      휴무 토글 (해제 시 고정값 복원)
-cfOff(eid)       휴무 확정
-
-### 공유/기타 (354~372)
-shareBtn         최신 근무표 종합 이미지 공유 시트 gate
-urlBtn           URL 복사
-collapsible      주간 개요 접기
-visibilitychange SSE+loadData 재호출 (reload 금지)
-init             S.date=new Date → updD → bTS → setupDel → loadData → connectSSE
-
-## 의존성 그래프 (수정 시 영향)
-gFix ← autoFix, gFixC ← rBrief
-S.fix ← gFix, shiftFixed
-S.sc ← loadData, SSE, autoFix, shiftSave/Del/Dayoff, togOff
-S.emp ← loadData, SSE, empEditSave
-catE ← rTimebar, rList (모든 뷰 렌더)
-renderAll ← SSE put/patch, loadData, 상태변경 전부
+## app.js 주요 섹션
+- config: `FB`, `FW`, 인증 설정, 06시 day-boundary, 날씨 기준 지역, 기본 직원/고정근무 fallback
+- store: `S` 단일 상태 객체. 직원, 스케줄, fixed, 휴무, 출근 기록, SSE 상태 보관
+- api: `fbG`, `fbP`. Firebase RTDB `.json` GET/PUT, `READONLY` guard
+- schedule delivery: 최신 근무표 변경 감지, idle/periodic due 계산, PNG 생성, 웹 공유/다운로드 출력
+- auth gate: PIN + CLI 허용 단말 또는 GPS factor. 정적 클라이언트 IP 헤더는 신뢰하지 않음
+- SSE: 직원/선택일 스케줄 SSE, 날짜 변경 세대관리
+- fixed schedule: 날짜별 overrides 우선, fixed fallback, `emp1` 매일 `17:00~06:00`
+- data loading: employees/fixed/overrides/status/attendance_history/storebot_attendance 로드
+- render: dashboard/day/people/month/timebar/list/ops 탭, 주간 개요, 날짜 스트립
+- actions: shift 저장/휴무/고정값, 표준입력 저장, 직원 disabled 처리, 휴무 일괄 파싱
 
 ## Firebase 경로
-/workschedule_v2/employees/{empId}
-/workschedule_v2/fixed_schedules/{empId}
-/workschedule_v2/overrides/{yyyy-MM-dd}/{empId}
-/workschedule_v2/status/{yyyy-MM-dd}/{empId}
-/workschedule_v2/attendance_history/{yyyy-MM-dd}  ← WorkSchedule 누적 근태 캐시/SOT 후보
-/packhelper/storebot_attendance/{yyyy-MM-dd}  ← 읽기전용
+- `/workschedule_v2/employees/{empId}`
+- `/workschedule_v2/fixed_schedules/{empId}`
+- `/workschedule_v2/overrides/{yyyy-MM-dd}/{empId}`
+- `/workschedule_v2/status/{yyyy-MM-dd}/{empId}`
+- `/workschedule_v2/attendance_history/{yyyy-MM-dd}` — WorkSchedule 누적 근태 캐시
+- `/packhelper/storebot_attendance/{yyyy-MM-dd}` — 읽기 전용 출근 원본
 
-## 공통 스키마 점검
-/root/my-first-project/scripts/workschedule_v2_migrate.py  — v2 마이그레이션/핀 고정값 참고. 런타임 reader는 legacy fallback 없이 `/workschedule_v2`를 읽음
+## 데이터 경계
+- Firebase `/workschedule_v2`가 근무 데이터 단일 원본이다.
+- `localStorage`는 인증 토큰, UI/메뉴얼 후보, 이미지 출력 due 상태 같은 브라우저 보조 상태만 보관한다.
+- 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
+- 휴무 해제/근무 clear는 삭제 대신 명시 값으로 남긴다.
+- `/packhelper/storebot_attendance`는 읽기 전용이다.
+
+## 검증
+- `node --check docs/app.js`
+- `node --check docs/manual_logic.js`
+- `node --check docs/schedule_delivery_logic.js`
+- `node scripts/test_schedule_logic.mjs`
+- `node scripts/test_manual_logic.mjs`
+- `git diff --check`
+- Android Gradle 빌드, APK 설치, ADB 검증은 WorkSchedule 완료 기준이 아니다.

@@ -4,7 +4,6 @@ import { readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const manual = require('../docs/manual_logic.js');
-const assetManual = require('../app/src/main/assets/manual_logic.js');
 
 const merged = manual.mergeManualFromMemo(
   [
@@ -40,21 +39,27 @@ const recipe = manual.normalizeManualEntry(
 assert.equal(recipe.category, 'recipe');
 assert.match(recipe.body, /레시피 세부 원본은 전용 영역/);
 
+const output = manual.normalizeManualEntry(
+  { id: 'memo-3', body: '하이닉스 사이트와 카카오 PNG 이미지 출력만 기준으로 사용' },
+  { sourceType: 'memo' },
+);
+assert.equal(output.category, 'output');
+assert.match(output.body, /하이닉스 사이트 화면과 카카오 전달용 PNG 이미지/);
+
 const conflicts = manual.detectManualConflicts([
   { title: '자동', body: '카카오 자동 발송' },
-  { title: '수동', body: '자동 발송하지 않고 공유 시트에서 직접 확인' },
+  { title: '수동', body: '자동 발송하지 않고 PNG 파일로 직접 확인' },
 ]);
 assert.ok(conflicts.some((text) => text.includes('카카오 공유')));
 
 const filtered = manual.filterManualEntries(merged, { query: '공유', category: 'chat', tag: 'kakao' });
 assert.equal(filtered.length, 1);
 
-assert.deepEqual(Object.keys(assetManual.CATEGORIES), Object.keys(manual.CATEGORIES));
+const indexSource = readFileSync(new URL('../docs/index.html', import.meta.url), 'utf8');
+assert.match(indexSource, /manual_logic\.js/);
+assert.match(indexSource, /data-tab="ops"/);
 
-for (const file of ['docs/index.html', 'app/src/main/assets/index.html']) {
-  const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
-  assert.match(source, /manual_logic\.js/);
-  assert.match(source, /data-tab="ops"/);
-}
+const manualSource = readFileSync(new URL('../docs/manual_logic.js', import.meta.url), 'utf8');
+assert.doesNotMatch(manualSource, /app\/src\/main\/assets|NativeBridge|adb|apk|usb|서버폰/i);
 
 console.log('manual logic tests passed');

@@ -1,68 +1,66 @@
 # WorkSchedule APP_INTENT.md
 
 ## 만든 이유
-- 매장 근무표, 휴무, 출근기록을 직원과 운영방이 같은 기준으로 보게 한다.
+- 매장 근무표, 휴무, 출근기록을 Firebase DB 한 기준으로 관리하고, 하이닉스 사이트와 카톡 이미지 출력에 같은 근무표를 쓰게 한다.
 
 ## 사용자 결과
-- 공식 근무스케줄 URL은 `https://wk7007-wk.github.io/WorkSchedule/`다.
-- 근무표 저장, 고정스케줄, 휴무, 출근기록이 Firebase 실패나 화면 전환 때문에 사라지면 안 된다.
+- WorkSchedule은 Android APK/설치형 앱이 아니다.
+- 공식 웹 출력은 `docs/` GitHub Pages `https://wk7007-wk.github.io/WorkSchedule/`다.
+- 하이닉스 사이트/HynixOps, StoreBotTermux, 대시보드는 Firebase `/workschedule_v2`를 소비한다.
+- 카톡 전달은 최신 근무표 PNG 이미지를 웹 공유 메뉴 또는 다운로드 파일로 출력한다.
 
 ## 절대 기준
-- localStorage 우선, Firebase 백업/동기화 기준을 유지한다.
+- Firebase `/workschedule_v2`가 단일 근무 데이터 원본이다.
+- `localStorage`는 인증 토큰, UI 상태, 운영메뉴얼 후보, 이미지 출력 due 상태 같은 브라우저 보조 상태만 맡는다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
-- 휴무 해제는 값을 false로 남기고 삭제하지 않는다.
-- 표준입력은 공식 WorkSchedule 웹앱에서 `/workschedule_v2/overrides`, `status` SOT에 직접 저장한다.
-- Firebase `/workschedule_v2`가 단일 근무 데이터 원본이고, WorkSchedule UI/HynixOps/StoreBotTermux/대시보드는 소비자다.
-- 공통 해석 순서는 날짜별 `overrides` state=shift/off/clear → `fixed_schedules/{empId}` fallback → 미입력이다.
-- 새 코드의 근무 해제/clear 값은 `false`가 기준이며, 빈 객체 `{}`는 legacy 호환으로만 본다.
-- 출근 원본 `/packhelper/storebot_attendance/{date}`는 수정하지 않고, 읽은 일자 데이터만 `/workschedule_v2/attendance_history/{date}`에 idempotent PUT으로 보존해 누적 보기 기준으로 쓴다.
-- StoreBot 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터의 저장 경계는 WorkSchedule이 가진다.
+- 휴무 해제와 근무 clear는 삭제가 아니라 명시 값으로 남긴다.
+- 표준입력은 공식 WorkSchedule 웹에서 `/workschedule_v2/overrides`, `status`에 직접 저장한다.
+- 공통 해석 순서는 날짜별 `overrides` state=shift/off/clear -> `fixed_schedules/{empId}` fallback -> 미입력이다.
+- 출근 원본 `/packhelper/storebot_attendance/{date}`는 수정하지 않고, 읽은 일자 데이터만 `/workschedule_v2/attendance_history/{date}`에 idempotent PUT으로 보존한다.
+- StoreBot 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터 저장 경계는 WorkSchedule/Firebase가 가진다.
 - HynixOps는 발주/근무표 탭형 통합 런처 이름이며, OrderHelper와 WorkSchedule 원본 SOT는 합치지 않는다.
-- 날씨 기준 지역은 `이천시 부발읍`이다. 좌표 상수는 근사 `37.2816, 127.4892`로 둔다.
+- 날씨 기준 지역은 `이천시 부발읍`, 좌표 상수는 근사 `37.2816, 127.4892`다.
 - `이원규(emp1)` 고정근무 fallback은 매일 `17:00~06:00`으로 해석한다.
 - 타임바/리스트 게이지는 06시 day-boundary 기준 선택 근무일의 당일 근무자 첫 출근~마지막 퇴근 범위만 쓴다.
-- 정적 프론트 인증은 `PIN 통과 AND (CLI 허용 단말 OR 서버/호스팅 허용 IP OR 매장 GPS 150m)` 구조다. PIN은 항상 필요하고, 단말/IP allowlist 등록은 운영자 CLI 전용이다. 웹 화면에서 PIN+GPS로 단말을 자동 허용하지 않는다.
-- IP allowlist는 CLI 기록/서버·호스팅 앞단 적용용이다. 정적 클라이언트의 임의 IP/X-Forwarded-For 값은 신뢰하지 않는다. `authDebug`는 로컬 개발에서만 GPS를 우회한다.
+- 정적 프론트 인증은 `PIN 통과 AND (CLI 허용 단말 OR 서버/호스팅 허용 IP OR 매장 GPS 150m)` 구조다. 웹 화면에서 PIN+GPS로 단말을 자동 허용하지 않는다.
+- IP allowlist는 CLI 기록/서버·호스팅 앞단 적용용이다. 정적 클라이언트의 임의 IP/X-Forwarded-For 값은 신뢰하지 않는다.
 
 ## UI/동선 기준
-- HynixOps는 근무표 간단 입력 front이고, WorkSchedule은 Firebase SOT/출력/기존 상세 화면 역할을 유지한다.
-- 사용자가 HynixOps에서 근무표를 수정할 때 기존 WorkSchedule 상세 UI를 기본으로 보게 하지 않는다.
-- 운영탭은 하이닉스 메모/운영 기준을 정리된 메뉴얼로 보여준다. 메모 원문은 기본 화면에 복사 노출하지 않고, 기존 메뉴얼과 비교해 카테고리/태그/요약/본문 기준으로 재정리한다.
-- 운영메뉴얼은 카테고리, 태그, 검색으로 바로 찾게 하고 내부 병합 로직 설명은 화면에 노출하지 않는다.
-- HynixOps 근무표 조정은 첫 화면의 primary action으로 열고, 편집 중에는 변경 수, 선택 셀 inspector, 기존→변경 비교, 닫기 확인, 저장 전 확인을 항상 기준으로 삼는다.
-- HynixOps 주간 패턴 적용은 선택 직원/기간의 기존 근무를 새 패턴으로 덮어쓰기 요청하되, 원본 직접 저장이 아니라 `schedule_update` safe queue로만 접수한다.
+- WorkSchedule 웹은 Firebase DB 상세 확인/보정/출력 화면이다.
+- HynixOps 근무표 조정은 safe queue 중심의 간단 입력 front이고, WorkSchedule 원본과 경계를 섞지 않는다.
+- 운영탭은 하이닉스 메모/운영 기준을 정리된 메뉴얼로 보여준다. 메모 원문은 기본 화면에 복사 노출하지 않는다.
 - 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.
 - 스와이프는 날짜 변경이며 탭 전환으로 바꾸지 않는다.
 - 직원 공개 화면과 관리자 조작 화면의 경계를 섞지 않는다.
 
 ## 근무표 전달 품질 기준
-- 근무표 전달은 품질상 Android/Kakao 이미지 공유 경로를 유지한다. 원본 해상도에 가까운 전달이 가능해야 폰트 깨짐/흐림을 줄일 수 있다.
-- 문제는 공유 방식 자체가 아니라 대상 단체방 검증/선택 gate 부재다. 이후 구현은 목표 방 선택과 방 제목 확인 gate를 추가하는 방향으로 잡는다.
+- 근무표 전달은 원본 해상도에 가까운 PNG 이미지 출력을 기준으로 한다.
+- 카톡 자동 선택/자동 발송은 하지 않는다. 사용자가 출력된 이미지와 대상 방을 직접 확인한다.
 - 텍스트-only, 스크린샷 리사이즈, 압축 전송으로 대체하지 않는다.
-- 전체 카톡 공유/이미지 공유가 no-op이면 복구하거나 명확한 비활성 상태로 표시한다.
-- 근무표 수정/갱신 후 5분간 추가 변경이 없을 때만 종합 이미지 공유 준비 상태로 본다.
-- 6시간 주기 발송 판단 대상은 `최신 근무표`다. 마지막 이미지 공유 intent 큐잉 후 6시간이 지나면 최신 근무표 기준으로 다시 준비한다.
-- 발송 전 날씨/뉴스 등 보조정보가 누락되면 CLI 보정 lane 후보(`workschedule_delivery_cli_patch`)만 no-live/no-write로 만들고, 실제 외부 호출/발송은 별도 gate를 통과해야 한다.
-- 앱은 Kakao 자동 선택/자동 전송을 하지 않는다. 공유 시트에서 목표 단체방을 사용자가 직접 확인해야 한다.
+- 전체 카톡 이미지 출력이 no-op이면 복구하거나 명확한 비활성 상태로 표시한다.
+- 근무표 수정/갱신 후 5분간 추가 변경이 없을 때만 종합 이미지 출력 준비 상태로 본다.
+- 마지막 이미지 출력 intent 큐잉 후 6시간이 지나면 최신 근무표 기준으로 다시 준비한다.
+- 날씨/뉴스 보조정보가 누락되면 CLI 보정 lane 후보(`workschedule_delivery_cli_patch`)만 no-live/no-write로 만들고, 실제 외부 호출/발송은 별도 gate를 통과해야 한다.
 
 ## 데이터/경계 기준
-- 주요 경로는 `/workschedule_v2/employees`, `fixed_schedules`, `overrides`, `status`, 출근기록 경로다.
+- 주요 경로는 `/workschedule_v2/employees`, `fixed_schedules`, `overrides`, `status`, `attendance_history`다.
 - 스키마 계약과 read-only 점검은 `/root/my-first-project/rules/workschedule_schema_contract.txt`와 `scripts/workschedule_schema_audit.py`를 기준으로 한다.
-- Firebase 쓰기 실패 시 로컬 상태가 먼저 보존되어야 한다.
+- Firebase 쓰기 실패를 localStorage 단일 원본처럼 숨기지 않는다. 실패는 화면에서 알리고 재시도 가능해야 한다.
 - StoreBot/근무표 PNG 경로를 바꿀 때는 StoreBotTermux와 `.agents/skills/storebot-kakao-reply` 기준을 같이 확인한다.
 
 ## C&I / AI Ops 경계
 - C&I는 GitHub Pages 배포 실패, JS 오류, Firebase sync 불일치, StoreBot 근무표 소비 오류, 반복 사용자 보정 신호를 self_fix 후보로 올린다.
 - 자동 복구는 웹 코드/문서/배포 보정과 검증까지 허용한다.
-- 직원/근무 원본을 임의 삭제하거나, localStorage 우선 정책을 깨거나, 직원 공개 화면에 쓰기 기능을 섞는 자동 복구는 금지한다.
-- CLI/LLM은 prompt envelope가 있어야 깨어난다. monitor/worker/사용자/수동 enqueue 또는 상주 판단 루프가 prompt를 주입하며, 이것은 C&I 판단 권한 제한이 아니다.
+- 직원/근무 원본 임의 삭제, 직원 공개 화면 쓰기 기능 혼입, 카톡 실제 발송은 금지한다.
+- CLI/LLM은 prompt envelope가 있어야 깨어난다. monitor/worker/사용자/수동 enqueue 또는 상주 판단 루프가 prompt를 주입한다.
 
 ## 수정 전 질문
-- 이 변경이 근무표 입력/조회 실수를 줄이는가.
-- localStorage와 Firebase의 역할이 유지되는가.
+- 이 변경이 Firebase 원본 근무표 입력/조회 실수를 줄이는가.
+- 하이닉스 사이트 출력과 카톡 PNG 이미지 출력이 같은 기준을 보는가.
 - StoreBot 근무표 출력과 공식 URL 안내가 같이 맞는가.
 
 ## 완료 기준
-- 검증: 브라우저 smoke, 저장/휴무/고정스케줄, Firebase 동기화.
-- 전달: GitHub Pages 반영 확인.
-- 남은 위험: 브라우저 캐시, Firebase 일시 실패, 직원 공개 화면 혼동.
+- 검증: JS syntax, 순수 로직 테스트, 브라우저 smoke, Firebase 읽기/쓰기 경계 확인.
+- 전달: GitHub Pages 반영 확인이 필요한 경우 별도 배포 gate를 통과한다.
+- 제외: Android Gradle 빌드, APK 설치, ADB 검증, 업데이트센터 배포.
+- 남은 위험: 브라우저 캐시, Firebase 일시 실패, 직원 공개 화면 혼동, 카톡 대상 방 수동 선택 실수.

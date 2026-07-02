@@ -1,51 +1,46 @@
 # WorkSchedule 규칙
 
 ## 개요
-매장 직원(6명) 근무표 앱. WebView + GitHub Pages. 타임라인 게이지 + AI 스케줄링.
-상세 스펙: SPEC.txt
+- Firebase DB 기반 근무표 웹/이미지 출력 도구다.
+- Android APK/앱 wrapper는 사용하지 않는다.
+- 상세 스펙: `SPEC.txt`
 
-## 데이터 저장 (최우선)
-- localStorage = Single Source of Truth (Firebase = 백업/동기화)
-- 모든 저장: localStorage 먼저 → Firebase 백그라운드
-- 모든 로드: localStorage 즉시 렌더 → Firebase 병합 (로컬 우선)
-- clearCache 금지 (localStorage 전부 삭제됨)
-- Firebase 실패해도 로컬 유지
+## 데이터 저장
+- Firebase `/workschedule_v2`가 단일 근무 데이터 원본이다.
+- `localStorage`는 인증 토큰, UI 상태, 운영메뉴얼 후보, 이미지 출력 due 상태만 보조로 쓴다.
+- Firebase 실패를 로컬 원본처럼 숨기지 않는다.
+- `/packhelper/storebot_attendance/{date}`는 읽기 전용이다.
 
 ## 직원 + 고정 스케줄
 - 직원: 이원규, 권연옥, 리, 히오, 사아야
 - 역할 3종: 주방(#E67E22) / 차배달(#4ECDC4) / 오토바이(#FFD700)
 - 멀티역할: 동시 체크 시 각 0.5명 계산
-- 고정스케줄: SPEC.txt "고정 스케줄" 섹션 참조
-
-## 보정 시스템
-- v2 status는 overrides state=shift/off/clear와 별도로 confirmed/off/clear를 기록
-- 수동 근무 저장 시 status confirmed 전환
-- 확정 2회 이상 → AI추천 표시
+- 고정스케줄: `SPEC.txt` "고정 스케줄" 섹션 참조
 
 ## 핵심 규칙
-- renderAll() 경유 필수 (renderTimeline 직접 호출 금지)
-- 3색 상수: C_OK=#2ECC71, C_DEF=#9090A8, C_OFF=#E74C3C
-- 반드시 전역 스코프 선언 (함수 내부 X)
-- 휴무 해제: overrides/{date}/{empId} state=clear (delete 아님)
-- 직원 삭제: employees/{empId}에 disabled:true, active:false 저장 (노드 삭제 아님)
-- 스와이프 = 날짜 변경 (탭 전환 아님)
-- 기능 축소/숨김 금지 (display:none X)
-- 이모지/그림 아이콘 지양 → 색상 텍스트
+- `renderAll()` 경유 필수.
+- 휴무 해제: `overrides/{date}/{empId}` state=clear 또는 명시 clear 값. 삭제 아님.
+- 직원 삭제: `employees/{empId}`에 `disabled:true`, `active:false` 저장. 노드 삭제 아님.
+- 스와이프 = 날짜 변경. 탭 전환 아님.
+- 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.
 
 ## 구조
-- 파일: /root/WorkSchedule/docs/index.html (HTML 구조) + style.css (CSS) + app.js (JS)
-- Pages: https://wk7007-wk.github.io/WorkSchedule/
-- init_ver: v7 (캐시 초기화 버전)
-- Firebase: /workschedule_v2/ (employees, fixed_schedules, overrides, status)
-- Gemini 키: /banktotal/settings/gemini_key.json (BankTotal 공유)
+- 웹 파일: `docs/index.html`, `docs/style.css`, `docs/app.js`
+- 순수 로직: `docs/schedule_delivery_logic.js`, `docs/manual_logic.js`
+- Pages: `https://wk7007-wk.github.io/WorkSchedule/`
+- Firebase: `/workschedule_v2/` employees, fixed_schedules, overrides, status, attendance_history
+- 하이닉스 소비자: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html`
 
-## 배포
-- 웹 변경: push만 (APK 불필요)
-- APK 변경: 공통규칙 Android 배포 절차
+## 출력
+- 하이닉스 사이트와 WorkSchedule 웹은 Firebase DB를 읽어 화면을 만든다.
+- 카톡 전달용 근무표는 `docs/app.js`에서 PNG로 생성한다.
+- 웹 공유 메뉴 또는 PNG 다운로드만 수행한다.
+- 카카오 자동 선택/자동 발송은 하지 않는다.
 
-## 완료
-- 월급 계산 + BankTotal 연동
-- 자동 스케줄링 고도화
+## 배포/검증
+- 웹 변경: JS syntax/test와 브라우저 smoke 후 GitHub Pages 반영 여부를 본다.
+- APK 빌드, 설치, ADB 검증, 업데이트센터 배포는 WorkSchedule 완료 기준이 아니다.
 
-## 미완료
-- 카카오톡 이미지 공유 (NativeBridge 필요)
+## 미완료/주의
+- 카톡 대상 방 확인은 사용자 수동 gate다.
+- 날씨/뉴스 보조정보 누락 시 `workschedule_delivery_cli_patch` 후보만 만들고 실제 외부 호출/발송은 하지 않는다.

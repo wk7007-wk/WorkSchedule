@@ -80,13 +80,12 @@ const nextPeriodic = delivery.computeDeliveryState({ ...sentState, nowMs: sentSt
 assert.equal(nextPeriodic.nextDueAtMs, sentState.lastSentAtMs + delivery.PERIODIC_MS);
 assert.equal(nextPeriodic.targetKind, 'latest_work_schedule');
 
-for (const file of ['docs/app.js', 'app/src/main/assets/app.js']) {
-  const source = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
-  assert.match(source, /최신 근무표/);
-  assert.match(source, /queueCompositeShare/);
-  assert.match(source, /shareImage/);
-  assert.match(source, /workschedule_delivery_cli_patch/);
-  assert.doesNotMatch(source, new RegExp('최신' + ' 상태'));
-}
+const appSource = readFileSync(new URL('../docs/app.js', import.meta.url), 'utf8');
+assert.match(appSource, /최신 근무표/);
+assert.match(appSource, /queueCompositeShare/);
+assert.match(appSource, /navigator\.share|downloadCompositeImage/);
+assert.match(appSource, /workschedule_delivery_cli_patch/);
+assert.doesNotMatch(appSource, /NativeBridge|shareImage|app\/src\/main\/assets/);
+assert.doesNotMatch(appSource, new RegExp('최신' + ' 상태'));
 
 console.log('schedule logic tests passed');

@@ -1,5 +1,7 @@
 # WorkSchedule 슬림 재작성 — 설계 인수인계 (Claude → Codex)
 
+> 2026-07-02 정정: WorkSchedule Android APK/app wrapper는 사용하지 않는다. 이 문서의 과거 WebView/APK 전제는 obsolete이며, 현재 기준은 `APP_INTENT.md`와 `CODEMAP.txt`의 Firebase DB + docs 웹 출력 + 카톡 PNG 이미지 출력이다.
+
 ## 0. 배턴 상황
 - Claude가 **1차 진단**까지 수행. 구현은 아직 시작 안 함.
 - Codex가 **§4 설계 논점 결정 완료**. Claude가 이 결정안 기준으로 코딩하고, Codex가 구현 후 재검토.
@@ -62,7 +64,7 @@
 
 ### 4.1 파일 구조
 - **결정**: `docs/app.js` 단일 IIFE 유지. `utils.js`/`render.js`/`firebase.js` 모듈 분할 금지.
-- **이유**: GitHub Pages는 모듈을 지원하지만 Android WebView/file asset 로딩에서 import 경로 문제가 생길 수 있음.
+- **이유**: GitHub Pages 정적 배포와 간단한 script 로딩을 유지하기 위함. 과거 Android WebView 제약은 obsolete.
 - **정리 방식**: app.js 내부 순서만 `config → store → api → selectors → render → actions → init`로 재배치.
 
 ### 4.2 뷰 렌더링
@@ -259,4 +261,4 @@
 - 라인 수: `app.js 375`, `index.html 40`, `style.css 122` = 537줄.
 
 #### 남은 위험
-- 실브라우저/서브폰 WebView 수동 스모크는 아직 미실행. 직원 삭제 후 재로드 시 숨김 동작은 코드상 필터링으로 보강됨.
+- 실브라우저 수동 스모크는 아직 미실행. 직원 삭제 후 재로드 시 숨김 동작은 코드상 필터링으로 보강됨.

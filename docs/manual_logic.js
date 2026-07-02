@@ -5,11 +5,11 @@
 })(typeof window!=='undefined'?window:globalThis,function(){
   'use strict';
 
-  const CATEGORY_ORDER=['work','chat','device','recipe','order','safety','etc'];
+  const CATEGORY_ORDER=['work','chat','output','recipe','order','safety','etc'];
   const CATEGORIES={
     work:{label:'근무',keywords:['근무','근무표','스케줄','출근','퇴근','휴무','확정','시간','직원']},
     chat:{label:'채팅',keywords:['카카오','카톡','채팅','답변','운영방','전송','공유','브리핑','메시지']},
-    device:{label:'단말',keywords:['단말','폰','서버폰','설치','apk','usb','adb','권한','업데이트','버전']},
+    output:{label:'출력',keywords:['하이닉스','사이트','이미지','png','브라우저','다운로드','출력','공유']},
     recipe:{label:'메뉴/레시피',keywords:['레시피','타이머','조리','메뉴','수량','재료','주의사항','치킨']},
     order:{label:'발주',keywords:['발주','주문','재고','입고','품절','수량','매입','거래처']},
     safety:{label:'확인/안전',keywords:['금지','삭제','초기화','확인','승인','주의','위험','보류','실행']},
@@ -20,7 +20,7 @@
     ['kakao','카카오',['카카오','카톡','운영방','공유','전송','답변']],
     ['manual','메뉴얼',['메뉴얼','매뉴얼','운영기준','운영 기준','정리']],
     ['memo','메모',['메모','기록','원문']],
-    ['device','단말',['단말','폰','서버폰','설치','apk','usb','adb']],
+    ['output','출력',['하이닉스','사이트','이미지','png','브라우저','다운로드','출력']],
     ['recipe','레시피',['레시피','타이머','조리','메뉴']],
     ['order','발주',['발주','주문','재고','입고']],
     ['safety','확인필요',['금지','삭제','초기화','확인','승인','보류','충돌']]
@@ -40,7 +40,7 @@
       category:'chat',
       title:'카카오 공유 기준',
       summary:'공유는 사용자가 대상 방을 직접 확인한 뒤 진행한다.',
-      body:'- 카카오톡 공유는 자동 발송하지 않고 공유 시트에서 대상 방을 사용자가 확인한다.\n- 답변 근거가 불확실하면 확인 필요 상태로 남기고 임의 실행하지 않는다.',
+      body:'- 카카오톡 공유는 자동 발송하지 않고 브라우저 공유 메뉴 또는 PNG 파일로 사용자가 대상 방을 확인한다.\n- 답변 근거가 불확실하면 확인 필요 상태로 남기고 임의 실행하지 않는다.',
       tags:['kakao','safety'],
       updatedAt:0
     },
@@ -113,7 +113,7 @@
     if(/근무표|스케줄|휴무|출근|퇴근/.test(body))return '근무표 처리 기준';
     if(/레시피|타이머|조리|메뉴/.test(body))return '레시피 안내 기준';
     if(/발주|재고|주문|입고/.test(body))return '발주 처리 기준';
-    if(/단말|설치|apk|usb|adb|서버폰/.test(body))return '단말 적용 기준';
+    if(/하이닉스|사이트|이미지|png|브라우저|다운로드|출력/.test(body.toLowerCase()))return '이미지 출력 기준';
     const first=splitTextUnits(body)[0]||tag+' 운영 기준';
     return cleanText(first.replace(/^(메모|요청|정리)\s*[:：-]?\s*/,'')||tag+' 운영 기준',36);
   }
@@ -135,8 +135,8 @@
     if(/발주|재고|주문|입고/.test(text)){
       return '발주 관련 예외는 재고와 주문 단위를 확인한 뒤 처리 기준으로 정리한다.';
     }
-    if(/단말|설치|apk|usb|adb|서버폰/.test(text)){
-      return '단말 적용은 현재 설치본과 대상 장치를 확인한 뒤 승인된 경로로만 진행한다.';
+    if(/하이닉스|사이트|이미지|png|브라우저|다운로드|출력/.test(text.toLowerCase())){
+      return '근무표 출력은 하이닉스 사이트 화면과 카카오 전달용 PNG 이미지를 기준으로 한다.';
     }
     const normalized=text
       .replace(/해야함|해야 함|해야한다/g,'한다')
@@ -227,8 +227,8 @@
     const body=String(text||'');
     return {
       autoSend:/자동.{0,8}(전송|발송|공유)|카카오.{0,8}자동/.test(body),
-      manualSend:/직접.{0,8}(확인|선택)|자동.{0,8}(금지|하지 않|없)|공유 시트/.test(body),
-      deleteData:/삭제|초기화|pm clear|uninstall|데이터 삭제/.test(body),
+      manualSend:/직접.{0,8}(확인|선택)|자동.{0,8}(금지|하지 않|없)|공유 (메뉴|파일)|PNG/.test(body),
+      deleteData:/삭제|초기화|데이터 삭제/.test(body),
       preserveData:/보존|유지|삭제하지|초기화하지|되돌리지/.test(body),
       rawVisible:/원문.{0,8}(노출|표시|보관)|그대로.{0,8}(복사|표시)/.test(body),
       rawHidden:/원문.{0,8}(노출하지|보관하지)|그대로.{0,8}복사하지|다듬어/.test(body)
