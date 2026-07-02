@@ -39,6 +39,10 @@
 
 ## 배포/검증
 - 웹 변경: JS syntax/test와 브라우저 smoke 후 GitHub Pages 반영 여부를 본다.
+- MCP surface는 `site/static-web`/`docs web`이다.
+- DB 증거는 `/workschedule_v2`, `/packhelper/ops_manual` 등 필요한 Firebase read source만 읽기 전용으로 확인한다.
+- 완료 증거는 Playwright desktop/mobile, Axe, static deploy/browser evidence 기준이다.
+- Figma는 실제 file/source가 있을 때만 기준으로 쓴다.
 - APK 빌드, 설치, ADB 검증, 업데이트센터 배포는 WorkSchedule 완료 기준이 아니다.
 
 ## 미완료/주의

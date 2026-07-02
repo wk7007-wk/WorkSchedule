@@ -1,6 +1,7 @@
 # WorkSchedule 코드맵
 # 의도 기준: APP_INTENT.md (Firebase DB 기반 웹/이미지 출력 도구)
 # 기준: Firebase DB 원본 + docs 웹 출력 + 카톡 PNG 이미지 출력
+# surface_type: site/static-web 또는 docs web
 # Android APK/app wrapper, Gradle 빌드, ADB 설치 큐는 사용하지 않는다.
 
 ## 실행 경로
@@ -60,5 +61,10 @@
 - `node --check docs/schedule_delivery_logic.js`
 - `node scripts/test_schedule_logic.mjs`
 - `node scripts/test_manual_logic.mjs`
+- Firebase read-only 증거: `/workschedule_v2`, `/packhelper/ops_manual` 등 필요한 read source
+- Playwright desktop/mobile screenshot + DOM smoke
+- Axe critical/serious 0 또는 사유
+- static deploy/browser evidence가 필요한 경우 GitHub Pages 반영 확인
+- Figma는 실제 file/source가 있을 때만 기준으로 사용
 - `git diff --check`
 - Android Gradle 빌드, APK 설치, ADB 검증은 WorkSchedule 완료 기준이 아니다.

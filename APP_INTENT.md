@@ -5,6 +5,7 @@
 
 ## 사용자 결과
 - WorkSchedule은 Android APK/설치형 앱이 아니다.
+- surface_type은 `site/static-web` 또는 `docs web`이다.
 - 공식 웹 출력은 `docs/` GitHub Pages `https://wk7007-wk.github.io/WorkSchedule/`다.
 - 하이닉스 사이트/HynixOps, StoreBotTermux, 대시보드는 Firebase `/workschedule_v2`를 소비한다.
 - 카톡 전달은 최신 근무표 PNG 이미지를 웹 공유 메뉴 또는 다운로드 파일로 출력한다.
@@ -45,6 +46,7 @@
 
 ## 데이터/경계 기준
 - 주요 경로는 `/workschedule_v2/employees`, `fixed_schedules`, `overrides`, `status`, `attendance_history`다.
+- MCP/브라우저 검증의 DB 증거는 `/workschedule_v2`, `/packhelper/ops_manual` 등 필요한 Firebase read source를 읽기 전용으로 확인한다.
 - 스키마 계약과 read-only 점검은 `/root/my-first-project/rules/workschedule_schema_contract.txt`와 `scripts/workschedule_schema_audit.py`를 기준으로 한다.
 - Firebase 쓰기 실패를 localStorage 단일 원본처럼 숨기지 않는다. 실패는 화면에서 알리고 재시도 가능해야 한다.
 - StoreBotTermux/근무표 PNG 경로를 바꿀 때는 StoreBotTermux와 `.agents/skills/storebot-kakao-reply` 기준을 같이 확인한다.
@@ -61,7 +63,8 @@
 - StoreBotTermux 근무표 출력과 공식 URL 안내가 같이 맞는가.
 
 ## 완료 기준
-- 검증: JS syntax, 순수 로직 테스트, 브라우저 smoke, Firebase 읽기/쓰기 경계 확인.
-- 전달: GitHub Pages 반영 확인이 필요한 경우 별도 배포 gate를 통과한다.
+- 검증: JS syntax, 순수 로직 테스트, Firebase read-only 증거, Playwright desktop/mobile screenshot + DOM smoke, Axe critical/serious 0 또는 사유.
+- 전달: static deploy/browser evidence가 필요한 경우 GitHub Pages 반영 확인 gate를 통과한다.
+- Figma: 실제 file/source가 있을 때만 기준으로 쓴다.
 - 제외: Android Gradle 빌드, APK 설치, ADB 검증, 업데이트센터 배포.
 - 남은 위험: 브라우저 캐시, Firebase 일시 실패, 직원 공개 화면 혼동, 카톡 대상 방 수동 선택 실수.
