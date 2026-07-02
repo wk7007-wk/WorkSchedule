@@ -33,6 +33,12 @@
 - 스와이프는 날짜 변경이며 탭 전환으로 바꾸지 않는다.
 - 직원 공개 화면과 관리자 조작 화면의 경계를 섞지 않는다.
 
+## 근무표 전달 품질 기준
+- 근무표 전달은 품질상 Android/Kakao 이미지 공유 경로를 유지한다. 원본 해상도에 가까운 전달이 가능해야 폰트 깨짐/흐림을 줄일 수 있다.
+- 문제는 공유 방식 자체가 아니라 대상 단체방 검증/선택 gate 부재다. 이후 구현은 목표 방 선택과 방 제목 확인 gate를 추가하는 방향으로 잡는다.
+- 텍스트-only, 스크린샷 리사이즈, 압축 전송으로 대체하지 않는다.
+- 전체 카톡 공유/이미지 공유가 no-op이면 복구하거나 명확한 비활성 상태로 표시한다.
+
 ## 데이터/경계 기준
 - 주요 경로는 `/workschedule_v2/employees`, `fixed_schedules`, `overrides`, `status`, 출근기록 경로다.
 - 스키마 계약과 read-only 점검은 `/root/my-first-project/rules/workschedule_schema_contract.txt`와 `scripts/workschedule_schema_audit.py`를 기준으로 한다.
