@@ -52,6 +52,16 @@
 - PC 시도 APK: `C:\root\WorkSchedule\app\build\outputs\apk\debug\app-debug.apk`, 5,618,682 bytes, mtime UTC `2026-06-22T21:58:37Z`
 - 판단: PC의 WorkSchedule repo/APK가 stale이다. 최신 `/root/WorkSchedule` APK 또는 업데이트센터 최신 artifact를 PC가 받아 설치해야 한다.
 
+## 2026-07-02 19:13 KST 설치 완료
+- request: `/packhelper/codex_ops_v2/requests/ops_1782987129397_218a5d65`
+- APK source: `https://poskds-attendance.web.app/workschedule/WorkSchedule_latest.bin`
+- APK SHA-256: `711105c95898e995d1a70aa818a2e4806b5ca62063102ff3625e99c05e406779`
+- ADB 경로: `C:\Users\wk700\platform-tools\adb.exe`
+- `devices -l`: `R39M30RWR2F device product:beyond2lteks model:SM_G975N device:beyond2`
+- 사용 serial: 현재 목록에서 확인된 단일 device `R39M30RWR2F`
+- 설치 확인: `versionName=0702.1839`, `versionCode=1782985171`, `lastUpdateTime=2026-07-02 19:13:17`
+- 금지 작업 미수행: wireless/IP:port, uninstall, `pm clear`, 데이터 삭제, 앱 실행, 카카오 발송 없음
+
 ## 공장 PC 전용 확인 항목
 ```bash
 cd /root/WorkSchedule
