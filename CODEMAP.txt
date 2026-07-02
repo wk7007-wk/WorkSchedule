@@ -1,4 +1,5 @@
 # WorkSchedule 코드맵
+# 의도 기준: APP_INTENT.md (Firebase DB 기반 웹/이미지 출력 도구)
 # 기준: Firebase DB 원본 + docs 웹 출력 + 카톡 PNG 이미지 출력
 # Android APK/app wrapper, Gradle 빌드, ADB 설치 큐는 사용하지 않는다.
 
@@ -7,7 +8,8 @@
 - 웹 출력: `docs/` 정적 파일, GitHub Pages `https://wk7007-wk.github.io/WorkSchedule/`
 - 하이닉스 소비자: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭
 - 카톡 이미지 출력: `docs/app.js`가 최신 근무표 PNG를 만들고 웹 공유 메뉴 또는 다운로드로 넘긴다.
-- StoreBot/대시보드/HynixOps는 WorkSchedule 데이터를 소비한다. 원본 저장 경계는 Firebase `/workschedule_v2`다.
+- StoreBotTermux/대시보드/HynixOps는 WorkSchedule 데이터를 소비한다. 원본 저장 경계는 Firebase `/workschedule_v2`다.
+- 운영메뉴얼 조회: `docs/manual_logic.js` + `docs/app.js` 운영탭. 현재 코드가 읽는 메모 후보는 브라우저 `localStorage` 키이며, 하이닉스 사이트 메모탭/기존 메뉴얼의 실제 durable source path는 아직 확정 필요하다.
 - 공통 스키마 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
 
 ## 파일 구조
@@ -46,6 +48,7 @@
 ## 데이터 경계
 - Firebase `/workschedule_v2`가 근무 데이터 단일 원본이다.
 - `localStorage`는 인증 토큰, UI/메뉴얼 후보, 이미지 출력 due 상태 같은 브라우저 보조 상태만 보관한다.
+- 운영메뉴얼 별도 Firebase source path는 현재 WorkSchedule 코드에 없다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제/근무 clear는 삭제 대신 명시 값으로 남긴다.
 - `/packhelper/storebot_attendance`는 읽기 전용이다.

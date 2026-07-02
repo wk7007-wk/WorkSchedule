@@ -17,7 +17,7 @@
 - 표준입력은 공식 WorkSchedule 웹에서 `/workschedule_v2/overrides`, `status`에 직접 저장한다.
 - 공통 해석 순서는 날짜별 `overrides` state=shift/off/clear -> `fixed_schedules/{empId}` fallback -> 미입력이다.
 - 출근 원본 `/packhelper/storebot_attendance/{date}`는 수정하지 않고, 읽은 일자 데이터만 `/workschedule_v2/attendance_history/{date}`에 idempotent PUT으로 보존한다.
-- StoreBot 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터 저장 경계는 WorkSchedule/Firebase가 가진다.
+- StoreBotTermux 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터 저장 경계는 WorkSchedule/Firebase가 가진다.
 - HynixOps는 발주/근무표 탭형 통합 런처 이름이며, OrderHelper와 WorkSchedule 원본 SOT는 합치지 않는다.
 - 날씨 기준 지역은 `이천시 부발읍`, 좌표 상수는 근사 `37.2816, 127.4892`다.
 - `이원규(emp1)` 고정근무 fallback은 매일 `17:00~06:00`으로 해석한다.
@@ -29,6 +29,7 @@
 - WorkSchedule 웹은 Firebase DB 상세 확인/보정/출력 화면이다.
 - HynixOps 근무표 조정은 safe queue 중심의 간단 입력 front이고, WorkSchedule 원본과 경계를 섞지 않는다.
 - 운영탭은 하이닉스 메모/운영 기준을 정리된 메뉴얼로 보여준다. 메모 원문은 기본 화면에 복사 노출하지 않는다.
+- 운영메뉴얼 구현 위치는 `docs/manual_logic.js`와 `docs/app.js` 운영탭이다. 현재 WorkSchedule이 직접 읽는 값은 브라우저 `localStorage` 후보이며, 하이닉스 사이트 메모탭/기존 메뉴얼의 실제 durable source/consumer path는 아직 확정 필요하다.
 - 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.
 - 스와이프는 날짜 변경이며 탭 전환으로 바꾸지 않는다.
 - 직원 공개 화면과 관리자 조작 화면의 경계를 섞지 않는다.
@@ -46,10 +47,10 @@
 - 주요 경로는 `/workschedule_v2/employees`, `fixed_schedules`, `overrides`, `status`, `attendance_history`다.
 - 스키마 계약과 read-only 점검은 `/root/my-first-project/rules/workschedule_schema_contract.txt`와 `scripts/workschedule_schema_audit.py`를 기준으로 한다.
 - Firebase 쓰기 실패를 localStorage 단일 원본처럼 숨기지 않는다. 실패는 화면에서 알리고 재시도 가능해야 한다.
-- StoreBot/근무표 PNG 경로를 바꿀 때는 StoreBotTermux와 `.agents/skills/storebot-kakao-reply` 기준을 같이 확인한다.
+- StoreBotTermux/근무표 PNG 경로를 바꿀 때는 StoreBotTermux와 `.agents/skills/storebot-kakao-reply` 기준을 같이 확인한다.
 
 ## C&I / AI Ops 경계
-- C&I는 GitHub Pages 배포 실패, JS 오류, Firebase sync 불일치, StoreBot 근무표 소비 오류, 반복 사용자 보정 신호를 self_fix 후보로 올린다.
+- C&I는 GitHub Pages 배포 실패, JS 오류, Firebase sync 불일치, StoreBotTermux 근무표 소비 오류, 반복 사용자 보정 신호를 self_fix 후보로 올린다.
 - 자동 복구는 웹 코드/문서/배포 보정과 검증까지 허용한다.
 - 직원/근무 원본 임의 삭제, 직원 공개 화면 쓰기 기능 혼입, 카톡 실제 발송은 금지한다.
 - CLI/LLM은 prompt envelope가 있어야 깨어난다. monitor/worker/사용자/수동 enqueue 또는 상주 판단 루프가 prompt를 주입한다.
@@ -57,7 +58,7 @@
 ## 수정 전 질문
 - 이 변경이 Firebase 원본 근무표 입력/조회 실수를 줄이는가.
 - 하이닉스 사이트 출력과 카톡 PNG 이미지 출력이 같은 기준을 보는가.
-- StoreBot 근무표 출력과 공식 URL 안내가 같이 맞는가.
+- StoreBotTermux 근무표 출력과 공식 URL 안내가 같이 맞는가.
 
 ## 완료 기준
 - 검증: JS syntax, 순수 로직 테스트, 브라우저 smoke, Firebase 읽기/쓰기 경계 확인.
