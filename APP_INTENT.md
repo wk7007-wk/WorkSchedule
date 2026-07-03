@@ -8,6 +8,7 @@
 - surface_type은 `site/static-web` 또는 `docs web`이다.
 - 공식 웹 출력은 `docs/` GitHub Pages `https://wk7007-wk.github.io/WorkSchedule/`다.
 - 하이닉스 사이트/HynixOps, StoreBotTermux, 대시보드는 Firebase `/workschedule_v2`를 소비한다.
+- `/packhelper/storebot_summary/schedule`은 표시용 캐시일 뿐 canonical 근무표 근거가 아니다.
 - 카톡 전달은 최신 근무표 PNG 이미지를 웹 공유 메뉴 또는 다운로드 파일로 출력한다.
 - 카톡 이미지 근무 확인은 preview queue 항목을 사람이 확인한 뒤 backend confirmed request queue로만 넘긴다.
 

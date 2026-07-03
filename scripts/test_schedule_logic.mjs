@@ -1,10 +1,24 @@
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const delivery = require('../docs/schedule_delivery_logic.js');
-const hynixScheduleLogic = require('/root/my-first-project/AttendanceBoard/docs/hynix_schedule_logic.js');
+const attendanceBoardHynixLogicPath = '/root/my-first-project/AttendanceBoard/docs/hynix_schedule_logic.js';
+const localHynixLogicPath = fileURLToPath(new URL('../docs/hynix_schedule_logic.js', import.meta.url));
+
+function loadHynixScheduleLogic() {
+  for (const candidate of [attendanceBoardHynixLogicPath, localHynixLogicPath]) {
+    if (existsSync(candidate)) {
+      return require(candidate);
+    }
+  }
+  throw new Error(`Unable to locate hynix_schedule_logic.js in ${attendanceBoardHynixLogicPath} or ${localHynixLogicPath}`);
+}
+
+const hynixScheduleLogic = loadHynixScheduleLogic();
 
 const DAY_START_HOUR = 6;
 const DAY_MINUTES = 24 * 60;
@@ -102,10 +116,21 @@ assert.match(appSource, /DFX\[empId\]\|\|S\.fix\[empId\]/);
 assert.doesNotMatch(appSource, /NativeBridge|shareImage|app\/src\/main\/assets/);
 assert.doesNotMatch(appSource, new RegExp('최신' + ' 상태'));
 
-const hynixSource = readFileSync('/root/my-first-project/AttendanceBoard/docs/hynix/index.html', 'utf8');
-assert.match(hynixSource, /hynix_schedule_logic\.js/);
-const hynixAppSource = readFileSync('/root/my-first-project/AttendanceBoard/docs/hynix/app.js', 'utf8');
-assert.match(hynixAppSource, /window\.HynixScheduleLogic/);
-assert.match(hynixAppSource, /canonicalFixedScheduleEntry\(empId, emp, fixedEntry\)/);
+const externalHynixIndexPath = '/root/my-first-project/AttendanceBoard/docs/hynix/index.html';
+const externalHynixAppPath = '/root/my-first-project/AttendanceBoard/docs/hynix/app.js';
+
+if (existsSync(externalHynixIndexPath) && existsSync(externalHynixAppPath)) {
+  const hynixSource = readFileSync(externalHynixIndexPath, 'utf8');
+  assert.match(hynixSource, /hynix_schedule_logic\.js/);
+  const hynixAppSource = readFileSync(externalHynixAppPath, 'utf8');
+  assert.match(hynixAppSource, /window\.HynixScheduleLogic/);
+  assert.match(hynixAppSource, /canonicalFixedScheduleEntry\(empId, emp, fixedEntry\)/);
+} else {
+  const localHynixSource = readFileSync(new URL('../docs/hynix_schedule_logic.js', import.meta.url), 'utf8');
+  assert.match(localHynixSource, /canonicalFixedScheduleEntry\(empId, emp, fixed\)/);
+  const localAppSource = readFileSync(new URL('../docs/app.js', import.meta.url), 'utf8');
+  assert.match(localAppSource, /function canonicalFixedSchedule\(empId\)/);
+  assert.match(localAppSource, /DFX\[empId\]\|\|S\.fix\[empId\]\|\|null/);
+}
 
 console.log('schedule logic tests passed');

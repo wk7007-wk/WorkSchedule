@@ -11,6 +11,7 @@
 - 카톡 이미지 출력: `docs/app.js`가 최신 근무표 PNG를 만들고 웹 공유 메뉴 또는 다운로드로 넘긴다.
 - 카톡 이미지 근무 확인: `docs/app.js` confirmation panel이 `/packhelper/storebot_termux/work_schedule_image_preview_queue`를 읽고, 확인 시 `/packhelper/storebot_termux/confirmed_schedule_write_requests`에 `confirmed_schedule_write_request`만 enqueue한다. 이 panel은 `/workschedule_v2` 직접 write를 하지 않는다.
 - StoreBotTermux/대시보드/HynixOps는 WorkSchedule 데이터를 소비한다. 원본 저장 경계는 Firebase `/workschedule_v2`다.
+- `/packhelper/storebot_summary/schedule`은 캐시/표시용이고 canonical 근무표 근거가 아니다.
 - 운영메뉴얼 조회: `docs/manual_logic.js` + `docs/app.js` 운영탭. Firebase `/packhelper/ops_manual`을 read-only durable source로 합산하고, 브라우저 `localStorage` 키는 초안/보조 후보와 intake 큐만 쓴다.
 - 메모추가 통합 입력: `docs/index.html`/`docs/app.js` intake panel. 텍스트, URL, 이미지(붙여넣기/드래그/업로드), 카카오 대화, CLI, 타이머앱, 사이트 입력을 즉시 envelope로 큐잉한다.
 - 공통 스키마 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
@@ -57,6 +58,7 @@
 - Firebase `/workschedule_v2`가 근무 데이터 단일 원본이다.
 - `localStorage`는 인증 토큰, UI/메뉴얼 초안 후보, 이미지 출력 due 상태 같은 브라우저 보조 상태만 보관한다.
 - 운영메뉴얼 durable source path는 `/packhelper/ops_manual`이며 WorkSchedule은 읽기 전용으로 표시한다.
+- 근무표 canonical 계산은 `/workschedule_v2/employees + fixed_schedules + overrides + status` 우선이며 `storebot_summary/schedule`은 표시 캐시로만 둔다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제/근무 clear는 삭제 대신 명시 값으로 남긴다.
 - `/packhelper/storebot_attendance`는 읽기 전용이다.
