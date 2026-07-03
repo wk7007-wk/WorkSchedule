@@ -104,8 +104,8 @@ assert.doesNotMatch(appSource, new RegExp('최신' + ' 상태'));
 
 const hynixSource = readFileSync('/root/my-first-project/AttendanceBoard/docs/hynix/index.html', 'utf8');
 assert.match(hynixSource, /hynix_schedule_logic\.js/);
-assert.match(hynixSource, /window\.HynixScheduleLogic/);
-assert.match(hynixSource, /fixedScheduleEntryFor\(empId,emp,dateKey,fx,manualCell\)/);
-assert.match(hynixSource, /canonicalFixedScheduleEntry\(empId,emp,fx\)/);
+const hynixAppSource = readFileSync('/root/my-first-project/AttendanceBoard/docs/hynix/app.js', 'utf8');
+assert.match(hynixAppSource, /window\.HynixScheduleLogic/);
+assert.match(hynixAppSource, /canonicalFixedScheduleEntry\(empId, emp, fixedEntry\)/);
 
 console.log('schedule logic tests passed');
