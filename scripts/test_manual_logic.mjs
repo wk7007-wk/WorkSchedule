@@ -46,6 +46,26 @@ const output = manual.normalizeManualEntry(
 assert.equal(output.category, 'output');
 assert.match(output.body, /하이닉스 사이트 화면과 카카오 전달용 PNG 이미지/);
 
+const intakeEnvelope = manual.buildInputEnvelope(
+  {
+    text: '카카오 대화 정리',
+    url: 'https://example.com/memo',
+    attachments: [{ name: 'shot.png', type: 'image/png', size: 1024 }],
+  },
+  { sourceType: 'image', sourceLabel: '붙여넣기', sourceOrigin: 'workschedule_web' },
+);
+assert.equal(intakeEnvelope.requestType, 'codex_ops_intake');
+assert.equal(intakeEnvelope.queueTarget, 'codex_ops');
+assert.equal(intakeEnvelope.sourceType, 'image');
+assert.ok(intakeEnvelope.decisionRequired.resource);
+assert.match(intakeEnvelope.body, /URL: https:\/\/example.com\/memo/);
+assert.match(intakeEnvelope.body, /\[image\] shot\.png/);
+assert.ok(intakeEnvelope.searchIndex.includes('shot.png'));
+
+const intakeMemo = manual.inputEnvelopeToManualMemo(intakeEnvelope);
+assert.ok(intakeMemo.sourceTypes.includes('intake'));
+assert.ok(intakeMemo.searchIndex.includes('shot.png'));
+
 const firebasePayload = {
   entries: {
     remote_share: {
@@ -73,6 +93,26 @@ const mergedFirebase = manual.mergeManualFromFirebasePayload([], [], firebasePay
 assert.ok(mergedFirebase.some((item) => item.category === 'chat' && item.tags.includes('kakao')));
 assert.ok(mergedFirebase.some((item) => item.category === 'order' && /발주/.test(item.body)));
 
+const briefing = manual.buildBriefingSections(
+  [merged[0], recipe, output, intakeMemo],
+  {
+    schedule: {
+      summary: '2026-07-03',
+      count: 2,
+      workSummary: '2명 출근',
+      taskSummary: '1건',
+      discountSummary: '0건',
+      newsSummary: '0건',
+      weatherSummary: '맑음',
+      manualSummary: '오늘 필요한 메뉴얼',
+    },
+    intakeCount: 1,
+  },
+);
+assert.ok(briefing.sections.some((section) => section.title === '할일/알람'));
+assert.ok(briefing.sections.some((section) => section.title === '오늘 필요한 메뉴얼'));
+assert.ok(briefing.indexable.some((item) => String(item.searchIndex || '').includes('shot.png')));
+
 const nestedFirebase = manual.normalizeFirebaseManualPayload({
   data: {
     remote_output: {
@@ -96,8 +136,16 @@ assert.equal(filtered.length, 1);
 const indexSource = readFileSync(new URL('../docs/index.html', import.meta.url), 'utf8');
 assert.match(indexSource, /manual_logic\.js/);
 assert.match(indexSource, /data-tab="ops"/);
+assert.match(indexSource, /intakePanel/);
+assert.match(indexSource, /intakeQueueBtn/);
+
+const appSource = readFileSync(new URL('../docs/app.js', import.meta.url), 'utf8');
+assert.match(appSource, /briefing-sections/);
+assert.match(appSource, /queueIntakeFromForm/);
 
 const manualSource = readFileSync(new URL('../docs/manual_logic.js', import.meta.url), 'utf8');
 assert.doesNotMatch(manualSource, /app\/src\/main\/assets|NativeBridge|adb|apk|usb|서버폰/i);
+assert.match(manualSource, /buildInputEnvelope/);
+assert.match(manualSource, /buildBriefingSections/);
 
 console.log('manual logic tests passed');
