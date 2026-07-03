@@ -9,6 +9,7 @@
 - 공식 웹 출력은 `docs/` GitHub Pages `https://wk7007-wk.github.io/WorkSchedule/`다.
 - 하이닉스 사이트/HynixOps, StoreBotTermux, 대시보드는 Firebase `/workschedule_v2`를 소비한다.
 - 카톡 전달은 최신 근무표 PNG 이미지를 웹 공유 메뉴 또는 다운로드 파일로 출력한다.
+- 카톡 이미지 근무 확인은 preview queue 항목을 사람이 확인한 뒤 backend confirmed request queue로만 넘긴다.
 
 ## 절대 기준
 - Firebase `/workschedule_v2`가 단일 근무 데이터 원본이다.
@@ -16,6 +17,8 @@
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제와 근무 clear는 삭제가 아니라 명시 값으로 남긴다.
 - 표준입력은 공식 WorkSchedule 웹에서 `/workschedule_v2/overrides`, `status`에 직접 저장한다.
+- 카톡 이미지 근무 확인 panel은 `/workschedule_v2`에 직접 저장하지 않는다. preview queue를 읽고, 확인 시 `/packhelper/storebot_termux/confirmed_schedule_write_requests`에 `confirmed_schedule_write_request`를 enqueue한다.
+- confirmed request live 실행 의도는 `dry_run=false`와 `execute_live_write=true`가 동시에 있을 때만 보낸다. 기본은 dry-run 확인 요청이다.
 - 공통 해석 순서는 날짜별 `overrides` state=shift/off/clear -> `fixed_schedules/{empId}` fallback -> 미입력이다.
 - 출근 원본 `/packhelper/storebot_attendance/{date}`는 수정하지 않고, 읽은 일자 데이터만 `/workschedule_v2/attendance_history/{date}`에 idempotent PUT으로 보존한다.
 - StoreBotTermux 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터 저장 경계는 WorkSchedule/Firebase가 가진다.
@@ -34,6 +37,7 @@
 - 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.
 - 스와이프는 날짜 변경이며 탭 전환으로 바꾸지 않는다.
 - 직원 공개 화면과 관리자 조작 화면의 경계를 섞지 않는다.
+- 카톡 이미지 근무 확인은 기존 표준입력/근무 수정 UI와 별도 panel로 둔다. 사용자가 preview item을 선택해 `date/employee/action/shift/off/clear`를 보정하고 확인/반려/보류한다.
 
 ## 근무표 전달 품질 기준
 - 근무표 전달은 원본 해상도에 가까운 PNG 이미지 출력을 기준으로 한다.
@@ -46,6 +50,7 @@
 
 ## 데이터/경계 기준
 - 주요 경로는 `/workschedule_v2/employees`, `fixed_schedules`, `overrides`, `status`, `attendance_history`다.
+- 카톡 이미지 preview 확인 경로는 `/packhelper/storebot_termux/work_schedule_image_preview_queue/{event_id}` read + review metadata patch, `/packhelper/storebot_termux/confirmed_schedule_write_requests/{request_id}` enqueue다.
 - MCP/브라우저 검증의 DB 증거는 `/workschedule_v2`, `/packhelper/ops_manual` 등 필요한 Firebase read source를 읽기 전용으로 확인한다.
 - 스키마 계약과 read-only 점검은 `/root/my-first-project/rules/workschedule_schema_contract.txt`와 `scripts/workschedule_schema_audit.py`를 기준으로 한다.
 - Firebase 쓰기 실패를 localStorage 단일 원본처럼 숨기지 않는다. 실패는 화면에서 알리고 재시도 가능해야 한다.
@@ -63,7 +68,7 @@
 - StoreBotTermux 근무표 출력과 공식 URL 안내가 같이 맞는가.
 
 ## 완료 기준
-- 검증: JS syntax, 순수 로직 테스트, Firebase read-only 증거, Playwright desktop/mobile screenshot + DOM smoke, Axe critical/serious 0 또는 사유.
+- 검증: JS syntax, 순수 로직 테스트, confirmation panel static write-boundary test, Firebase read-only 증거, Playwright desktop/mobile screenshot + DOM smoke, Axe critical/serious 0 또는 사유.
 - 전달: static deploy/browser evidence가 필요한 경우 GitHub Pages 반영 확인 gate를 통과한다.
 - Figma: 실제 file/source가 있을 때만 기준으로 쓴다.
 - 제외: Android Gradle 빌드, APK 설치, ADB 검증, 업데이트센터 배포.

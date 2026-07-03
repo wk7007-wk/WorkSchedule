@@ -9,6 +9,7 @@
 - 웹 출력: `docs/` 정적 파일, GitHub Pages `https://wk7007-wk.github.io/WorkSchedule/`
 - 하이닉스 소비자: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭
 - 카톡 이미지 출력: `docs/app.js`가 최신 근무표 PNG를 만들고 웹 공유 메뉴 또는 다운로드로 넘긴다.
+- 카톡 이미지 근무 확인: `docs/app.js` confirmation panel이 `/packhelper/storebot_termux/work_schedule_image_preview_queue`를 읽고, 확인 시 `/packhelper/storebot_termux/confirmed_schedule_write_requests`에 `confirmed_schedule_write_request`만 enqueue한다. 이 panel은 `/workschedule_v2` 직접 write를 하지 않는다.
 - StoreBotTermux/대시보드/HynixOps는 WorkSchedule 데이터를 소비한다. 원본 저장 경계는 Firebase `/workschedule_v2`다.
 - 운영메뉴얼 조회: `docs/manual_logic.js` + `docs/app.js` 운영탭. Firebase `/packhelper/ops_manual`을 read-only durable source로 합산하고, 브라우저 `localStorage` 키는 초안/보조 후보로만 쓴다.
 - 공통 스키마 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
@@ -21,6 +22,7 @@
 - `docs/manual_logic.js` — 하이닉스 메모 -> 운영메뉴얼 병합/정규화/충돌 감지 순수 모듈
 - `scripts/test_schedule_logic.mjs` — delivery 상태 계산 + docs 이미지 출력 경로 회귀 테스트
 - `scripts/test_manual_logic.mjs` — 운영메뉴얼 병합/출력 분류 회귀 테스트
+- `scripts/test_confirmation_panel_static.mjs` — confirmation panel queue contract/static write-boundary smoke 테스트
 - `APP_INTENT.md` — 앱이 아니라 Firebase DB 기반 웹/이미지 출력 도구라는 의도 SOT
 - `SPEC.txt` — 근무표 상세 스펙
 - `CLAUDE.md` — WorkSchedule 전용 작업 규칙
@@ -37,6 +39,7 @@
 - data loading: employees/fixed/overrides/status/attendance_history/storebot_attendance 로드
 - render: dashboard/day/people/month/timebar/list/ops 탭, 주간 개요, 날짜 스트립
 - actions: shift 저장/휴무/고정값, 표준입력 저장, 직원 disabled 처리, 휴무 일괄 파싱
+- confirmation queue: 카톡 이미지 preview item 표시, date/employee/action/shift/off/clear 보정, confirmed request enqueue, reject/hold review metadata patch
 
 ## Firebase 경로
 - `/workschedule_v2/employees/{empId}`
@@ -46,6 +49,8 @@
 - `/workschedule_v2/attendance_history/{yyyy-MM-dd}` — WorkSchedule 누적 근태 캐시
 - `/packhelper/storebot_attendance/{yyyy-MM-dd}` — 읽기 전용 출근 원본
 - `/packhelper/ops_manual` — 읽기 전용 운영메뉴얼 source. WorkSchedule 운영탭과 HynixOps 운영메뉴얼 탭이 소비하며, 웹은 live write를 하지 않는다.
+- `/packhelper/storebot_termux/work_schedule_image_preview_queue/{event_id}` — 카톡 이미지 근무 preview/read source. confirmation panel은 review metadata만 patch할 수 있고 schedule DB write는 하지 않는다.
+- `/packhelper/storebot_termux/confirmed_schedule_write_requests/{request_id}` — confirmation panel이 backend worker에 넘기는 confirmed request queue. 필수 payload는 `actor/source_event_id/date/employee/action/confirmed_at_ms/dry_run_result`이고 live 요청은 `dry_run=false` + `execute_live_write=true`일 때만 보낸다.
 
 ## 데이터 경계
 - Firebase `/workschedule_v2`가 근무 데이터 단일 원본이다.
@@ -61,6 +66,7 @@
 - `node --check docs/schedule_delivery_logic.js`
 - `node scripts/test_schedule_logic.mjs`
 - `node scripts/test_manual_logic.mjs`
+- `node scripts/test_confirmation_panel_static.mjs`
 - Firebase read-only 증거: `/workschedule_v2`, `/packhelper/ops_manual` 등 필요한 read source
 - Playwright desktop/mobile screenshot + DOM smoke
 - Axe critical/serious 0 또는 사유

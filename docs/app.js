@@ -3,6 +3,10 @@
 // === config ===
 const FB='https://poskds-4ba60-default-rtdb.asia-southeast1.firebasedatabase.app',FW=FB+'/workschedule_v2';
 const OPS_MANUAL_URL=FB+'/packhelper/ops_manual';
+const PREVIEW_QUEUE_PATH='/packhelper/storebot_termux/work_schedule_image_preview_queue';
+const CONFIRMED_QUEUE_PATH='/packhelper/storebot_termux/confirmed_schedule_write_requests';
+const PREVIEW_QUEUE_URL=FB+PREVIEW_QUEUE_PATH,CONFIRMED_QUEUE_URL=FB+CONFIRMED_QUEUE_PATH;
+const CONFIRM_ALLOWED_TARGETS=['/workschedule_v2/overrides','/workschedule_v2/status'];
 const READONLY=new URLSearchParams(location.search).get('readonly')==='1';
 const AUTH_DEBUG=new URLSearchParams(location.search).get('authDebug')==='1'&&['','localhost','127.0.0.1'].includes(location.hostname);
 const AUTH={pinSha256:'38083c7ee9121e17401883566a148aa5c2e2d55dc53bc4a94a026517dbff3c6b',storeLat:37.2528352,storeLng:127.4900516,radiusM:150,storageKey:'workschedule_auth_device_v1',allowedDeviceHashes:['d21a6620a9a24efe29e7b6921076e2ccd25c6f9b977154e9f8dfe4653d21bd08','c1aa36e7f5eabff58103bbc86257f3350c222b55c0d883592e438f021721681c'],
@@ -16,7 +20,7 @@ const DFX={emp1:{start:'17:00',end:'06:00',role:'주방,오토바이',kind:'fixe
 const HOL={'2026-01-01':'신정','2026-01-28':'설날연휴','2026-01-29':'설날','2026-01-30':'설날연휴','2026-03-01':'삼일절','2026-05-05':'어린이날','2026-05-06':'대체공휴일','2026-05-24':'석가탄신일','2026-06-06':'현충일','2026-08-15':'광복절','2026-09-24':'추석연휴','2026-09-25':'추석','2026-09-26':'추석연휴','2026-10-03':'개천절','2026-10-09':'한글날','2026-12-25':'성탄절','2027-01-01':'신정','2027-02-07':'설날연휴','2027-02-08':'설날','2027-02-09':'설날연휴','2027-03-01':'삼일절','2027-05-05':'어린이날','2027-05-13':'석가탄신일','2027-06-06':'현충일','2027-08-15':'광복절','2027-08-16':'대체공휴일','2027-10-03':'개천절','2027-10-04':'추석연휴','2027-10-05':'추석','2027-10-06':'추석연휴','2027-10-09':'한글날','2027-12-25':'성탄절'};
 const COLORS=['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD','#F0A500','#6C5CE7','#A8E6CF','#FF8A5C','#EA80FC','#00BCD4'];
 // === store ===
-const S={tab:'dashboard',date:new Date(),emp:{},sc:{},wsc:{},msc:{},mst:{},ah:{},xsc:{},xLoading:{},mKey:null,mLoading:false,fix:{},dof:{},cf:{},sst:{},att:{},opsManual:{entries:[],memos:[],loaded:false},sseE:null,sseS:null,gen:0,loaded:false,sec:{}};
+const S={tab:'dashboard',date:new Date(),emp:{},sc:{},wsc:{},msc:{},mst:{},ah:{},xsc:{},xLoading:{},mKey:null,mLoading:false,fix:{},dof:{},cf:{},sst:{},att:{},opsManual:{entries:[],memos:[],loaded:false},confirm:{items:[],selected:'',loading:false,error:'',lastLoadMs:0,renderedSelected:''},sseE:null,sseS:null,gen:0,loaded:false,sec:{}};
 const $=id=>document.getElementById(id);
 // === util ===
 function pad(n){return n<10?'0'+n:''+n;}
@@ -63,6 +67,7 @@ function hLbl(m){return pad(Math.floor(m/60)%24);}
 // === api ===
 async function fbG(u){try{const r=await fetch(u+'.json');if(!r.ok)throw r.status;return await r.json();}catch(e){console.error('fbG',u,e);return null;}}
 async function fbP(u,d){if(READONLY){toast('읽기 전용');return false;}try{const r=await fetch(u+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});if(!r.ok)throw r.status;trackScheduleDeliveryWrite(u);return true;}catch(e){console.error('fbP',e);toast('저장 실패');return false;}}
+async function fbPatch(u,d){if(READONLY){toast('읽기 전용');return false;}try{const r=await fetch(u+'.json',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});if(!r.ok)throw r.status;return true;}catch(e){console.error('fbPatch',u,e);toast('상태 저장 실패');return false;}}
 function hasObj(o){return o&&typeof o==='object'&&Object.keys(o).length>0;}
 function nowMeta(){const n=Date.now();return{source:'workschedule_web',updated_at:new Date(n).toISOString(),updated_at_ms:n};}
 function statusRow(st,extra){return Object.assign(nowMeta(),extra||{},{status:st,state:st,confirmed:st==='confirmed'});}
@@ -71,6 +76,133 @@ function offRowData(){return Object.assign(nowMeta(),{state:'off',type:'off',shi
 function clearRow(role){return Object.assign(nowMeta(),{state:'clear',type:'clear',shift:null,start:'',end:'',role:role||'',work:false,active:false,off:false,dayoff:false,clear:true});}
 function offIndex(overrides){const out={};if(!overrides||typeof overrides!=='object')return out;Object.keys(overrides).forEach(d=>{const day=overrides[d];if(!day||typeof day!=='object')return;Object.keys(day).forEach(e=>{const r=day[e];if(r&&typeof r==='object'&&(r.state==='off'||r.off===true||r.dayoff===true)){if(!out[e])out[e]={};out[e][d]=true;}});});return out;}
 async function cacheAtt(d,a){if(!hasObj(a))return;S.ah[d]=a;await fbP(FW+'/attendance_history/'+d,a);}
+// === schedule image confirmation queue ===
+function safeFbKey(v){return String(v||'item').trim().replace(/[.#$\[\]\/\s]+/g,'_').replace(/^_+|_+$/g,'').slice(0,180)||'item';}
+function boolish(v){return v===true||v===1||String(v||'').toLowerCase()==='true'||String(v||'').toLowerCase()==='yes'||String(v||'').toLowerCase()==='1';}
+function plainText(v){if(v==null)return'';if(typeof v==='object')return String(v.name||v.employee||v.employee_name||v.employee_id||v.id||'').trim();return String(v).trim();}
+function previewRoots(item){const out=[item];['schedule','parsed','parse','parsed_schedule','candidate','candidate_schedule','dry_run_result','write_request','confirmation','proposed_write','request'].forEach(k=>{const v=item&&item[k];if(v&&typeof v==='object')out.push(v);});const dr=item&&item.dry_run_result;if(dr&&dr.request&&typeof dr.request==='object')out.push(dr.request);return out;}
+function pickPreviewValue(item,keys){for(const root of previewRoots(item||{})){for(const key of keys){if(root&&root[key]!=null&&root[key]!=='')return root[key];}}return'';}
+function previewTs(item){const n=Number(pickPreviewValue(item,['ts_ms','created_at_ms','updated_at_ms','timestamp','event_ts_ms','received_at_ms']));return Number.isFinite(n)?(n<10000000000?n*1000:n):0;}
+function fmtTs(ms){if(!ms)return'-';const d=new Date(ms);return (d.getMonth()+1)+'/'+d.getDate()+' '+pad(d.getHours())+':'+pad(d.getMinutes());}
+function normalizeConfirmAction(v){const t=String(v||'').trim().toLowerCase();if(t.includes('clear'))return'clear';if(t.includes('off')||t.includes('dayoff'))return'off';if(t.includes('shift')||t.includes('upsert')||t==='work')return'upsert_shift';return'';}
+function previewRows(raw){if(!raw||typeof raw!=='object')return[];return Object.keys(raw).map(key=>({key,item:raw[key]||{}})).filter(r=>r.item&&typeof r.item==='object').sort((a,b)=>previewTs(b.item)-previewTs(a.item)).slice(0,30);}
+function previewField(item,key){const map={event_id:['event_id','eventId','source_event_id'],room:['room','room_name','roomName','room_id'],sender:['sender','sender_name','author'],media_kind:['media_kind','mediaKind','kind','attachment_kind'],status_text:['status_text','status','message','summary'],ocr_status:['ocr_status','ocrStatus'],parse_status:['parse_status','parseStatus'],write_status:['write_status','writeStatus']};return plainText(pickPreviewValue(item,map[key]||[key]));}
+function previewSafetyFlags(item){
+  const flags=[];['no_send','no_live_write','preview_only','execute_live_write','blocked_until_confirmed'].forEach(k=>{if(item&&item[k]!=null)flags.push(k+'='+plainText(item[k]));});
+  ['write_status','confirmation_state','safety_status'].forEach(k=>{const v=previewField(item,k);if(v)flags.push(k+'='+v);});
+  const targets=pickPreviewValue(item,['target_paths','adapter_allowed_targets','allowed_write_targets']);
+  if(Array.isArray(targets))flags.push('targets='+targets.join(','));
+  return flags.length?flags:['safety flags 없음'];
+}
+function shiftTextFromPreview(item){
+  const direct=pickPreviewValue(item,['shift','shift_text','time_range','range']);if(typeof direct==='string')return direct.trim();
+  if(direct&&typeof direct==='object'&&(direct.start||direct.end))return plainText(direct.start)+'-'+plainText(direct.end);
+  const s=plainText(pickPreviewValue(item,['start','start_time'])),e=plainText(pickPreviewValue(item,['end','end_time']));
+  return s&&e?s+'-'+e:'';
+}
+function previewSuggestion(row){
+  const item=row?row.item:{},eventId=previewField(item,'event_id')||row?.key||'';
+  let action=normalizeConfirmAction(pickPreviewValue(item,['action','schedule_action','write_action','operation']));
+  const off=boolish(pickPreviewValue(item,['off','dayoff']));
+  const clear=boolish(pickPreviewValue(item,['clear']));
+  if(!action)action=clear?'clear':off?'off':'upsert_shift';
+  return{source_event_id:eventId,date:plainText(pickPreviewValue(item,['date','work_date','schedule_date']))||dk(S.date),employee:plainText(pickPreviewValue(item,['employee','employee_name','employee_id','name','staff'])),action,shift:shiftTextFromPreview(item),role:plainText(pickPreviewValue(item,['role','job_role'])),off:action==='off'||off,clear:action==='clear'||clear,note:plainText(pickPreviewValue(item,['note','memo','status_text','summary']))};
+}
+function parseShiftRange(text){const m=String(text||'').trim().match(/^([01]?\d|2[0-3])(?::?([0-5]\d))?\s*(?:시)?\s*[-~–—]\s*([01]?\d|2[0-3])(?::?([0-5]\d))?\s*(?:시)?$/);if(!m)return null;return{start:pad(parseInt(m[1]))+':'+(m[2]||'00'),end:pad(parseInt(m[3]))+':'+(m[4]||'00')};}
+function confirmActor(){const a=authStore();return plainText(a&&a.name)||'workschedule_web';}
+async function loadConfirmQueue(){
+  S.confirm.loading=true;S.confirm.error='';rConfirmPanel();
+  const raw=await fbG(PREVIEW_QUEUE_URL);
+  S.confirm.loading=false;S.confirm.items=previewRows(raw);S.confirm.lastLoadMs=Date.now();
+  if(!S.confirm.items.some(r=>r.key===S.confirm.selected))S.confirm.selected=S.confirm.items[0]?.key||'';
+  S.confirm.renderedSelected='';rConfirmPanel();
+}
+function selectedConfirmRow(){return S.confirm.items.find(r=>r.key===S.confirm.selected)||null;}
+function renderConfirmEmployeeOptions(){const dl=$('confirmEmployeeOptions');if(!dl)return;const ids=empIds(),sig=ids.map(id=>id+':'+(S.emp[id]?.name||id)).join('|');if(dl.dataset.sig===sig)return;dl.dataset.sig=sig;dl.innerHTML=ids.map(id=>'<option value="'+esc(S.emp[id].name||id)+'"></option>').join('');}
+function setConfirmEditorDisabled(disabled){['confirmDate','confirmEmployee','confirmAction','confirmShift','confirmRole','confirmOff','confirmClear','confirmNote','confirmLive','confirmSend','confirmReject','confirmHold'].forEach(id=>{const el=$(id);if(el)el.disabled=!!disabled;});}
+function fillConfirmEditor(row){
+  const disabled=!row;setConfirmEditorDisabled(disabled);
+  const s=row?previewSuggestion(row):{source_event_id:'',date:'',employee:'',action:'upsert_shift',shift:'',role:'',off:false,clear:false,note:''};
+  if($('confirmSource'))$('confirmSource').value=s.source_event_id;
+  if($('confirmDate'))$('confirmDate').value=s.date;
+  if($('confirmEmployee'))$('confirmEmployee').value=s.employee;
+  if($('confirmAction'))$('confirmAction').value=s.action;
+  if($('confirmShift'))$('confirmShift').value=s.shift;
+  if($('confirmRole'))$('confirmRole').value=s.role;
+  if($('confirmOff'))$('confirmOff').checked=!!s.off;
+  if($('confirmClear'))$('confirmClear').checked=!!s.clear;
+  if($('confirmNote'))$('confirmNote').value=s.note;
+  if($('confirmLive'))$('confirmLive').checked=false;
+  updateConfirmActionFields();
+}
+function confirmFormPayload(quiet){
+  const row=selectedConfirmRow(),now=Date.now(),source=plainText($('confirmSource')?.value)||row?.key||'',date=plainText($('confirmDate')?.value),employee=plainText($('confirmEmployee')?.value),action=$('confirmAction')?.value||'upsert_shift',shift=plainText($('confirmShift')?.value),role=plainText($('confirmRole')?.value),note=plainText($('confirmNote')?.value),live=!!$('confirmLive')?.checked;
+  function bad(m){if(!quiet)toast(m);return{error:m};}
+  if(!row)return bad('확인할 preview를 선택해주세요');
+  if(!source)return bad('source_event_id 없음');
+  if(!date)return bad('날짜를 입력해주세요');
+  if(!employee)return bad('직원을 입력해주세요');
+  const reqId='confirmed_schedule_write_request_'+safeFbKey(source)+'_'+now;
+  const dryRunSource=row.item&&typeof row.item.dry_run_result==='object'?row.item.dry_run_result:{ok:true,source:'workschedule_confirmation_ui',generated_from_preview:true};
+  if(dryRunSource.ok===false)return bad('dry_run_result가 실패 상태입니다');
+  const payload={request_id:reqId,request_type:'confirmed_schedule_write_request',actor:confirmActor(),source_event_id:source,date,employee,action,confirmed_at_ms:now,queued_at_ms:now,dry_run:!live,execute_live_write:live,dry_run_result:Object.assign({},dryRunSource,{reviewed_at_ms:now,reviewed_by:confirmActor(),preview_event_id:source}),target_paths:CONFIRM_ALLOWED_TARGETS,adapter_allowed_targets:CONFIRM_ALLOWED_TARGETS,preview_queue_path:PREVIEW_QUEUE_PATH,confirmation_state:'confirmed',confirmed_via:'workschedule_web_confirmation_panel'};
+  if(!live)payload.no_live_write=true;
+  if(note)payload.note=note;
+  if(action==='upsert_shift'){
+    if(!shift)return bad('근무 시간을 입력해주세요');
+    const p=parseShiftRange(shift);if(!p)return bad('근무 시간은 10:00-18:00 형식으로 입력해주세요');
+    payload.shift=shift;payload.start=p.start;payload.end=p.end;
+    if(role)payload.role=role;
+  }else if(action==='off'){payload.off=true;}
+  else if(action==='clear'){payload.clear=true;}
+  return payload;
+}
+function renderConfirmPayloadPreview(){const el=$('confirmPayloadPreview');if(!el)return;const p=confirmFormPayload(true);el.textContent=p.error?p.error:JSON.stringify({request_type:p.request_type,queue_path:CONFIRMED_QUEUE_PATH,source_event_id:p.source_event_id,date:p.date,employee:p.employee,action:p.action,dry_run:p.dry_run,execute_live_write:p.execute_live_write},null,2);}
+function updateConfirmActionFields(){
+  const action=$('confirmAction')?.value||'upsert_shift',isShift=action==='upsert_shift',isOff=action==='off',isClear=action==='clear';
+  if($('confirmShift'))$('confirmShift').disabled=!isShift||!selectedConfirmRow();
+  if($('confirmRole'))$('confirmRole').disabled=!isShift||!selectedConfirmRow();
+  if($('confirmOff')){$('confirmOff').checked=isOff;$('confirmOff').disabled=!isOff||!selectedConfirmRow();}
+  if($('confirmClear')){$('confirmClear').checked=isClear;$('confirmClear').disabled=!isClear||!selectedConfirmRow();}
+  renderConfirmPayloadPreview();
+}
+function rConfirmPanel(){
+  renderConfirmEmployeeOptions();
+  const status=$('confirmQueueStatus'),list=$('confirmList');if(status){status.textContent=S.confirm.loading?'preview queue 불러오는 중':S.confirm.items.length+'건 / '+(S.confirm.lastLoadMs?fmtTs(S.confirm.lastLoadMs):'미조회');}
+  if(list){
+    if(S.confirm.loading&&!S.confirm.items.length)list.innerHTML='<div class="confirm-empty">불러오는 중...</div>';
+    else if(!S.confirm.items.length)list.innerHTML='<div class="confirm-empty">대기 중인 preview가 없습니다.</div>';
+    else list.innerHTML=S.confirm.items.map(row=>{const it=row.item,sel=row.key===S.confirm.selected,ev=previewField(it,'event_id')||row.key,room=previewField(it,'room')||'-',sender=previewField(it,'sender')||'-',wr=previewField(it,'write_status')||'-',ts=fmtTs(previewTs(it)),flags=previewSafetyFlags(it).slice(0,4).map(x=>'<span>'+esc(x)+'</span>').join('');return'<button type="button" class="confirm-item'+(sel?' active':'')+'" data-confirm-key="'+esc(row.key)+'"><strong>'+esc(ev)+'</strong><em>'+esc(ts)+' · '+esc(room)+' · '+esc(sender)+'</em><small>write '+esc(wr)+'</small><div class="confirm-flags">'+flags+'</div></button>';}).join('');
+  }
+  const row=selectedConfirmRow(),detail=$('confirmPreviewDetail');
+  if(detail){if(!row)detail.textContent='preview item을 선택하세요.';else{const it=row.item;detail.innerHTML='<div><b>event_id</b><span>'+esc(previewField(it,'event_id')||row.key)+'</span></div><div><b>room</b><span>'+esc(previewField(it,'room')||'-')+'</span></div><div><b>sender</b><span>'+esc(previewField(it,'sender')||'-')+'</span></div><div><b>media</b><span>'+esc(previewField(it,'media_kind')||'-')+'</span></div><div><b>status</b><span>'+esc(previewField(it,'status_text')||'-')+'</span></div><div><b>ocr</b><span>'+esc(previewField(it,'ocr_status')||'-')+'</span></div><div><b>parse</b><span>'+esc(previewField(it,'parse_status')||'-')+'</span></div><div><b>write</b><span>'+esc(previewField(it,'write_status')||'-')+'</span></div><div><b>ts_ms</b><span>'+esc(String(previewTs(it)||''))+'</span></div><div><b>safety</b><span>'+previewSafetyFlags(it).map(esc).join(' / ')+'</span></div>';}}
+  if(S.confirm.renderedSelected!==S.confirm.selected){S.confirm.renderedSelected=S.confirm.selected;fillConfirmEditor(row);}else renderConfirmPayloadPreview();
+}
+async function markPreviewReview(decision,payload){
+  const row=selectedConfirmRow();if(!row)return false;
+  const now=Date.now(),note=plainText($('confirmNote')?.value);
+  const patch={review_status:decision,review_decision:decision,reviewed_at_ms:now,reviewed_by:confirmActor(),review_note:note};
+  if(payload){patch.confirmed_request_id=payload.request_id;patch.confirmed_request_path=CONFIRMED_QUEUE_PATH+'/'+safeFbKey(payload.request_id);patch.live_requested=!!payload.execute_live_write;patch.dry_run=!!payload.dry_run;}
+  return await fbPatch(PREVIEW_QUEUE_URL+'/'+safeFbKey(row.key),patch);
+}
+async function enqueueConfirmedScheduleRequest(){
+  let payload=confirmFormPayload(false);if(payload.error)return;
+  if(payload.execute_live_write&&!confirm('실제 근무표 반영 요청을 backend queue에 등록합니다. 계속할까요?'))return;
+  const btn=$('confirmSend');if(btn)btn.disabled=true;
+  try{
+    const ok=await fbP(CONFIRMED_QUEUE_URL+'/'+safeFbKey(payload.request_id),payload);
+    if(!ok)return;
+    await markPreviewReview(payload.execute_live_write?'confirmed_live_requested':'confirmed_dry_run_requested',payload);
+    toast(payload.execute_live_write?'live 확인 요청 등록됨':'dry-run 확인 요청 등록됨');
+    loadConfirmQueue();
+  }finally{if(btn)btn.disabled=false;}
+}
+async function decideConfirmPreview(decision){
+  const row=selectedConfirmRow();if(!row){toast('preview를 선택해주세요');return;}
+  if(decision==='rejected'&&!confirm('이 preview를 반려로 표시할까요?'))return;
+  const ok=await markPreviewReview(decision,null);
+  if(ok){toast(decision==='hold'?'보류 표시됨':'반려 표시됨');loadConfirmQueue();}
+}
 // === schedule delivery ===
 const DL=window.WorkScheduleDeliveryLogic||{IDLE_MS:300000,PERIODIC_MS:21600000,computeDeliveryState:x=>Object.assign({targetKind:'latest_work_schedule',due:false,nextDueAtMs:null},x||{}),markScheduleChanged:(s,n)=>Object.assign({},s||{},{targetKind:'latest_work_schedule',lastChangedAtMs:n==null?Date.now():n,lastPreparedAtMs:null}),markShareIntentQueued:(s,n)=>Object.assign({},s||{},{targetKind:'latest_work_schedule',lastPreparedAtMs:n==null?Date.now():n,lastSentAtMs:n==null?Date.now():n})};
 const DELIVERY_KEY='workschedule_delivery_v1';
@@ -265,7 +397,7 @@ function attRow(eid,sh){
 // === render core ===
 let rQ=false,rA=false;
 function renderAll(f){if(f===true){doR();return;}if(rQ){rA=true;return;}rQ=true;const r=()=>{rQ=false;doR();if(rA){rA=false;renderAll();}};requestAnimationFrame?requestAnimationFrame(r):setTimeout(r,16);}
-function doR(){try{updD();}catch(e){}try{rStdPanel();}catch(e){}try{rBrief();}catch(e){}try{rTab();}catch(e){}try{renderDS();}catch(e){}if($('weekBody').classList.contains('open'))try{renderWeek();}catch(e){}}
+function doR(){try{updD();}catch(e){}try{rStdPanel();}catch(e){}try{rConfirmPanel();}catch(e){}try{rBrief();}catch(e){}try{rTab();}catch(e){}try{renderDS();}catch(e){}if($('weekBody').classList.contains('open'))try{renderWeek();}catch(e){}}
 function updD(){$('dateDisp').textContent=(S.date.getMonth()+1)+'/'+S.date.getDate()+' '+DOW_KR[S.date.getDay()];}
 // === common builders ===
 function dayMap(k){return k===dk(S.date)?S.sc:(S.wsc[k]||S.msc[k]||S.xsc[k]||{});}
@@ -638,6 +770,14 @@ $('stdOff').addEventListener('change',setStdDisabled);
 $('stdSave').addEventListener('click',saveStd);
 $('stdDate').addEventListener('change',()=>{const v=$('stdDate').value;if(!v)return;const p=v.split('-');S.date=new Date(+p[0],+p[1]-1,+p[2]);onDC();});
 $('stdEmp').addEventListener('change',()=>{const e=S.emp[$('stdEmp').value];if(e&&e.role&&['주방','차배달','오토바이'].includes(e.role))$('stdRole').value=e.role;});
+// === confirmation panel events ===
+$('confirmRefresh')?.addEventListener('click',loadConfirmQueue);
+$('confirmList')?.addEventListener('click',e=>{const it=e.target.closest('[data-confirm-key]');if(!it)return;S.confirm.selected=it.dataset.confirmKey;S.confirm.renderedSelected='';rConfirmPanel();});
+['confirmDate','confirmEmployee','confirmShift','confirmRole','confirmNote','confirmLive'].forEach(id=>$(id)?.addEventListener('input',renderConfirmPayloadPreview));
+$('confirmAction')?.addEventListener('change',updateConfirmActionFields);
+$('confirmSend')?.addEventListener('click',enqueueConfirmedScheduleRequest);
+$('confirmReject')?.addEventListener('click',()=>decideConfirmPreview('rejected'));
+$('confirmHold')?.addEventListener('click',()=>decideConfirmPreview('hold'));
 // === nav ===
 $('prevD').addEventListener('click',()=>{S.date.setDate(S.date.getDate()-1);onDC();});$('nextD').addEventListener('click',()=>{S.date.setDate(S.date.getDate()+1);onDC();});
 $('prevW').addEventListener('click',()=>{S.date.setDate(S.date.getDate()-7);onDC();});$('nextW').addEventListener('click',()=>{S.date.setDate(S.date.getDate()+7);onDC();});
@@ -670,8 +810,8 @@ $('urlBtn').addEventListener('click',()=>{if(navigator.clipboard)navigator.clipb
 // === collapsible + misc ===
 (function(tId,aId,bId,def){const b=$(bId),a=$(aId);if(!b||!a||!$(tId))return;if(def){b.classList.add('open');a.classList.add('open');}$(tId).addEventListener('click',()=>{const o=b.classList.toggle('open');a.classList.toggle('open',o);S.sec[bId]=o;if(o&&bId==='weekBody')renderAll(true);});})('weekToggle','weekArrow','weekBody',false);
 $('refreshBtn').addEventListener('click',()=>{toast('새로고침...');location.reload();});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!document.body.classList.contains('auth-locked')){connectSSE();loadData();}});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!document.body.classList.contains('auth-locked')){connectSSE();loadData();loadConfirmQueue();}});
 [$('shiftModal'),$('empModal'),$('empEditModal')].forEach(m=>{if(m)m.addEventListener('click',e=>{if(e.target===m)closeM(m);});});
 // === init ===
-initAuthGate(()=>{S.date=new Date();updD();bTS();setupDel();loadData();connectSSE();renderDeliveryPanel();queueDeliveryRender();});
+initAuthGate(()=>{S.date=new Date();updD();bTS();setupDel();loadData();loadConfirmQueue();connectSSE();renderDeliveryPanel();queueDeliveryRender();});
 })();
