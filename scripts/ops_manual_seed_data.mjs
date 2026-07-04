@@ -8,22 +8,6 @@ export const OPS_MANUAL_SEED_PAYLOAD = {
   updated_at_ms: 1783123200000,
   entries: [
     {
-      id: 'seed_order_chicken_thigh_out_of_stock',
-      category: 'order',
-      title: '닭다리 품절 주문 처리',
-      summary: '닭다리가 품절이면 재고 확인, 대체 가능 여부, 고객 안내 순서로 처리한다.',
-      body: '- 주문 접수 전에 닭다리 재고를 먼저 확인한다.\n- 품절이면 대체 메뉴 가능 여부와 안내 문구를 분리한다.\n- 이미 들어온 주문은 임의 취소보다 고객 확인을 우선한다.',
-      tags: ['order', 'safety', 'stock', 'customer'],
-      search_text: '닭다리 품절 주문 처리 재고 대체 메뉴 고객 확인',
-      source: OPS_MANUAL_SEED_SOURCE,
-      sourceIds: ['seed_order_chicken_thigh_out_of_stock'],
-      sourceTypes: ['manual', OPS_MANUAL_SEED_SOURCE],
-      status: 'active',
-      updatedAt: 1783123200000,
-      updated_at_ms: 1783123200000,
-      updated_at: '2026-07-04T00:00:00.000Z',
-    },
-    {
       id: 'seed_manual_input_principles',
       category: 'manual',
       title: '운영메뉴얼 입력 원칙',

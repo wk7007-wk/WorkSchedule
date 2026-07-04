@@ -114,7 +114,8 @@ assert.match(appSource, /navigator\.share|downloadCompositeImage/);
 assert.match(appSource, /workschedule_delivery_cli_patch/);
 assert.match(appSource, /function canonicalFixedSchedule\(empId\)/);
 assert.match(appSource, /DFX\[empId\]\|\|S\.fix\[empId\]/);
-assert.match(indexSource, /근무 직접 수정/);
+assert.match(indexSource, /근무 수정/);
+assert.match(indexSource, /workEditBtn/);
 assert.doesNotMatch(appSource, /NativeBridge|shareImage|app\/src\/main\/assets/);
 assert.doesNotMatch(appSource, new RegExp('최신' + ' 상태'));
 

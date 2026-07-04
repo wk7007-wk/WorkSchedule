@@ -103,6 +103,11 @@ assert.equal(firebaseManual.memos[0].category, 'order');
 const mergedFirebase = manual.mergeManualFromFirebasePayload([], [], firebasePayload, { sourcePath: '/packhelper/ops_manual' });
 assert.ok(mergedFirebase.some((item) => item.category === 'chat' && item.tags.includes('kakao')));
 assert.ok(mergedFirebase.some((item) => item.category === 'order' && /발주/.test(item.body)));
+assert.equal(manual.CATEGORIES.customer_support.label, '고객응대');
+assert.equal(manual.CATEGORIES.platform_help.label, '플랫폼 안내');
+assert.equal(manual.CATEGORIES.manual.label, '입력원칙');
+assert.equal(manual.CATEGORIES.task.label, '할일');
+assert.equal(manual.CATEGORIES.discount.label, '할인행사');
 
 const briefing = manual.buildBriefingSections(
   [merged[0], recipe, output, intakeMemo],
@@ -165,13 +170,14 @@ assert.match(indexSource, /manual_logic\.js/);
 assert.match(indexSource, /data-tab="ops"/);
 assert.match(indexSource, /intakePanel/);
 assert.match(indexSource, /intakeQueueBtn/);
-assert.match(indexSource, /근무 직접 수정/);
+assert.match(indexSource, /근무 수정/);
 
 const appSource = readFileSync(new URL('../docs/app.js', import.meta.url), 'utf8');
 assert.match(appSource, /briefing-sections/);
 assert.match(appSource, /queueIntakeFromForm/);
-assert.match(appSource, /ops-contract/);
+assert.match(appSource, /ops-manual-more/);
 assert.match(appSource, /intake-candidates/);
+assert.match(appSource, /workEditBtn/);
 
 const manualSource = readFileSync(new URL('../docs/manual_logic.js', import.meta.url), 'utf8');
 assert.doesNotMatch(manualSource, /app\/src\/main\/assets|NativeBridge|adb|apk|usb|서버폰/i);

@@ -465,14 +465,33 @@ function rStdPanel(){
   if(sd.value!==dk(S.date))sd.value=dk(S.date);
   const cur=se.value,ids=empIds();let sig=ids.join('|')+'|'+ids.map(id=>S.emp[id]?.name||id).join('|');
   if(se.dataset.sig!==sig){se.dataset.sig=sig;se.innerHTML='<option value="">직원 선택</option>'+ids.map(id=>'<option value="'+id+'">'+esc(S.emp[id].name||id)+'</option>').join('');if(cur&&ids.includes(cur))se.value=cur;}
+  renderStdPreview();
 }
-function setStdDisabled(){const off=$('stdOff')?.checked;['stdStart','stdEnd','stdRole'].forEach(id=>{const el=$(id);if(el)el.disabled=!!off;});}
+function stdDateLabel(value){
+  const d=String(value||dk(S.date));
+  const parts=d.split('-');
+  if(parts.length!==3)return d;
+  const dt=new Date(+parts[0],+parts[1]-1,+parts[2]);
+  return parts[1]+'/'+parts[2]+'('+DOW_KR[dt.getDay()]+')';
+}
+function stdPreviewText(){
+  const d=$('stdDate')?.value||dk(S.date),eid=$('stdEmp')?.value,emp=S.emp[eid];
+  if(!emp)return'직원과 날짜를 고르면 저장 내용이 보입니다.';
+  const role=$('stdRole')?.value||'미지정';
+  if($('stdOff')?.checked)return emp.name+' · '+stdDateLabel(d)+' · 휴무 저장 요청';
+  const s=$('stdStart')?.value||'--:--',e=$('stdEnd')?.value||'--:--';
+  return emp.name+' · '+stdDateLabel(d)+' · '+s+' ~ '+e+' · '+role;
+}
+function renderStdPreview(){const el=$('stdPreview');if(!el)return;el.innerHTML='<strong>저장 내용</strong> '+esc(stdPreviewText());}
+function focusStdPanel(){const panel=$('stdPanel');if(!panel)return;panel.scrollIntoView({behavior:'smooth',block:'start'});panel.classList.add('highlight');clearTimeout(panel._hl);panel._hl=setTimeout(()=>panel.classList.remove('highlight'),1200);}
+function setStdDisabled(){const off=$('stdOff')?.checked;['stdStart','stdEnd','stdRole'].forEach(id=>{const el=$(id);if(el)el.disabled=!!off;});renderStdPreview();}
 async function saveStd(){
   const d=$('stdDate').value||dk(S.date),eid=$('stdEmp').value,off=$('stdOff').checked;
   if(!eid||!S.emp[eid]){toast('직원을 선택해주세요');return;}
   const stUrl=FW+'/status/'+d+'/'+eid,ovUrl=FW+'/overrides/'+d+'/'+eid;
   const btn=$('stdSave');btn.disabled=true;
   try{
+    if(!confirm((off?'휴무':'근무')+' 저장 요청을 보낼까요?\n\n'+stdPreviewText()))return;
     if(off){
       const ok=await Promise.all([fbP(ovUrl,offRowData()),fbP(stUrl,statusRow('off'))]);
       if(!ok.every(Boolean)){toast('저장 실패');return;}
@@ -804,35 +823,37 @@ function rOpsManual(){
   const con=$('opsCon');if(!con)return;
   const wasFocused=document.activeElement&&document.activeElement.id==='opsSearch',caret=wasFocused?document.activeElement.selectionStart:null;
   const logic=window.WorkScheduleManualLogic,all=manualEntries();
-  const cat=S.sec.opsCat||'all',tag=S.sec.opsTag||'all',q=S.sec.opsQ||'';
-  const filtered=logic?logic.filterManualEntries(all,{category:cat,tag,query:q}):all;
+  const cat=S.sec.opsCat||'all',q=S.sec.opsQ||'';
+  const filtered=logic?logic.filterManualEntries(all,{category:cat,query:q}):all;
   const cats=['all'].concat((logic?.CATEGORY_ORDER||[]).filter(c=>all.some(x=>x.category===c)));
-  const tags=['all'].concat(Array.from(new Set(all.flatMap(x=>x.tags||[]))).sort((a,b)=>manualTagLabel(a).localeCompare(manualTagLabel(b),'ko')));
   const catChips=cats.map(c=>manualChip(c==='all'?'전체':(logic?.categoryLabel(c)||c),cat===c,'data-ops-cat',c)).join('');
-  const tagChips=tags.map(t=>manualChip(t==='all'?'전체 태그':manualTagLabel(t),tag===t,'data-ops-tag',t)).join('');
   const cards=filtered.length?filtered.map(item=>{
     const conflicts=(item.conflicts||[]).length?'<div class="ops-conflict">확인 필요: '+esc((item.conflicts||[]).join(' / '))+'</div>':'';
-    const tagsHtml=(item.tags||[]).slice(0,6).map(t=>'<span class="ops-tag">'+esc(manualTagLabel(t))+'</span>').join('');
+    const sourceCount=Number(item.sourceCount||0)||[].concat(item.sourceIds||[],item.sourceUrls||[]).filter(Boolean).length;
+    const updatedAt=Number(item.updatedAt||0)||0;
+    const updatedLabel=updatedAt?new Date(updatedAt).getFullYear()+'-'+pad(new Date(updatedAt).getMonth()+1)+'-'+pad(new Date(updatedAt).getDate()):'';
+    const detailBits=[];
+    if(sourceCount)detailBits.push('관련 출처 '+sourceCount+'개');
+    if(updatedLabel)detailBits.push('최근 갱신 '+updatedLabel);
+    const more=detailBits.length?'<details class="ops-manual-more"><summary>출처/갱신</summary><div class="ops-manual-more-body">'+detailBits.map(x=>'<div>'+esc(x)+'</div>').join('')+'</div></details>':'';
     return '<article class="ops-manual-card" data-category="'+esc(item.category||'etc')+'">'+
       '<div class="ops-manual-card-head"><h3>'+esc(item.title||'운영 기준')+'</h3><span class="ops-cat">'+esc(item.categoryLabel||logic?.categoryLabel(item.category)||'기타')+'</span></div>'+
       '<p class="ops-summary">'+esc(item.summary||'')+'</p>'+
       '<p class="ops-body">'+esc(item.body||'')+'</p>'+
-      (tagsHtml?'<div class="ops-tags">'+tagsHtml+'</div>':'')+
+      more+
       conflicts+
     '</article>';
   }).join(''):'<div class="ops-empty">조건에 맞는 운영메뉴얼이 없습니다.</div>';
   con.innerHTML='<div class="ops-manual-view">'+
     '<div class="ops-manual-head"><div class="ops-manual-title"><strong>운영메뉴얼</strong><span class="ops-manual-count">'+filtered.length+' / '+all.length+'</span></div>'+
-    '<div class="ops-contract"><span class="ops-contract-chip">DB 원천: /packhelper/ops_manual</span><span class="ops-contract-chip">입력 원천: 메모추가 envelope</span><span class="ops-contract-chip">정리 주체: Codex / CLI</span></div>'+
     '<input class="ops-search" id="opsSearch" type="search" placeholder="메뉴얼 검색" value="'+esc(q)+'">'+
-    '<div class="ops-chip-row">'+catChips+'</div><div class="ops-chip-row">'+tagChips+'</div></div>'+
+    '<div class="ops-chip-row">'+catChips+'</div></div>'+
     '<div class="ops-manual-list">'+cards+'</div></div>';
   const input=$('opsSearch');if(input){
     input.addEventListener('input',e=>{S.sec.opsQ=e.target.value;rOpsManual();});
     if(wasFocused){input.focus();if(caret!==null)input.setSelectionRange(caret,caret);}
   }
-  con.querySelectorAll('[data-ops-cat]').forEach(btn=>btn.addEventListener('click',()=>{S.sec.opsCat=btn.dataset.opsCat;S.sec.opsTag='all';rOpsManual();}));
-  con.querySelectorAll('[data-ops-tag]').forEach(btn=>btn.addEventListener('click',()=>{S.sec.opsTag=btn.dataset.opsTag;rOpsManual();}));
+  con.querySelectorAll('[data-ops-cat]').forEach(btn=>btn.addEventListener('click',()=>{S.sec.opsCat=btn.dataset.opsCat;rOpsManual();}));
 }
 function rIntakePanel(){
   const source=$('intakeSource'),text=$('intakeText'),url=$('intakeUrl'),status=$('intakeStatus');
@@ -986,10 +1007,11 @@ $('dayoffMgrBtn').addEventListener('click',()=>{rDL();openM(doMod);});$('dayoffC
 $('doAddBtn').addEventListener('click',async()=>{const e=$('doEmpSel').value,d=$('doDate').value;if(!e||!d)return;if(!S.dof[e])S.dof[e]={};S.dof[e][d]=true;const row=offRowData();fbP(FW+'/overrides/'+d+'/'+e,row);fbP(FW+'/status/'+d+'/'+e,statusRow('off'));if(d===dk(S.date)){S.sc[e]=row;renderAll();}toast((S.emp[e]?.name||'')+' '+d+' 휴무 등록');rDL();});
 $('doBulkBtn').addEventListener('click',async()=>{const t=$('doBulk').value.trim();if(!t)return;const entries=pBulk(t);if(!entries.length){toast('인식된 휴무 없음');return;}for(const x of entries){if(!S.dof[x.e])S.dof[x.e]={};S.dof[x.e][x.d]=true;const row=offRowData();await fbP(FW+'/overrides/'+x.d+'/'+x.e,row);await fbP(FW+'/status/'+x.d+'/'+x.e,statusRow('off'));if(x.d===dk(S.date))S.sc[x.e]=row;}$('doBulk').value='';toast(entries.length+'건 등록');rDL();if(entries.some(x=>x.d===dk(S.date)))renderAll();});
 // === standard input events ===
-$('stdOff').addEventListener('change',setStdDisabled);
+$('stdOff').addEventListener('change',()=>{setStdDisabled();renderStdPreview();});
 $('stdSave').addEventListener('click',saveStd);
-$('stdDate').addEventListener('change',()=>{const v=$('stdDate').value;if(!v)return;const p=v.split('-');S.date=new Date(+p[0],+p[1]-1,+p[2]);onDC();});
-$('stdEmp').addEventListener('change',()=>{const e=S.emp[$('stdEmp').value];if(e&&e.role&&['주방','차배달','오토바이'].includes(e.role))$('stdRole').value=e.role;});
+$('stdDate').addEventListener('change',()=>{const v=$('stdDate').value;if(!v)return;const p=v.split('-');S.date=new Date(+p[0],+p[1]-1,+p[2]);renderStdPreview();onDC();});
+$('stdEmp').addEventListener('change',()=>{const e=S.emp[$('stdEmp').value];if(e&&e.role&&['주방','차배달','오토바이'].includes(e.role))$('stdRole').value=e.role;renderStdPreview();});
+['stdStart','stdEnd','stdRole'].forEach(id=>$(id)?.addEventListener('input',renderStdPreview));
 // === confirmation panel events ===
 $('confirmRefresh')?.addEventListener('click',loadConfirmQueue);
 $('confirmList')?.addEventListener('click',e=>{const it=e.target.closest('[data-confirm-key]');if(!it)return;S.confirm.selected=it.dataset.confirmKey;S.confirm.renderedSelected='';rConfirmPanel();});
@@ -998,6 +1020,7 @@ $('confirmAction')?.addEventListener('change',updateConfirmActionFields);
 $('confirmSend')?.addEventListener('click',enqueueConfirmedScheduleRequest);
 $('confirmReject')?.addEventListener('click',()=>decideConfirmPreview('rejected'));
 $('confirmHold')?.addEventListener('click',()=>decideConfirmPreview('hold'));
+$('workEditBtn')?.addEventListener('click',focusStdPanel);
 // === nav ===
 $('prevD').addEventListener('click',()=>{S.date.setDate(S.date.getDate()-1);onDC();});$('nextD').addEventListener('click',()=>{S.date.setDate(S.date.getDate()+1);onDC();});
 $('prevW').addEventListener('click',()=>{S.date.setDate(S.date.getDate()-7);onDC();});$('nextW').addEventListener('click',()=>{S.date.setDate(S.date.getDate()+7);onDC();});
