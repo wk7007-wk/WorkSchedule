@@ -20,6 +20,7 @@
 - `docs/index.html` — WorkSchedule 웹 UI, 인증 gate, intake panel, 근무 수정, 종합 이미지 출력 버튼
 - `docs/app.js` — 단일 IIFE 웹 로직. Firebase fetch/write, SSE, 렌더, 이미지 출력, intake 큐잉, 브리핑 요약, 인증/근무 수정 요청 연결
 - `docs/auth_std_logic.js` — PIN/GPS 상태 요약과 표준 근무 수정 요청 객체 생성 순수 모듈
+- `docs/ops_manual_seed.js` — `/packhelper/ops_manual`가 비어도 직원용 운영메뉴얼 필수 항목(배민/쿠팡/BBQ/쿠폰)을 유지하는 공개 seed fallback
 - `docs/style.css` — WorkSchedule 웹 스타일
 - `docs/schedule_delivery_logic.js` — 5분 idle/6시간 최신 근무표 이미지 출력 due 계산 순수 모듈
 - `docs/manual_logic.js` — 하이닉스 메모 -> 직원용 메뉴얼 병합/정규화/충돌 감지 + 숨은 메타 유지 + intake envelope 후보 도메인/briefing empty-state contract 순수 모듈

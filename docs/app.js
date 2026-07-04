@@ -706,15 +706,39 @@ function rList(){
 }
 // === dashboard / multi views ===
 function rDashboard(){
-  const con=$('dashCon');if(!con)return;const d=dk(S.date),st=dayStats(d),today=dk(new Date()),ts=dayStats(today);
+  const con=$('dashCon');if(!con)return;const d=dk(S.date),st=dayStats(d),today=dk(new Date()),ts=dayStats(today),logic=window.WorkScheduleManualLogic,entries=manualEntries();
   if(today!==d&&!S.wsc[today]&&!S.msc[today]&&!S.xsc[today])loadDayCache(today);
+  const dashBriefing=logic&&logic.buildBriefingSections?logic.buildBriefingSections(entries,{schedule:{
+    summary:d+' '+(DOW_KR[S.date.getDay()]||''),
+    count:st.work.length,
+    workSummary:st.work.length+'명 출근 / '+fmtH(st.hours)+'h',
+    taskSummary:'할일·알람 · 입력 큐 '+intakeQueueCount()+'건',
+    discountSummary:'할인/행사 확인 필요',
+    newsSummary:'뉴스/월드컵 확인 필요',
+    weatherSummary:WEATHER_LOCATION.name,
+    manualSummary:'오늘 필요한 메뉴얼 '+(entries.length?entries[0].title:'대기')
+  },intakeCount:intakeQueueCount()}):null;
+  const focusEntries=entries.filter(item=>/배민|쿠팡|BBQ|쿠폰|기프티콘/.test(String(item.title||''))).slice(0,4);
+  const manualHighlights=(focusEntries.length?focusEntries:entries).slice(0,4);
   let h='<div class="view-pad"><div class="summary-title"><div>'+d+' '+DOW_KR[S.date.getDay()]+' 대시보드</div><span>'+st.confirmed+'/'+st.work.length+' 확정</span></div>';
   h+='<div class="dash-grid">'+statCard(st.work.length+'명','근무','#E0E0EC')+statCard(fmtH(st.hours)+'h','총시간','#FFD700')+statCard(st.missing.length+'명','미입력','#9090A8')+statCard(st.off.length+'명','휴무','#E74C3C')+statCard(st.attStart+'건','실출근','#2ECC71')+statCard(st.attEnd+'건','실퇴근','#4ECDC4')+'</div>';
+  if(dashBriefing){
+    h+='<div class="summary-card dash-callout-card"><div class="summary-title"><div>브리핑</div><span>첫 화면 요약</span></div>';
+    h+='<div class="dash-callout-copy">근무, 일정/할일/행사/뉴스/날씨, 오늘 필요한 메뉴얼을 한 화면에서 먼저 확인합니다.</div>';
+    h+='<div class="dash-preview-grid">'+dashBriefing.sections.slice(0,7).map(section=>{const itemLabel=section.items&&section.items[0]?(section.items[0].title||section.items[0].summary||'항목 대기'):(section.emptyState||'항목 대기');return '<section class="briefing-section'+((section.count||0)===0?' is-empty':'')+'"><div class="briefing-section-head"><strong>'+esc(section.title)+'</strong><span>'+esc(section.count?section.count+'건':(section.emptyState||'대기'))+'</span></div><div class="briefing-section-body">'+esc(itemLabel)+'</div></section>';}).join('')+'</div>';
+    h+='<div class="dash-link-row"><button type="button" class="dash-link-btn" data-go-tab="ops">운영메뉴얼 열기</button><button type="button" class="dash-link-btn" data-go-tab="day">날짜별 근무 보기</button><button type="button" class="dash-link-btn" data-go-std="1">근무 수정 요청</button></div></div>';
+  }
+  h+='<div class="summary-card dash-callout-card"><div class="summary-title"><div>운영메뉴얼</div><span>검색 · 카테고리</span></div>';
+  h+='<div class="dash-callout-copy">직원용 한글 화면으로만 보여주고, 검색과 카테고리 탐색은 운영메뉴얼 탭에서 이어서 확인합니다.</div>';
+  h+='<div class="dash-manual-preview">'+manualHighlights.map(item=>'<article class="dash-manual-item"><strong>'+esc(item.title||'운영메뉴얼')+'</strong><span>'+esc(item.summary||'안내를 확인합니다.')+'</span></article>').join('')+'</div>';
+  h+='<div class="dash-link-row"><button type="button" class="dash-link-btn" data-go-tab="ops">검색/카테고리 열기</button><button type="button" class="dash-link-btn" data-go-tab="list">리스트 근무표 보기</button></div></div>';
   h+='<div class="summary-card"><div class="summary-title"><div>역할별 인원</div><span>선택일</span></div><div class="chip-row">'+roleChips(st.roles)+'</div></div>';
   h+='<div class="summary-card"><div class="summary-title"><div>확인 필요</div><span>미확정 '+st.unconfirmed+' / 미입력 '+st.missing.length+'</span></div><div class="chip-row">';
   h+=miniNames(st.work.filter(x=>x.status!=='confirmed'),'미확정 없음')+miniNames(st.missing,'미입력 없음')+'</div></div>';
   if(today!==d)h+='<div class="summary-card"><div class="summary-title"><div>오늘 요약</div><span>'+(S.xLoading[today]?'불러오는 중':today)+'</span></div><div class="chip-row"><span class="info-chip">근무 '+ts.work.length+'명</span><span class="info-chip">총 '+fmtH(ts.hours)+'h</span><span class="info-chip">휴무 '+ts.off.length+'명</span><span class="info-chip">미입력 '+ts.missing.length+'명</span><span class="info-chip">실출근 '+ts.attStart+'</span><span class="info-chip">실퇴근 '+ts.attEnd+'</span></div></div>';
   con.innerHTML=h+'</div>';
+  con.querySelectorAll('[data-go-tab]').forEach(btn=>btn.addEventListener('click',()=>swTab(btn.dataset.goTab)));
+  con.querySelectorAll('[data-go-std]').forEach(btn=>btn.addEventListener('click',()=>focusStdPanel()));
 }
 function rDay(){
   const con=$('dayCon');if(!con)return;const d=dk(S.date),st=dayStats(d);
@@ -783,6 +807,10 @@ function writeJsonToLocalStorage(key,value){
 function manualJson(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
 const OPS_MANUAL_KEY='hynixops_ops_manual_entries_v1';
 const OPS_MEMO_KEYS=['hynixops_ops_manual_pending_memos_v1','workschedule_hynix_ops_manual_memos_v1'];
+function seedManualEntries(){
+  const seed=window.WorkScheduleManualSeed;
+  return Array.isArray(seed&&seed.entries)?seed.entries:[];
+}
 function manualArray(value){return Array.isArray(value)?value:(value&&typeof value==='object'?Object.keys(value).map(k=>Object.assign({id:k},value[k])):[]);}
 function readManualEntries(){return manualArray(manualJson(OPS_MANUAL_KEY));}
 function readManualMemos(){return OPS_MEMO_KEYS.flatMap(k=>manualArray(manualJson(k))).filter(item=>item&&typeof item==='object'&&String(item.body||item.text||item.memo||item.content||'').trim());}
@@ -821,7 +849,10 @@ function manualEntries(){
   const logic=window.WorkScheduleManualLogic;
   if(!logic)return [];
   const remote=S.opsManual||{};
-  return logic.mergeManualFromMemo([].concat(readManualEntries(),remote.entries||[]),[].concat(readManualMemos(),remote.memos||[],queuedManualEntries()));
+  const localEntries=readManualEntries();
+  const remoteEntries=[].concat(remote.entries||[]);
+  const fallbackEntries=(!localEntries.length&&!remoteEntries.length)?seedManualEntries():[];
+  return logic.mergeManualFromMemo([].concat(localEntries,fallbackEntries,remoteEntries),[].concat(readManualMemos(),remote.memos||[],queuedManualEntries()));
 }
 function manualChip(label,active,attr,value){
   return '<button type="button" class="ops-filter-chip'+(active?' active':'')+'" '+attr+'="'+esc(value)+'">'+esc(label)+'</button>';
