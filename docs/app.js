@@ -26,7 +26,6 @@ const WEATHER_LOCATION={name:'이천시 부발읍',lat:37.2816,lng:127.4892};
 const RC={'주방':'#E67E22','차배달':'#4ECDC4','오토바이':'#FFD700'},RL={'주방':'주방','차배달':'차','오토바이':'바이크'};
 const CK='#2ECC71',CD='#9090A8',CO='#E74C3C',CB='#1A1A30';
 const DE={emp1:{name:'이원규',phone:'',role:'',hourlyRate:9860},emp2:{name:'권연옥',phone:'',role:'',hourlyRate:9860},emp3:{name:'리',phone:'',role:'',hourlyRate:9860},emp4:{name:'히오',phone:'',role:'',hourlyRate:9860},emp9:{name:'사아야',phone:'',role:'',hourlyRate:9860}};
-const DFX={emp1:{start:'17:00',end:'06:00',role:'주방,오토바이',kind:'fixed',type:'fixed'}};
 const HOL={'2026-01-01':'신정','2026-01-28':'설날연휴','2026-01-29':'설날','2026-01-30':'설날연휴','2026-03-01':'삼일절','2026-05-05':'어린이날','2026-05-06':'대체공휴일','2026-05-24':'석가탄신일','2026-06-06':'현충일','2026-08-15':'광복절','2026-09-24':'추석연휴','2026-09-25':'추석','2026-09-26':'추석연휴','2026-10-03':'개천절','2026-10-09':'한글날','2026-12-25':'성탄절','2027-01-01':'신정','2027-02-07':'설날연휴','2027-02-08':'설날','2027-02-09':'설날연휴','2027-03-01':'삼일절','2027-05-05':'어린이날','2027-05-13':'석가탄신일','2027-06-06':'현충일','2027-08-15':'광복절','2027-08-16':'대체공휴일','2027-10-03':'개천절','2027-10-04':'추석연휴','2027-10-05':'추석','2027-10-06':'추석연휴','2027-10-09':'한글날','2027-12-25':'성탄절'};
 const COLORS=['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD','#F0A500','#6C5CE7','#A8E6CF','#FF8A5C','#EA80FC','#00BCD4'];
 // === store ===
@@ -75,7 +74,7 @@ function syncPreviewModeUI(){
     live.disabled=PREVIEW_ONLY;
   }
 }
-// v2 resolver: override(state=shift/off/clear) 먼저, clear는 fixed fallback, 그 다음 empId-key fixed.
+// v2 resolver: override(state=shift/off/clear) 먼저, clear는 fixed fallback 차단, 그 다음 empId-key fixed.
 function isOff(e,d){
   const ov=dayMap(typeof d==='string'?d:dk(d))[e];
   if(ov&&typeof ov==='object'){
@@ -84,7 +83,7 @@ function isOff(e,d){
     if(st==='shift'||st==='clear'||ov.clear===true||ov.cancel===true||ov.deleted===true)return false;
   }
   const emp=S.emp[e];if(!emp)return false;
-  const fx=DFX[e]||S.fix[e];if(!fx)return false;
+  const fx=S.fix[e];if(!fx)return false;
   const dObj=typeof d==='string'?new Date(d.replace(/-/g,'/')):d,dow=dObj.getDay(),ds=DOW_EN[dow];
   const fov=fx.dayTimes&&fx.dayTimes[ds];
   const kind=fx.kind||fx.type;
@@ -113,7 +112,7 @@ function shiftRow(s){return Object.assign(nowMeta(),{state:'shift',type:'manual_
 function offRowData(){return Object.assign(nowMeta(),{state:'off',type:'off',shift:null,start:'',end:'',role:'',work:false,active:false,off:true,dayoff:true,clear:false});}
 function clearRow(role){return Object.assign(nowMeta(),{state:'clear',type:'clear',shift:null,start:'',end:'',role:role||'',work:false,active:false,off:false,dayoff:false,clear:true});}
 function offIndex(overrides){const out={};if(!overrides||typeof overrides!=='object')return out;Object.keys(overrides).forEach(d=>{const day=overrides[d];if(!day||typeof day!=='object')return;Object.keys(day).forEach(e=>{const r=day[e];if(r&&typeof r==='object'&&(r.state==='off'||r.off===true||r.dayoff===true)){if(!out[e])out[e]={};out[e][d]=true;}});});return out;}
-async function cacheAtt(d,a){if(!hasObj(a))return;S.ah[d]=a;if(PREVIEW_ONLY){recordDryRunWrite('PUT',FW+'/attendance_history/'+d,a);return;}await fbP(FW+'/attendance_history/'+d,a);}
+async function cacheAtt(d,a){if(!hasObj(a))return;S.ah[d]=a;if(PREVIEW_ONLY){recordDryRunWrite('PUT',FW+'/attendance/'+d,a);return;}await fbP(FW+'/attendance/'+d,a);}
 // === schedule image confirmation queue ===
 function safeFbKey(v){return String(v||'item').trim().replace(/[.#$\[\]\/\s]+/g,'_').replace(/^_+|_+$/g,'').slice(0,180)||'item';}
 function boolish(v){return v===true||v===1||String(v||'').toLowerCase()==='true'||String(v||'').toLowerCase()==='yes'||String(v||'').toLowerCase()==='1';}
@@ -275,7 +274,7 @@ const DELIVERY_KEY='workschedule_delivery_v1';
 let deliveryTimer=null;
 function readDeliveryStore(){try{return JSON.parse(localStorage.getItem(DELIVERY_KEY)||'{}')||{};}catch(e){return{};}}
 function writeDeliveryStore(s){try{localStorage.setItem(DELIVERY_KEY,JSON.stringify(Object.assign({targetKind:'latest_work_schedule'},s||{})));}catch(e){}}
-function isScheduleDeliveryWrite(u){return u&&u.indexOf(FW+'/attendance_history')<0&&(u.indexOf(FW+'/overrides/')===0||u.indexOf(FW+'/status/')===0||u.indexOf(FW+'/fixed_schedules')===0);}
+function isScheduleDeliveryWrite(u){return u&&u.indexOf(FW+'/attendance')<0&&(u.indexOf(FW+'/overrides/')===0||u.indexOf(FW+'/status/')===0||u.indexOf(FW+'/fixed_schedules')===0);}
 function markScheduleDeliveryChanged(){writeDeliveryStore(DL.markScheduleChanged(readDeliveryStore(),Date.now()));renderDeliveryPanel();queueDeliveryRender();}
 function trackScheduleDeliveryWrite(u){if(!isScheduleDeliveryWrite(u))return;markScheduleDeliveryChanged();}
 function deliveryState(now){return DL.computeDeliveryState(Object.assign({targetKind:'latest_work_schedule',nowMs:now||Date.now()},readDeliveryStore()));}
@@ -415,7 +414,7 @@ function initAuthGate(start){
 }
 // === getFixedScheduleForDate ===
 function canonicalFixedSchedule(empId){
-  return DFX[empId]||S.fix[empId]||null;
+  return S.fix[empId]||null;
 }
 function gFix(empId,dateObj){
   const d=typeof dateObj==='string'?new Date(dateObj.replace(/-/g,'/')):dateObj,dow=d.getDay(),fs=canonicalFixedSchedule(empId);
@@ -423,7 +422,7 @@ function gFix(empId,dateObj){
   const ds=DOW_EN[dow],ov=fs.dayTimes&&fs.dayTimes[ds];
   const start=ov&&ov.start?ov.start:fs.start,end=ov&&ov.end?ov.end:fs.end,role=ov&&ov.role?ov.role:(fs.role||'');
   if(!start&&!end)return null;
-  const kind=fs.kind||fs.type;
+  const kind=fs.kind||fs.type||'fixed';
   if(kind==='fixed'){if(fs.off&&Array.isArray(fs.off)&&fs.off.includes(dow))return null;return{start,end,role,type:'fixed'};}
   if(kind==='weekly'){return((Array.isArray(fs.days)&&fs.days.includes(ds))||!!ov)?{start,end,role,type:'fixed'}:null;}
   return null;
@@ -451,19 +450,19 @@ function conSS(g){
 // === data loading ===
 async function loadData(){
   const d=dk(S.date);$('loader').style.display='flex';$('tabContent').style.display='none';
-  try{const[eD,sD,fD,oD,tD,aD,hD,omD]=await Promise.all([fbG(FW+'/employees'),fbG(FW+'/overrides/'+d),fbG(FW+'/fixed_schedules'),fbG(FW+'/overrides'),fbG(FW+'/status/'+d),fbG(FB+'/packhelper/storebot_attendance/'+d),fbG(FW+'/attendance_history/'+d),fbG(OPS_MANUAL_URL)]);
+  try{const[eD,sD,fD,oD,tD,aD,omD]=await Promise.all([fbG(FW+'/employees'),fbG(FW+'/overrides/'+d),fbG(FW+'/fixed_schedules'),fbG(FW+'/overrides'),fbG(FW+'/status/'+d),fbG(FW+'/attendance/'+d),fbG(OPS_MANUAL_URL)]);
     if(eD&&Object.keys(eD).length){S.emp=eD;}else{S.emp=JSON.parse(JSON.stringify(DE));if(!PREVIEW_ONLY)fbP(FW+'/employees',S.emp);}
     if(sD){S.sc=sD;}else S.sc={};
-    if(fD)S.fix=fD;if(oD)S.dof=offIndex(oD);
+    S.fix=fD||{};if(oD)S.dof=offIndex(oD);
     if(tD)Object.keys(tD).forEach(e=>{const row=tD[e];if(row&&typeof row==='object')S.sst[d+'_'+e]=row.status||row.state||'auto';else if(row)S.sst[d+'_'+e]=row;else delete S.sst[d+'_'+e];});
-    S.att=hasObj(aD)?aD:(hD||{});if(hasObj(S.att))S.ah[d]=S.att;if(hasObj(aD))cacheAtt(d,aD);
+    S.att=hasObj(aD)?aD:{};if(hasObj(S.att))S.ah[d]=S.att;
     if(window.WorkScheduleManualLogic)S.opsManual=Object.assign({loaded:true},window.WorkScheduleManualLogic.normalizeFirebaseManualPayload(omD,{sourcePath:'/packhelper/ops_manual'}));
   }catch(e){console.error('loadData',e);}
   S.loaded=true;genDO();autoFix(d);$('loader').style.display='none';$('tabContent').style.display='';renderAll();loadWk();
 }
 async function loadWk(){
   const m=getMon(S.date),ks=[],sp=[],tp=[],ap=[];
-  for(let i=0;i<7;i++){const d=new Date(m);d.setDate(d.getDate()+i);const k=dk(d);ks.push(k);sp.push(fbG(FW+'/overrides/'+k));tp.push(fbG(FW+'/status/'+k));ap.push(fbG(FW+'/attendance_history/'+k));}
+  for(let i=0;i<7;i++){const d=new Date(m);d.setDate(d.getDate()+i);const k=dk(d);ks.push(k);sp.push(fbG(FW+'/overrides/'+k));tp.push(fbG(FW+'/status/'+k));ap.push(fbG(FW+'/attendance/'+k));}
   const[sR,tR,aR]=await Promise.all([Promise.all(sp),Promise.all(tp),Promise.all(ap)]);S.wsc={};
   ks.forEach((k,i)=>{S.wsc[k]=sR[i]||{};const f=tR[i];if(f)Object.keys(f).forEach(e=>{if(f[e])S.sst[k+'_'+e]=f[e];else delete S.sst[k+'_'+e];});});
   ks.forEach((k,i)=>{if(hasObj(aR[i]))S.ah[k]=aR[i];});
@@ -519,6 +518,7 @@ function explicitShift(v){if(!v||typeof v!=='object')return null;const st=String
 function getShift(k,eid){
   const m=dayMap(k),raw=m?m[eid]:null,ex=explicitShift(raw);
   if(ex)return ex;
+  if(raw&&typeof raw==='object'){const st=String(raw.state||raw.status||raw.type||'').toLowerCase();if(st==='clear'||raw.clear===true)return null;}
   if(isOff(eid,k))return null;
   const emp=S.emp[eid],fx=emp?gFix(eid,dateObjFromKey(k)):null;
   return fx&&fx.start?{start:fx.start,end:fx.end,role:fx.role}:null;
@@ -541,7 +541,7 @@ function dayStats(k){
 }
 async function loadDayCache(k){
   if(S.xsc[k]||S.wsc[k]||S.msc[k]||S.xLoading[k])return;S.xLoading[k]=true;
-  try{const[sc,st,ah]=await Promise.all([fbG(FW+'/overrides/'+k),fbG(FW+'/status/'+k),fbG(FW+'/attendance_history/'+k)]);S.xsc[k]=sc||{};if(hasObj(ah))S.ah[k]=ah;if(st)Object.keys(st).forEach(e=>{const row=st[e];row?S.sst[k+'_'+e]=(typeof row==='object'?(row.status||row.state||'auto'):row):delete S.sst[k+'_'+e];});}
+  try{const[sc,st,ah]=await Promise.all([fbG(FW+'/overrides/'+k),fbG(FW+'/status/'+k),fbG(FW+'/attendance/'+k)]);S.xsc[k]=sc||{};if(hasObj(ah))S.ah[k]=ah;if(st)Object.keys(st).forEach(e=>{const row=st[e];row?S.sst[k+'_'+e]=(typeof row==='object'?(row.status||row.state||'auto'):row):delete S.sst[k+'_'+e];});}
   catch(e){console.error('loadDayCache',e);}
   delete S.xLoading[k];renderAll(true);
 }
@@ -792,7 +792,7 @@ function rPeople(){
 async function loadMonth(force){
   const mk=monthKey(S.date);if(S.mLoading||(!force&&S.mKey===mk))return;S.mLoading=true;S.mKey=mk;renderAll(true);
   try{const y=S.date.getFullYear(),m=S.date.getMonth(),last=new Date(y,m+1,0).getDate(),ks=[],sp=[],tp=[],ap=[];
-    for(let d=1;d<=last;d++){const k=y+'-'+pad(m+1)+'-'+pad(d);ks.push(k);sp.push(fbG(FW+'/overrides/'+k));tp.push(fbG(FW+'/status/'+k));ap.push(fbG(FW+'/attendance_history/'+k));}
+    for(let d=1;d<=last;d++){const k=y+'-'+pad(m+1)+'-'+pad(d);ks.push(k);sp.push(fbG(FW+'/overrides/'+k));tp.push(fbG(FW+'/status/'+k));ap.push(fbG(FW+'/attendance/'+k));}
     const[sr,tr,ar]=await Promise.all([Promise.all(sp),Promise.all(tp),Promise.all(ap)]);ks.forEach((k,i)=>{S.msc[k]=sr[i]||{};S.mst[k]=tr[i]||{};if(hasObj(ar[i]))S.ah[k]=ar[i];if(tr[i])Object.keys(tr[i]).forEach(e=>{const row=tr[i][e];row?S.sst[k+'_'+e]=(typeof row==='object'?(row.status||row.state||'auto'):row):delete S.sst[k+'_'+e];});});}
   catch(e){console.error('loadMonth',e);toast('월별 불러오기 실패');}
   S.mLoading=false;renderAll(true);
@@ -1174,9 +1174,9 @@ $('dateDisp').addEventListener('click',()=>openDP());
 function showFlash(){const m=S.date.getMonth()+1,d=S.date.getDate();let el=document.getElementById('dateFlash');if(!el){el=document.createElement('div');el.id='dateFlash';el.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);font-size:2.5rem;font-weight:900;color:#fff;opacity:0;pointer-events:none;z-index:999;text-shadow:0 2px 12px #000a;transition:opacity .15s;';document.body.appendChild(el);}el.textContent=m+'/'+d+' '+DOW_KR[S.date.getDay()];el.style.opacity='.35';clearTimeout(el._t);el._t=setTimeout(()=>{el.style.opacity='0';},600);}
 let _dc=0;
 async function onDC(){const my=++_dc;showFlash();updD();if(S.sseS){try{S.sseS.close();}catch(e){}}conSS(S.gen);const d=dk(S.date);S.sc={};S.att={};genDO();autoFix(d);rTab();if(my!==_dc)return;
-  try{const[scD,stD,atD,ahD]=await Promise.all([fbG(FW+'/overrides/'+d),fbG(FW+'/status/'+d),fbG(FB+'/packhelper/storebot_attendance/'+d),fbG(FW+'/attendance_history/'+d)]);if(my!==_dc)return;
+  try{const[scD,stD,atD]=await Promise.all([fbG(FW+'/overrides/'+d),fbG(FW+'/status/'+d),fbG(FW+'/attendance/'+d)]);if(my!==_dc)return;
     if(scD){S.sc=scD;}if(stD)Object.keys(stD).forEach(e=>{const row=stD[e];row?S.sst[d+'_'+e]=(typeof row==='object'?(row.status||row.state||'auto'):row):delete S.sst[d+'_'+e];});
-    S.att=hasObj(atD)?atD:(ahD||{});if(hasObj(S.att))S.ah[d]=S.att;if(hasObj(atD))cacheAtt(d,atD);autoFix(d);rTab();}catch(e){console.error('onDC',e);}if(my!==_dc)return;loadWk();}
+    S.att=hasObj(atD)?atD:{};if(hasObj(S.att))S.ah[d]=S.att;autoFix(d);rTab();}catch(e){console.error('onDC',e);}if(my!==_dc)return;loadWk();}
 function openDP(){const ov=$('dpOverlay'),list=$('dpList');const today=new Date();today.setHours(0,0,0,0);const selDk=dk(S.date),tDk=dk(today),ek=empIds();
   let h='<div class="dp-jump"><button data-action="jumpDate" data-days="-7">◀ 1주</button><button data-action="jumpDate" data-days="0">오늘</button><button data-action="jumpDate" data-days="7">1주 ▶</button></div>';
   for(let i=0;i<30;i++){const d=new Date(today);d.setDate(d.getDate()+i);const k=dk(d),dow=DOW_KR[d.getDay()],isT=k===tDk,isSel=k===selDk,m=d.getMonth()+1,dd=d.getDate();

@@ -18,22 +18,12 @@
     return labels.map(cleanLabel).filter(Boolean);
   }
 
-  function isGyuEmployee(empId, emp) {
-    return employeeLabels(empId, emp).some(label => {
-      return label === '규' || label === '원규' || label === '이원규' || label.endsWith('원규');
-    });
-  }
-
   function canonicalFixedScheduleEntry(empId, emp, fixed) {
-    if (isGyuEmployee(empId, emp)) {
-      return { start: '17:00', end: '06:00', role: '주방,오토바이' };
-    }
     return fixed && typeof fixed === 'object' ? fixed : null;
   }
 
   return {
     canonicalFixedScheduleEntry: canonicalFixedScheduleEntry,
-    employeeLabels: employeeLabels,
-    isGyuEmployee: isGyuEmployee
+    employeeLabels: employeeLabels
   };
 });

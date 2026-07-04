@@ -41,7 +41,7 @@ assert.match(block, /fbPatch\(PREVIEW_QUEUE_URL\+'\/'\+safeFbKey\(row\.key\),pat
 assert.doesNotMatch(block, /fbP\(FW/);
 assert.doesNotMatch(block, /fbPatch\(FW/);
 assert.doesNotMatch(block, /fetch\(FW/);
-assert.doesNotMatch(block, /\/packhelper\/storebot_attendance/);
+assert.doesNotMatch(block, /\/workschedule_v2\/attendance/);
 assert.doesNotMatch(block, /\/workschedule(?!_v2)/);
 
 for (const id of [

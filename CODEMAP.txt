@@ -35,14 +35,14 @@
 - `REFACTOR_HANDOFF.md` — 과거 슬림 재작성 기록. 현 기준과 충돌하면 `APP_INTENT.md`/현재 코드 우선
 
 ## app.js 주요 섹션
-- config: `FB`, `FW`, 인증 설정, 06시 day-boundary, 날씨 기준 지역, 기본 직원/고정근무 fallback
+- config: `FB`, `FW`, 인증 설정, 06시 day-boundary, 날씨 기준 지역, 기본 직원 표시값
 - store: `S` 단일 상태 객체. 직원, 스케줄, fixed, 휴무, 출근 기록, SSE 상태 보관
 - api: `fbG`, `fbP`. Firebase RTDB `.json` GET/PUT, `READONLY` guard
 - schedule delivery: 최신 근무표 변경 감지, idle/periodic due 계산, PNG 생성, 웹 공유/다운로드 출력
 - auth gate: PIN + 등록 단말 또는 GPS factor. 정적 클라이언트 IP 헤더는 신뢰하지 않음. 인증 화면은 PIN/위치/단말 상태를 한글로 보여준다
 - SSE: 직원/선택일 스케줄 SSE, 날짜 변경 세대관리
-- fixed schedule: 날짜별 overrides 우선, fixed fallback, `emp1` 매일 `17:00~06:00`
-- data loading: employees/fixed/overrides/status/attendance_history/storebot_attendance 로드
+- fixed schedule: 날짜별 overrides 우선, clear는 fixed fallback 차단, fixed는 `/workschedule_v2/fixed_schedules` 값만 사용
+- data loading: planned schedule은 employees/fixed_schedules/overrides/status, 실근태는 `/workschedule_v2/attendance`
 - render: dashboard/day/people/month/timebar/list/ops 탭, 주간 개요, 날짜 스트립
 - actions: shift 저장/휴무/고정값, 표준입력 요청 생성, 직원 disabled 처리, 휴무 일괄 파싱
 - confirmation queue: 카톡 이미지 preview item 표시, date/employee/action/shift/off/clear 보정, confirmed request enqueue, reject/hold review metadata patch
@@ -52,8 +52,7 @@
 - `/workschedule_v2/fixed_schedules/{empId}`
 - `/workschedule_v2/overrides/{yyyy-MM-dd}/{empId}`
 - `/workschedule_v2/status/{yyyy-MM-dd}/{empId}`
-- `/workschedule_v2/attendance_history/{yyyy-MM-dd}` — WorkSchedule 누적 근태 캐시
-- `/packhelper/storebot_attendance/{yyyy-MM-dd}` — 읽기 전용 출근 원본
+- `/workschedule_v2/attendance/{yyyy-MM-dd}/{empId}` — 출근/퇴근/실근태 원본
 - `/packhelper/ops_manual` — 읽기 전용 운영메뉴얼 source. WorkSchedule 운영탭과 HynixOps 운영메뉴얼 탭이 소비하며, 웹은 live write를 하지 않는다.
 - `/packhelper/storebot_termux/work_schedule_image_preview_queue/{event_id}` — 카톡 이미지 근무 preview/read source. confirmation panel은 review metadata만 patch할 수 있고 schedule DB write는 하지 않는다.
 - `/packhelper/storebot_termux/confirmed_schedule_write_requests/{request_id}` — confirmation panel과 표준 근무 수정 요청이 backend worker에 넘기는 confirmed request queue. 필수 payload는 `actor/source_event_id/date/employee/action/confirmed_at_ms/dry_run_result`이고 live 요청은 `dry_run=false` + `execute_live_write=true`일 때만 보낸다.
@@ -65,7 +64,7 @@
 - 근무표 canonical 계산은 `/workschedule_v2/employees + fixed_schedules + overrides + status` 우선이며 `storebot_summary/schedule`은 표시 캐시로만 둔다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제/근무 clear는 삭제 대신 명시 값으로 남긴다.
-- `/packhelper/storebot_attendance`는 읽기 전용이다.
+- 출근/퇴근/실근태는 `/workschedule_v2/attendance`만 읽고 쓴다.
 
 ## 검증
 - `node --check docs/app.js`

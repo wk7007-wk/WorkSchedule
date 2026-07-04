@@ -9,7 +9,7 @@
 - Firebase `/workschedule_v2`가 단일 근무 데이터 원본이다.
 - `localStorage`는 인증 토큰, UI 상태, 운영메뉴얼 후보, 이미지 출력 due 상태만 보조로 쓴다.
 - Firebase 실패를 로컬 원본처럼 숨기지 않는다.
-- `/packhelper/storebot_attendance/{date}`는 읽기 전용이다.
+- 출근/퇴근/실근태 원본은 `/workschedule_v2/attendance/{date}/{empId}`다.
 
 ## 직원 + 고정 스케줄
 - 직원: 이원규, 권연옥, 리, 히오, 사아야
@@ -28,7 +28,7 @@
 - 웹 파일: `docs/index.html`, `docs/style.css`, `docs/app.js`
 - 순수 로직: `docs/schedule_delivery_logic.js`, `docs/manual_logic.js`
 - Pages: `https://wk7007-wk.github.io/WorkSchedule/`
-- Firebase: `/workschedule_v2/` employees, fixed_schedules, overrides, status, attendance_history
+- Firebase: `/workschedule_v2/` employees, fixed_schedules, overrides, status, attendance
 - 하이닉스 소비자: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html`
 
 ## 출력

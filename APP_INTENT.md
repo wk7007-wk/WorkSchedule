@@ -24,12 +24,12 @@
 - 브리핑 탭은 일정, 알람, 할인/행사, 뉴스, 날씨, 근무, 오늘 필요한 메뉴얼을 함께 요약하고, 사이트 상세/카카오 요약/근무표 이미지 출력 기준을 짧게 보여준다.
 - 브리핑 탭은 데이터가 없어도 섹션과 대기/빈 상태를 보여야 하며, 일정/할일/알람/예약/할인행사/뉴스/날씨/근무/오늘 필요한 메뉴얼을 함께 요약한다.
 - confirmed request live 실행 의도는 `dry_run=false`와 `execute_live_write=true`가 동시에 있을 때만 보낸다. 기본은 dry-run 확인 요청이다.
-- 공통 해석 순서는 날짜별 `overrides` state=shift/off/clear -> `fixed_schedules/{empId}` fallback -> 미입력이다.
-- 출근 원본 `/packhelper/storebot_attendance/{date}`는 수정하지 않고, 읽은 일자 데이터만 `/workschedule_v2/attendance_history/{date}`에 idempotent PUT으로 보존한다.
+- 공통 해석 순서는 날짜별 `overrides` state=shift/off/clear -> `fixed_schedules/{empId}` fallback -> 미입력이며, `clear`는 해당 날짜의 fixed fallback을 막는다.
+- 출근/퇴근/실근태 원본은 `/workschedule_v2/attendance/{date}/{empId}`이며 계획 근무(`fixed_schedules`, `overrides`, `status`)와 분리한다.
 - StoreBotTermux 근무표 브리핑은 WorkSchedule 데이터를 소비하지만, 원본 근무 데이터 저장 경계는 WorkSchedule/Firebase가 가진다.
 - HynixOps는 발주/근무표 탭형 통합 런처 이름이며, OrderHelper와 WorkSchedule 원본 SOT는 합치지 않는다.
 - 날씨 기준 지역은 `이천시 부발읍`, 좌표 상수는 근사 `37.2816, 127.4892`다.
-- `이원규(emp1)` 고정근무 fallback은 매일 `17:00~06:00`으로 해석한다.
+- 직원별 고정근무는 `/workschedule_v2/fixed_schedules`에 있는 값만 해석한다. 코드/화면의 직원별 하드코딩 fallback은 금지한다.
 - 타임바/리스트 게이지는 06시 day-boundary 기준 선택 근무일의 당일 근무자 첫 출근~마지막 퇴근 범위만 쓴다.
 - 정적 프론트 인증은 `PIN 통과 AND (CLI 허용 단말 OR 서버/호스팅 허용 IP OR 매장 GPS 150m)` 구조다. 웹 화면에서 PIN+GPS로 단말을 자동 허용하지 않는다.
 - 인증 화면은 PIN, 매장 좌표/반경, 단말 저장 상태를 한글로 보여주고, PIN 값은 화면에 노출하지 않는다.
@@ -57,7 +57,7 @@
 - 날씨/뉴스 보조정보가 누락되면 CLI 보정 lane 후보(`workschedule_delivery_cli_patch`)만 no-live/no-write로 만들고, 실제 외부 호출/발송은 별도 gate를 통과해야 한다.
 
 ## 데이터/경계 기준
-- 주요 경로는 `/workschedule_v2/employees`, `fixed_schedules`, `overrides`, `status`, `attendance_history`다.
+- 주요 경로는 `/workschedule_v2/employees`, `fixed_schedules`, `overrides`, `status`, `attendance`다.
 - 카톡 이미지 preview 확인 경로는 `/packhelper/storebot_termux/work_schedule_image_preview_queue/{event_id}` read + review metadata patch, `/packhelper/storebot_termux/confirmed_schedule_write_requests/{request_id}` enqueue다.
 - MCP/브라우저 검증의 DB 증거는 `/workschedule_v2`, `/packhelper/ops_manual` 등 필요한 Firebase read source를 읽기 전용으로 확인한다.
 - 스키마 계약과 read-only 점검은 `/root/my-first-project/rules/workschedule_schema_contract.txt`와 `scripts/workschedule_schema_audit.py`를 기준으로 한다.

@@ -71,13 +71,13 @@ assert.equal(calcHours('17:00', '06:00'), 13);
 const staleFixed = { start: '08:00', end: '03:00', role: '주방,오토바이', kind: 'fixed', type: 'fixed' };
 const gyuEmployee = { name: '이원규', short_name: '규', aliases: ['규'] };
 const canonicalGyu = hynixScheduleLogic.canonicalFixedScheduleEntry('emp1', gyuEmployee, staleFixed);
-assert.deepEqual(canonicalGyu, { start: '17:00', end: '06:00', role: '주방,오토바이' });
-assert.deepEqual(hynixScheduleLogic.canonicalFixedScheduleEntry('emp1', gyuEmployee, null), canonicalGyu);
+assert.deepEqual(canonicalGyu, staleFixed);
+assert.equal(hynixScheduleLogic.canonicalFixedScheduleEntry('emp1', gyuEmployee, null), null);
 assert.deepEqual(hynixScheduleLogic.canonicalFixedScheduleEntry('emp2', { name: '권연옥', short_name: '권' }, staleFixed), staleFixed);
 
 const canonicalGauge = gaugeRange([{ id: 'emp1', shift: canonicalGyu }]);
-assert.equal(canonicalGauge.startMinute, operationalMinute('17:00'));
-assert.equal(canonicalGauge.rangeMinutes, 13 * 60);
+assert.equal(canonicalGauge.startMinute, operationalMinute('08:00'));
+assert.equal(canonicalGauge.rangeMinutes, 19 * 60);
 
 const rows = [
   { id: 'emp1', off: false, shift: { start: '17:00', end: '06:00' } },
@@ -118,13 +118,15 @@ assert.match(appSource, /previewBanner/);
 assert.match(appSource, /authModeBadge/);
 assert.match(appSource, /PREVIEW_ONLY/);
 assert.match(appSource, /function canonicalFixedSchedule\(empId\)/);
-assert.match(appSource, /DFX\[empId\]\|\|S\.fix\[empId\]/);
+assert.match(appSource, /return S\.fix\[empId\]\|\|null/);
+assert.match(appSource, /st==='clear'/);
 assert.match(appSource, /publicManualCardModel/);
 assert.match(indexSource, /근무 수정/);
 assert.match(indexSource, /workEditBtn/);
 assert.match(indexSource, /preview-banner/);
 assert.match(indexSource, /authModeBadge/);
 assert.doesNotMatch(appSource, /NativeBridge|shareImage|app\/src\/main\/assets/);
+assert.doesNotMatch(appSource, /DFX/);
 assert.doesNotMatch(appSource, new RegExp('최신' + ' 상태'));
 
 const externalHynixIndexPath = '/root/my-first-project/AttendanceBoard/docs/hynix/index.html';
@@ -133,15 +135,18 @@ const externalHynixAppPath = '/root/my-first-project/AttendanceBoard/docs/hynix/
 if (existsSync(externalHynixIndexPath) && existsSync(externalHynixAppPath)) {
   const hynixSource = readFileSync(externalHynixIndexPath, 'utf8');
   assert.match(hynixSource, /hynix_schedule_logic\.js/);
+  assert.doesNotMatch(hynixSource, /17:00~06:00/);
   const hynixAppSource = readFileSync(externalHynixAppPath, 'utf8');
   assert.match(hynixAppSource, /window\.HynixScheduleLogic/);
   assert.match(hynixAppSource, /canonicalFixedScheduleEntry\(empId, emp, fixedEntry\)/);
+  assert.match(hynixAppSource, /WORKSCHEDULE_BASE \+ '\/status'/);
 } else {
   const localHynixSource = readFileSync(new URL('../docs/hynix_schedule_logic.js', import.meta.url), 'utf8');
   assert.match(localHynixSource, /canonicalFixedScheduleEntry\(empId, emp, fixed\)/);
+  assert.doesNotMatch(localHynixSource, /isGyuEmployee/);
   const localAppSource = readFileSync(new URL('../docs/app.js', import.meta.url), 'utf8');
   assert.match(localAppSource, /function canonicalFixedSchedule\(empId\)/);
-  assert.match(localAppSource, /DFX\[empId\]\|\|S\.fix\[empId\]\|\|null/);
+  assert.match(localAppSource, /return S\.fix\[empId\]\|\|null/);
 }
 
 console.log('schedule logic tests passed');

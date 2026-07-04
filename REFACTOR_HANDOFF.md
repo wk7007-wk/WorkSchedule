@@ -24,7 +24,7 @@
 - 직원 관리 / 휴무 일괄등록 (텍스트 파싱)
 - 자동배정(`autoApplyFixed`) + 자동휴무(`generateAutoDayoffs`)
 - SSE 실시간 동기화 + 확정 토글 / 전체확정
-- `/packhelper/storebot_attendance` 실제 근태 오버레이
+- `/workschedule_v2/attendance` 실제 근태 오버레이
 - 텍스트/URL 공유 + 터치 스와이프 날짜 이동
 
 ### 재사용할 순수함수 (app.js 라인)
@@ -57,7 +57,7 @@
 /workschedule_v2/fixed_schedules/{empId}
 /workschedule_v2/overrides/{yyyy-MM-dd}/{empId}
 /workschedule_v2/status/{yyyy-MM-dd}/{empId}
-/packhelper/storebot_attendance/{yyyy-MM-dd}   ← 읽기 전용
+/workschedule_v2/attendance/{yyyy-MM-dd}/{empId}   ← 실근태 원본
 ```
 
 ## 4. Codex 설계 결정안 (Claude 구현 기준)
