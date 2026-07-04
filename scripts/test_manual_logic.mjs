@@ -27,7 +27,7 @@ const merged = manual.mergeManualFromMemo(
 
 assert.equal(merged.length, 1);
 assert.equal(merged[0].category, 'chat');
-assert.match(merged[0].body, /카카오톡 공유는 자동 발송하지 않고/);
+assert.match(merged[0].body, /카카오톡 전달은 자동 발송하지 않고/);
 assert.doesNotMatch(merged[0].body, /카톡 자동전송 금지/);
 assert.ok(merged[0].tags.includes('kakao'));
 assert.ok(merged[0].sourceCount >= 2);
@@ -37,7 +37,7 @@ const recipe = manual.normalizeManualEntry(
   { sourceType: 'memo' },
 );
 assert.equal(recipe.category, 'recipe');
-assert.match(recipe.body, /레시피 세부 원본은 전용 영역/);
+assert.match(recipe.body, /레시피 세부값은 따로 확인하고 직원용 화면에는 안내만 둔다/);
 
 const output = manual.normalizeManualEntry(
   { id: 'memo-3', body: '하이닉스 사이트와 카카오 PNG 이미지 출력만 기준으로 사용' },
@@ -45,6 +45,13 @@ const output = manual.normalizeManualEntry(
 );
 assert.equal(output.category, 'output');
 assert.match(output.body, /하이닉스 사이트 화면과 카카오 전달용 PNG 이미지/);
+
+const employeeFacing = manual.normalizeManualEntry(
+  { id: 'memo-4', title: '운영메뉴얼 입력 원칙', body: 'category tags search_text source status updated_at 원문 복붙 DB' },
+  { sourceType: 'memo' },
+);
+assert.match(employeeFacing.title, /새 내용 알려주는 방법|입력 정리 기준|주문 변경 응대 기준|근무 변경 요청 방법/);
+assert.doesNotMatch([employeeFacing.title, employeeFacing.summary, employeeFacing.body].join(' '), /source|status|updated_at|search_text|원문|복붙|DB|database/i);
 
 const intakeEnvelope = manual.buildInputEnvelope(
   {
@@ -104,10 +111,11 @@ const mergedFirebase = manual.mergeManualFromFirebasePayload([], [], firebasePay
 assert.ok(mergedFirebase.some((item) => item.category === 'chat' && item.tags.includes('kakao')));
 assert.ok(mergedFirebase.some((item) => item.category === 'order' && /발주/.test(item.body)));
 assert.equal(manual.CATEGORIES.customer_support.label, '고객응대');
-assert.equal(manual.CATEGORIES.platform_help.label, '플랫폼 안내');
-assert.equal(manual.CATEGORIES.manual.label, '입력원칙');
+assert.equal(manual.CATEGORIES.platform_help.label, '앱주문');
+assert.equal(manual.CATEGORIES.manual.label, '새 내용');
+assert.equal(manual.CATEGORIES.coupon.label, '쿠폰');
 assert.equal(manual.CATEGORIES.task.label, '할일');
-assert.equal(manual.CATEGORIES.discount.label, '할인행사');
+assert.equal(manual.CATEGORIES.discount.label, '행사');
 
 const briefing = manual.buildBriefingSections(
   [merged[0], recipe, output, intakeMemo],

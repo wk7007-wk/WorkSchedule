@@ -5,17 +5,18 @@
 })(typeof window!=='undefined'?window:globalThis,function(){
   'use strict';
 
-  const CATEGORY_ORDER=['work','manual','customer_support','platform_help','chat','recipe','delivery','task','discount','weather','news','regulation','order','output','safety','etc'];
+  const CATEGORY_ORDER=['work','manual','customer_support','platform_help','coupon','chat','recipe','delivery','task','discount','weather','news','regulation','order','output','safety','etc'];
   const CATEGORIES={
     work:{label:'근무',keywords:['근무','근무표','스케줄','출근','퇴근','휴무','확정','시간','직원']},
-    manual:{label:'입력원칙',keywords:['메뉴얼','매뉴얼','운영기준','운영 기준','편입','색인','원문','정리']},
+    manual:{label:'새 내용',keywords:['메뉴얼','매뉴얼','운영기준','운영 기준','편입','색인','원문','정리','새 내용','알려주는 방법']},
     customer_support:{label:'고객응대',keywords:['고객센터','고객 센터','문의','상담','안내','취소','변경']},
-    platform_help:{label:'플랫폼 안내',keywords:['플랫폼','배민','배달의민족','쿠팡이츠','BBQ','앱 상태','주문 상태']},
+    platform_help:{label:'앱주문',keywords:['플랫폼','앱주문','배민','배달의민족','쿠팡이츠','BBQ','앱 상태','주문 상태','주문 변경']},
+    coupon:{label:'쿠폰',keywords:['쿠폰','기프티콘','gifticon','쿠폰 등록','장바구니','사용 가능']},
     chat:{label:'카카오/대화',keywords:['카카오','카톡','채팅','답변','운영방','전송','공유','브리핑','메시지']},
     recipe:{label:'레시피/타이머',keywords:['레시피','타이머','조리','메뉴','수량','재료','주의사항','치킨']},
     delivery:{label:'배달정보',keywords:['배달','주소','건물명','호수','비번','비밀번호','group_only','group only','도착']},
     task:{label:'할일',keywords:['할일','할 일','알람','예약','투두','todo','마감','리마인드','기한']},
-    discount:{label:'할인행사',keywords:['할인','행사','프로모션','특가','쿠폰','이벤트','증정']},
+    discount:{label:'행사',keywords:['할인','행사','프로모션','특가','쿠폰','이벤트','증정']},
     weather:{label:'날씨',keywords:['날씨','기상','비','눈','폭염','기온','강수']},
     news:{label:'뉴스',keywords:['뉴스','속보','하이닉스뉴스','월드컵','경기일정','일정', '보도']},
     regulation:{label:'규정',keywords:['규정','일반음식점','법','행정','신고','허가','출처','갱신일','요약']},
@@ -28,7 +29,8 @@
     ['schedule','근무표',['근무표','스케줄','휴무','출근','퇴근']],
     ['manual','메뉴얼',['메뉴얼','매뉴얼','운영기준','운영 기준','편입','정리']],
     ['customer_support','고객안내',['고객센터','고객 센터','문의','상담','안내','취소','변경']],
-    ['platform_help','플랫폼안내',['플랫폼','배민','배달의민족','쿠팡이츠','BBQ','앱 상태','주문 상태']],
+    ['platform_help','앱주문',['플랫폼','앱주문','배민','배달의민족','쿠팡이츠','BBQ','앱 상태','주문 상태','주문 변경']],
+    ['coupon','쿠폰',['쿠폰','기프티콘','gifticon','쿠폰 등록','장바구니','사용 가능']],
     ['kakao','카카오',['카카오','카톡','운영방','공유','전송','답변']],
     ['memo','메모',['메모','기록','원문']],
     ['text','텍스트',['텍스트','문자','본문','문장','노트']],
@@ -52,54 +54,54 @@
     {
       id:'default_schedule_source',
       category:'work',
-      title:'근무표 기준',
-      summary:'근무 변경과 안내는 WorkSchedule의 현재 데이터를 기준으로 판단한다.',
-      body:'- 근무 변경은 WorkSchedule의 날짜별 근무, 휴무, 확정 상태를 먼저 확인한다.\n- 기존 근무가 있으면 새 내용으로 덮기 전에 변경점과 휴무 여부를 구분한다.',
+      title:'근무 변경 요청 방법',
+      summary:'근무 변경은 현재 근무를 먼저 확인한 뒤 요청한다.',
+      body:'- 날짜와 직원을 함께 적어서 변경 요청을 남긴다.\n- 이미 확정된 근무는 먼저 확인하고, 바꾸려는 시간도 같이 적는다.\n- 휴무가 섞이면 근무와 휴무를 분리해서 적는다.',
       tags:['schedule','safety'],
       updatedAt:0
     },
     {
       id:'default_kakao_share',
       category:'chat',
-      title:'카카오 공유 기준',
-      summary:'공유는 사용자가 대상 방을 직접 확인한 뒤 진행한다.',
-      body:'- 카카오톡 공유는 자동 발송하지 않고 브라우저 공유 메뉴 또는 PNG 파일로 사용자가 대상 방을 확인한다.\n- 답변 근거가 불확실하면 확인 필요 상태로 남기고 임의 실행하지 않는다.',
+      title:'카카오 전달 기준',
+      summary:'전달은 대상 방을 직접 확인한 뒤 진행한다.',
+      body:'- 카카오톡 전달은 자동 발송하지 않고 대상 방을 직접 확인한 뒤 진행한다.\n- 답이 애매하면 먼저 확인하고, 바로 보내지 않는다.',
       tags:['kakao','safety'],
       updatedAt:0
     },
     {
       id:'default_memo_manual',
-      category:'etc',
-      title:'메모 정리 기준',
-      summary:'메모 원문은 기본 화면에 노출하지 않고 운영 기준으로 다듬어 반영한다.',
-      body:'- 새 메모는 기존 항목과 비교해 같은 주제는 합치고, 다른 주제는 별도 항목으로 분리한다.\n- 원문 표현을 그대로 복사하지 않고 판단 기준과 처리 방법 중심으로 정리한다.',
+      category:'manual',
+      title:'새 내용 알려주는 방법',
+      summary:'새로 들어온 내용은 한 문장으로 먼저 알려준다.',
+      body:'- 새 내용은 한 문장으로 먼저 알린다.\n- 같은 주제는 묶고, 다른 주제는 나눠 적는다.\n- 직원이 바로 볼 수 있게 표현을 다듬는다.',
       tags:['manual','memo'],
       updatedAt:0
     },
     {
       id:'default_intake_envelope',
       category:'manual',
-      title:'통합 입력층 계약',
-      summary:'텍스트, URL, 이미지, 카카오 대화, CLI, 타이머앱, 사이트 입력은 즉시 큐용 envelope로 만든다.',
-      body:'- 입력 원문은 즉시 Codex CLI 또는 codex_ops 요청 큐에 넣을 envelope로 변환한다.\n- 리소스, 모델, MCP 필요 여부, 카테고리, 태그, 반영 방식은 CLI가 최종 판단한다.\n- 대기는 하지 않고 큐에 먼저 쌓고, 나중에 분석과 반영을 분리한다.',
+      title:'입력 정리 기준',
+      summary:'텍스트, URL, 이미지, 카카오 대화, CLI, 타이머앱, 사이트 입력은 바로 정리한다.',
+      body:'- 들어온 내용은 바로 정리해서 다음 사람이 읽기 쉽게 만든다.\n- 텍스트, 링크, 이미지, 대화, 알림, 사이트 정보는 각각 구분해서 적는다.\n- 기다리지 말고 먼저 모아 두고, 나중에 분류한다.',
       tags:['cli','text','url','image','kakao','timer','site','manual'],
       updatedAt:0
     },
     {
       id:'default_briefing_contract',
       category:'manual',
-      title:'브리핑 탭 기준',
-      summary:'브리핑은 일정, 알람, 할인/행사, 뉴스, 날씨, 근무, 오늘 필요한 메뉴얼을 함께 요약한다.',
-      body:'- 브리핑 탭은 오늘 필요한 작업과 확인 항목을 한 번에 읽을 수 있어야 한다.\n- 사이트 상세, 카카오 요약, 근무표 이미지 출력 기준은 짧은 문장으로 구분해 둔다.\n- 카카오봇 답변이 필요한 메뉴얼은 색인 가능한 항목으로 유지한다.',
+      title:'오늘 확인 기준',
+      summary:'오늘 필요한 내용은 일정, 알림, 행사, 뉴스, 날씨, 근무를 함께 본다.',
+      body:'- 오늘 확인할 내용은 한 화면에서 같이 본다.\n- 사이트 상세, 카카오 안내, 근무표 이미지는 각각 짧게 구분해 둔다.\n- 필요한 내용만 직원이 바로 읽게 정리한다.',
       tags:['manual','schedule','task','discount','weather','news','work','kakao'],
       updatedAt:0
     },
     {
       id:'default_recipe_boundary',
       category:'recipe',
-      title:'레시피 참조 범위',
-      summary:'레시피 세부 원본과 카카오 답변용 요약은 분리한다.',
-      body:'- 타이머, 수량, 절차 세부값은 레시피 원본 영역을 기준으로 둔다.\n- 운영메뉴얼에는 카카오봇 답변에 필요한 대표 안내와 주의사항만 정리한다.',
+      title:'레시피 확인 범위',
+      summary:'레시피 세부값과 안내용 요약은 분리한다.',
+      body:'- 타이머, 수량, 절차 세부값은 따로 확인한다.\n- 직원용 화면에는 바로 필요한 안내와 주의만 정리한다.',
       tags:['recipe','kakao','manual'],
       updatedAt:0
     }
@@ -111,6 +113,22 @@
 
   function cleanText(value,limit){
     return String(value==null?'':value).replace(/\r/g,'\n').replace(/[ \t]+/g,' ').replace(/\n{3,}/g,'\n\n').trim().slice(0,limit||4000);
+  }
+  function employeeText(value,limit){
+    return cleanText(String(value||'')
+      .replace(/운영메뉴얼\s*입력\s*원칙/gi,'새 내용 알려주는 방법')
+      .replace(/근무표\s*원천\/?\s*수정\s*기준/gi,'근무 변경 요청 방법')
+      .replace(/할인행사\s*당일\s*브리핑\s*기준/gi,'행사 안내 기준')
+      .replace(/배달정보\s*조회\s*기준/gi,'배달정보 확인 기준')
+      .replace(/할일\/?\s*알람\s*등록\s*기준/gi,'할일/알림 등록 방법')
+      .replace(/메뉴\s*변경\s*문의\s*답변\s*기준/gi,'주문 변경 응대 기준')
+      .replace(/BBQ\s*기프티콘\s*메뉴\s*변경\s*안내/gi,'BBQ 쿠폰 사용 안내')
+      .replace(/\b(source|status|updated_at|updatedAt|search_text|searchText|sourceIds?|sourceTypes?|sourceUrls?|source_urls?|db|database)\b/gi,'')
+      .replace(/원문/g,'내용')
+      .replace(/복붙/g,'그대로 옮김')
+      .replace(/관리자/g,'직원')
+      .replace(/\s{2,}/g,' ')
+      .replace(/([,;])\s*([,;]+)/g,'$1'),limit);
   }
   function isPlainObject(value){
     return value&&typeof value==='object'&&!Array.isArray(value);
@@ -236,12 +254,13 @@
   function titleFromText(text,category){
     const body=String(text||'');
     const tag=categoryLabel(category);
-    if(/카카오|카톡|공유|전송/.test(body))return '카카오 공유 기준';
-    if(/근무표|스케줄|휴무|출근|퇴근/.test(body))return '근무표 처리 기준';
-    if(/레시피|타이머|조리|메뉴/.test(body))return '레시피 안내 기준';
+    if(/메뉴얼|매뉴얼|운영기준|편입|색인|원문|정리|새 내용|알려주는 방법/.test(body))return '새 내용 알려주는 방법';
+    if(/근무표|스케줄|휴무|출근|퇴근/.test(body))return '근무 변경 요청 방법';
+    if(/레시피|타이머|조리|메뉴/.test(body))return '레시피 확인 범위';
     if(/배달|주소|건물명|비번|비밀번호|group_only/.test(body.toLowerCase()))return '배달정보 기준';
-    if(/할일|할 일|알람|예약|마감|리마인드/.test(body))return '할일/알람 기준';
-    if(/할인|행사|프로모션|이벤트|쿠폰/.test(body))return '할인/행사 기준';
+    if(/할일|할 일|알람|예약|마감|리마인드/.test(body))return '할일/알림 등록 방법';
+    if(/쿠폰|기프티콘|gifticon/.test(body))return '쿠폰 사용 안내';
+    if(/할인|행사|프로모션|이벤트/.test(body))return '행사 안내 기준';
     if(/날씨|기상|비|눈|폭염|기온/.test(body))return '날씨 확인 기준';
     if(/뉴스|월드컵|경기|보도/.test(body))return '뉴스 확인 기준';
     if(/규정|일반음식점|허가|신고|출처|갱신일/.test(body))return '규정 요약 기준';
@@ -254,25 +273,28 @@
     const text=cleanText(line,300);
     if(!text)return '';
     if(/카카오|카톡|공유|전송/.test(text)&&/자동|방|대상|확인|금지|하지/.test(text)){
-      return '카카오톡 공유는 자동 발송하지 않고 사용자가 대상 방을 확인한다.';
+      return '카카오톡 전달은 자동 발송하지 않고 대상 방을 직접 확인한다.';
     }
     if(/원문|메모|복사|그대로/.test(text)&&/보관|노출|복사|정리/.test(text)){
-      return '메모 원문은 기본 화면에 노출하지 않고 운영 기준으로 다듬어 반영한다.';
+      return '새 내용은 직원이 바로 볼 수 있게 다듬어 반영한다.';
     }
     if(/근무표|스케줄|휴무|출근|퇴근/.test(text)){
-      return '근무표 변경은 기존 근무, 휴무, 확정 상태를 비교한 뒤 반영한다.';
+      return '근무 변경은 현재 근무와 휴무를 확인한 뒤 반영한다.';
     }
     if(/레시피|타이머|조리|메뉴/.test(text)){
-      return '레시피 세부 원본은 전용 영역을 기준으로 두고 운영메뉴얼에는 안내용 요약만 둔다.';
+      return '레시피 세부값은 따로 확인하고 직원용 화면에는 안내만 둔다.';
     }
     if(/배달|주소|건물명|비번|비밀번호|group_only/.test(text.toLowerCase())){
-      return '배달정보는 주소, 건물명, 비밀번호처럼 group_only 항목과 일반 안내를 분리한다.';
+      return '배달정보는 주소, 건물명, 비밀번호를 분리해서 확인한다.';
     }
     if(/할일|할 일|알람|예약|마감|리마인드/.test(text)){
-      return '할일과 알람, 예약은 마감 시간과 실행 조건을 함께 적는다.';
+      return '할일과 알림은 마감 시간과 반복 여부를 함께 적는다.';
     }
-    if(/할인|행사|프로모션|이벤트|쿠폰/.test(text)){
-      return '할인행사 정보는 적용 기간, 대상, 예외를 함께 적는다.';
+    if(/쿠폰|기프티콘|gifticon/.test(text)){
+      return '쿠폰은 등록 방법과 사용 가능 여부를 함께 적는다.';
+    }
+    if(/할인|행사|프로모션|이벤트/.test(text)){
+      return '행사 정보는 적용 기간, 대상, 예외를 함께 적는다.';
     }
     if(/날씨|기상|비|눈|폭염|기온/.test(text)){
       return '날씨 정보는 확인일과 지역을 함께 두고 최신성 여부를 표시한다.';
@@ -293,7 +315,7 @@
       .replace(/해야함|해야 함|해야한다/g,'한다')
       .replace(/하면 안됨|하면 안 됨|하지말것|금지/g,'하지 않는다')
       .replace(/카톡/g,'카카오톡')
-      .replace(/메뉴얼/g,'메뉴얼')
+      .replace(/메뉴얼|매뉴얼/g,'메뉴얼')
       .replace(/\s+/g,' ')
       .replace(/[~]+/g,' ')
       .trim();
@@ -305,12 +327,29 @@
     if(!lines.length)lines.push('관련 상황을 확인한 뒤 기존 운영 기준과 맞춰 처리한다.');
     return lines.map(line=>'- '+line.replace(/^-\s*/,'')).join('\n');
   }
+  function displaySectionsFromBody(body){
+    const lines=extractLines(body);
+    const actions=[];
+    const cautions=[];
+    lines.forEach(line=>{
+      const text=cleanText(line,180);
+      if(!text)return;
+      if(/주의|확인|보류|애매|불확실|금지|안 되|하지 않는다|먼저|가능한지|구분|분리/.test(text)){
+        cautions.push(text);
+      }else{
+        actions.push(text);
+      }
+    });
+    if(!actions.length&&lines[0])actions.push(cleanText(lines[0],180));
+    if(!cautions.length&&lines.length>1)cautions.push(cleanText(lines[lines.length-1],180));
+    return {actions:uniq(actions).slice(0,3),cautions:uniq(cautions).slice(0,2)};
+  }
   function extractLines(body){
     return splitTextUnits(body).map(line=>line.replace(/^-\s*/,'')).filter(Boolean);
   }
   function summarize(body,category){
     const first=extractLines(body)[0];
-    return cleanText(first||categoryLabel(category)+' 기준을 확인한다.',110);
+    return employeeText(first||categoryLabel(category)+' 기준을 확인한다.',110);
   }
   function searchIndexForEntry(entry){
     return cleanText([
@@ -328,10 +367,11 @@
     const item=(entry&&typeof entry==='object')?entry:{body:entry};
     const sourceType=(options&&options.sourceType)||String(item.sourceType||item.source_type||'manual');
     const sourceId=cleanText(item.id||item.sourceMemoId||item.source_memo_id||item.requestId||item.request_id||'',120);
-    const rawBody=cleanText(item.body||item.text||item.memo||item.content||item.summary||'',4000);
+    const rawBody=employeeText(item.body||item.text||item.memo||item.content||item.summary||'',4000);
     const category=normalizeCategory(item.category||item.manual_category,rawBody+' '+(item.title||''));
-    const title=cleanText(item.title||titleFromText(rawBody,category),80);
-    const body=sourceType==='memo'?bodyFromMemo(rawBody,category):cleanText(rawBody,4000);
+    const title=employeeText(item.title||titleFromText(rawBody,category),80);
+    const body=sourceType==='memo'?bodyFromMemo(rawBody,category):employeeText(rawBody,4000);
+    const sections=displaySectionsFromBody(body);
     const tags=tagsForText([title,body,rawBody].join(' '),category,Array.isArray(item.tags)?item.tags:String(item.tags||'').split(/[,\s]+/));
     const updatedAt=Number(item.updatedAt||item.updated_at_ms||item.createdAt||item.created_at_ms||0)||0;
     const normalized={
@@ -339,8 +379,12 @@
       category,
       categoryLabel:categoryLabel(category),
       title:title||titleFromText(body,category),
-      summary:cleanText(item.summary||summarize(body,category),130),
+      summary:employeeText(item.summary||summarize(body,category),130),
       body,
+      actions:sections.actions,
+      cautions:sections.cautions,
+      actionText:sections.actions.join(' · '),
+      cautionText:sections.cautions.join(' · '),
       tags,
       status:cleanText(item.status||'',40),
       updatedAt,
@@ -350,7 +394,8 @@
       source_urls:uniq([].concat(item.sourceUrls||item.source_urls||item.sourceUrl||item.source_url||[])),
       sourceCount:Number(item.sourceCount||item.source_count||0)||1,
       searchIndex:'',
-      conflicts:[]
+      conflicts:[],
+      displayCategoryLabel:categoryLabel(category)
     };
     if(!normalized.body)normalized.body=bodyFromMemo(normalized.title,category);
     normalized.summary=summarize(normalized.summary||normalized.body,category);
@@ -520,7 +565,7 @@
     const sectionSummary={
       work:'근무 '+cleanText(schedule.workSummary||'',60),
       task:'할일/알람 '+cleanText(schedule.taskSummary||'',60),
-      discount:'할인/행사 '+cleanText(schedule.discountSummary||'',60),
+      discount:'행사 '+cleanText(schedule.discountSummary||'',60),
       news:'뉴스 '+cleanText(schedule.newsSummary||'',60),
       weather:'날씨 '+cleanText(schedule.weatherSummary||'',60),
       manual:'오늘 필요한 메뉴얼 '+cleanText(schedule.manualSummary||'',60)
@@ -528,7 +573,7 @@
     const sections=[
       {key:'schedule',title:'일정',summary:cleanText(schedule.summary||'',120),count:Number(schedule.count||0)||0,items:[],emptyState:Number(schedule.count||0)?'':'일정 대기',pendingCount:Number(schedule.count||0)?0:1},
       sectionForCategory(all,'task','할일/알람',sectionSummary.task),
-      sectionForCategory(all,'discount','할인/행사',sectionSummary.discount),
+      sectionForCategory(all,'discount','행사',sectionSummary.discount),
       sectionForCategory(all,'news','뉴스',sectionSummary.news),
       sectionForCategory(all,'weather','날씨',sectionSummary.weather),
       sectionForCategory(all,'work','근무',sectionSummary.work),

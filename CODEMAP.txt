@@ -22,7 +22,7 @@
 - `docs/auth_std_logic.js` — PIN/GPS 상태 요약과 표준 근무 수정 요청 객체 생성 순수 모듈
 - `docs/style.css` — WorkSchedule 웹 스타일
 - `docs/schedule_delivery_logic.js` — 5분 idle/6시간 최신 근무표 이미지 출력 due 계산 순수 모듈
-- `docs/manual_logic.js` — 하이닉스 메모 -> 운영메뉴얼 병합/정규화/충돌 감지 + intake envelope 후보 도메인/briefing empty-state contract 순수 모듈
+- `docs/manual_logic.js` — 하이닉스 메모 -> 직원용 메뉴얼 병합/정규화/충돌 감지 + 숨은 메타 유지 + intake envelope 후보 도메인/briefing empty-state contract 순수 모듈
 - `scripts/test_schedule_logic.mjs` — delivery 상태 계산 + docs 이미지 출력 경로 회귀 테스트
 - `scripts/test_auth_std_logic.mjs` — PIN/GPS gate와 표준 수정 요청 객체 회귀 테스트
 - `scripts/test_manual_logic.mjs` — 운영메뉴얼 병합/출력 분류 회귀 테스트

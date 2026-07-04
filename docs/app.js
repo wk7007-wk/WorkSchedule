@@ -852,24 +852,25 @@ function rOpsManual(){
   const catChips=cats.map(c=>manualChip(c==='all'?'전체':(logic?.categoryLabel(c)||c),cat===c,'data-ops-cat',c)).join('');
   const cards=filtered.length?filtered.map(item=>{
     const conflicts=(item.conflicts||[]).length?'<div class="ops-conflict">확인 필요: '+esc((item.conflicts||[]).join(' / '))+'</div>':'';
-    const sourceCount=Number(item.sourceCount||0)||[].concat(item.sourceIds||[],item.sourceUrls||[]).filter(Boolean).length;
-    const updatedAt=Number(item.updatedAt||0)||0;
-    const updatedLabel=updatedAt?new Date(updatedAt).getFullYear()+'-'+pad(new Date(updatedAt).getMonth()+1)+'-'+pad(new Date(updatedAt).getDate()):'';
-    const detailBits=[];
-    if(sourceCount)detailBits.push('관련 출처 '+sourceCount+'개');
-    if(updatedLabel)detailBits.push('최근 갱신 '+updatedLabel);
-    const more=detailBits.length?'<details class="ops-manual-more"><summary>출처/갱신</summary><div class="ops-manual-more-body">'+detailBits.map(x=>'<div>'+esc(x)+'</div>').join('')+'</div></details>':'';
+    const actions=(item.actions||[]).slice(0,3).join(' · ')||(item.body||item.summary||'');
+    const cautions=(item.cautions||[]).slice(0,2).join(' · ')||(item.summary||'');
+    const refs=(item.sourceUrls||[]).slice(0,3).map((url,index)=>{
+      const label='참고 '+(index+1);
+      return '<a class="ops-ref-link" href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">'+esc(label)+'</a>';
+    }).join('');
+    const more=refs?'<details class="ops-manual-more"><summary>참고</summary><div class="ops-manual-more-body">'+refs+'</div></details>':'';
     return '<article class="ops-manual-card" data-category="'+esc(item.category||'etc')+'">'+
-      '<div class="ops-manual-card-head"><h3>'+esc(item.title||'운영 기준')+'</h3><span class="ops-cat">'+esc(item.categoryLabel||logic?.categoryLabel(item.category)||'기타')+'</span></div>'+
+      '<div class="ops-manual-card-head"><h3>'+esc(item.title||'직원메뉴얼')+'</h3><span class="ops-cat">'+esc(item.displayCategoryLabel||item.categoryLabel||logic?.categoryLabel(item.category)||'기타')+'</span></div>'+
       '<p class="ops-summary">'+esc(item.summary||'')+'</p>'+
-      '<p class="ops-body">'+esc(item.body||'')+'</p>'+
+      '<div class="ops-section"><span>해야 할 일</span><p>'+esc(actions)+'</p></div>'+
+      '<div class="ops-section caution"><span>주의</span><p>'+esc(cautions)+'</p></div>'+
       more+
       conflicts+
     '</article>';
   }).join(''):'<div class="ops-empty">조건에 맞는 운영메뉴얼이 없습니다.</div>';
   con.innerHTML='<div class="ops-manual-view">'+
-    '<div class="ops-manual-head"><div class="ops-manual-title"><strong>운영메뉴얼</strong><span class="ops-manual-count">'+filtered.length+' / '+all.length+'</span></div>'+
-    '<input class="ops-search" id="opsSearch" type="search" placeholder="메뉴얼 검색" value="'+esc(q)+'">'+
+    '<div class="ops-manual-head"><div class="ops-manual-title"><strong>직원메뉴얼</strong><span class="ops-manual-count">'+filtered.length+' / '+all.length+'</span></div>'+
+    '<input class="ops-search" id="opsSearch" type="search" placeholder="내용 검색" value="'+esc(q)+'">'+
     '<div class="ops-chip-row">'+catChips+'</div></div>'+
     '<div class="ops-manual-list">'+cards+'</div></div>';
   const input=$('opsSearch');if(input){

@@ -37,7 +37,7 @@
 ## UI/동선 기준
 - WorkSchedule 웹은 Firebase DB 상세 확인/보정/출력 화면이다.
 - HynixOps 근무표 조정은 safe queue 중심의 간단 입력 front이고, WorkSchedule 원본과 경계를 섞지 않는다.
-- 운영탭은 하이닉스 메모/운영 기준을 정리된 메뉴얼로 보여준다. 메모 원문은 기본 화면에 복사 노출하지 않는다.
+- 운영탭은 하이닉스 메모/운영 기준을 직원용 메뉴얼로 보여준다. 제목, 요약, 해야 할 일, 주의만 기본 노출하고 source/id/search_text/sourceTypes/updated_at 같은 메타는 내부에만 둔다.
 - 근무 직접 수정은 직원/날짜를 고른 뒤 확인-저장 흐름으로 `/workschedule_v2` 원천을 직접 갱신한다. 카톡 PNG 출력과 같은 원천을 본다.
 - 운영메뉴얼 구현 위치는 `docs/manual_logic.js`와 `docs/app.js` 운영탭이다. 하이닉스 메모탭/운영메뉴얼 소비자는 `/root/my-first-project/AttendanceBoard/docs/hynix/index.html`이고, durable source는 `/packhelper/ops_manual` read-only다.
 - 운영메뉴얼은 원문 복사본이 아니라 분석/편입된 색인형 DB로 유지한다. 카카오봇 상황 답변용 검색 키와 태그는 `docs/manual_logic.js` 계약을 따른다.
