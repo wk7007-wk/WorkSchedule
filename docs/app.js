@@ -165,12 +165,12 @@ function confirmPreviewDetailText(row){
   const lines=['선택한 이미지 반영 요청',confirmPreviewSummary(row)];
   if(s.shift)lines.push('시간: '+s.shift);
   if(s.role)lines.push('역할: '+s.role);
-  if(s.note)lines.push('메모: '+s.note);
+  if(s.note)lines.push('요청 메모: '+s.note);
   return lines.filter(Boolean).join('\n');
 }
 function confirmPayloadPreviewText(payload){
   if(!payload||payload.error)return payload&&payload.error?payload.error:'선택한 이미지 반영 요청';
-  const lines=['선택한 이미지 반영 요청',payload.date?('날짜: '+payload.date):'',payload.employee?('직원: '+payload.employee):'',confirmActionLabel(payload.action),payload.action==='upsert_shift'&&payload.shift?('시간: '+payload.shift):'',payload.role?('역할: '+payload.role):'',payload.note?('메모: '+payload.note):'',payload.dry_run?'확인 요청 등록':'실제 반영 요청'];
+  const lines=['선택한 이미지 반영 요청',payload.date?('날짜: '+payload.date):'',payload.employee?('직원: '+payload.employee):'',confirmActionLabel(payload.action),payload.action==='upsert_shift'&&payload.shift?('시간: '+payload.shift):'',payload.role?('역할: '+payload.role):'',payload.note?('요청 메모: '+payload.note):'',payload.dry_run?'확인 요청 등록':'실제 반영 요청'];
   return lines.filter(Boolean).join('\n');
 }
 function parseShiftRange(text){const m=String(text||'').trim().match(/^([01]?\d|2[0-3])(?::?([0-5]\d))?\s*(?:시)?\s*[-~–—]\s*([01]?\d|2[0-3])(?::?([0-5]\d))?\s*(?:시)?$/);if(!m)return null;return{start:pad(parseInt(m[1]))+':'+(m[2]||'00'),end:pad(parseInt(m[3]))+':'+(m[4]||'00')};}
@@ -1195,7 +1195,7 @@ $('tabContent').addEventListener('touchend',e=>{const dx=e.changedTouches[0].cli
 // === share ===
 $('shareBtn').addEventListener('click',()=>queueCompositeShare('header_share'));
 $('deliveryShareBtn')?.addEventListener('click',()=>queueCompositeShare('delivery_panel'));
-$('urlBtn').addEventListener('click',()=>{if(navigator.clipboard)navigator.clipboard.writeText(location.href).then(()=>toast('URL 복사됨'));else{const a=document.createElement('textarea');a.value=location.href;document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);toast('URL 복사됨');}});
+$('urlBtn').addEventListener('click',()=>{if(navigator.clipboard)navigator.clipboard.writeText(location.href).then(()=>toast('공유 링크가 복사됨'));else{const a=document.createElement('textarea');a.value=location.href;document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);toast('공유 링크가 복사됨');}});
 // === collapsible + misc ===
 (function(tId,aId,bId,def){const b=$(bId),a=$(aId);if(!b||!a||!$(tId))return;if(def){b.classList.add('open');a.classList.add('open');}$(tId).addEventListener('click',()=>{const o=b.classList.toggle('open');a.classList.toggle('open',o);S.sec[bId]=o;if(o&&bId==='weekBody')renderAll(true);});})('weekToggle','weekArrow','weekBody',false);
 $('refreshBtn').addEventListener('click',()=>{toast('새로고침...');location.reload();});
