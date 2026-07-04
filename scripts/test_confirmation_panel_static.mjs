@@ -63,14 +63,17 @@ for (const id of [
 const publicText = visibleHtmlText(indexSource);
 assert.match(publicText, /카톡 이미지 근무 확인/);
 assert.match(publicText, /카톡 이미지 확인 대기 없음/);
-assert.match(publicText, /확인 요청 미리보기/);
-assert.match(publicText, /반영 요청 내용/);
+assert.match(publicText, /선택한 이미지를 고르면 반영 요청 내용이 보입니다\./);
+assert.match(publicText, /선택한 이미지 반영 요청/);
 assert.match(publicText, /근무 추가\/수정/);
 assert.match(publicText, /휴무/);
 assert.match(publicText, /해제/);
 assert.doesNotMatch(publicText, /(?<!운영)메뉴얼/);
 for (const term of ['preview queue', 'source_event_id', 'execute_live_write', 'confirmed request preview', 'upsert_shift', 'note', 'off', 'clear', 'CLI 보정 후보']) {
   assert.doesNotMatch(publicText, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+}
+for (const term of ['source text', 'preview queue', 'source_event_id', 'upsert_shift', 'execute_live_write', 'confirmed request preview', 'CLI 보정', 'note 실제']) {
+  assert.doesNotMatch(indexSource, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
 }
 assert.match(styleSource, /\.confirm-panel/);
 assert.match(styleSource, /\.confirm-grid/);

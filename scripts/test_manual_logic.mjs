@@ -50,7 +50,7 @@ const employeeFacing = manual.normalizeManualEntry(
   { id: 'memo-4', title: '운영메뉴얼 입력 원칙', body: 'category tags search_text source status updated_at 원문 복붙 DB' },
   { sourceType: 'memo' },
 );
-assert.match(employeeFacing.title, /새 내용 알려주는 방법|입력 정리 기준|주문 변경 응대 기준|근무 변경 요청 방법/);
+assert.match(employeeFacing.title, /운영메뉴얼 새 내용 추가 방법|새 내용 알려주는 방법|입력 정리 기준|주문 변경 응대 기준|근무 변경 요청 방법/);
 assert.doesNotMatch([employeeFacing.title, employeeFacing.summary, employeeFacing.body].join(' '), /source|status|updated_at|search_text|원문|복붙|DB|database/i);
 
 const publicCard = manual.publicManualCardModel({
@@ -127,7 +127,7 @@ assert.ok(mergedFirebase.some((item) => item.category === 'chat' && item.tags.in
 assert.ok(mergedFirebase.some((item) => item.category === 'order' && /발주/.test(item.body)));
 assert.equal(manual.CATEGORIES.customer_support.label, '고객응대');
 assert.equal(manual.CATEGORIES.platform_help.label, '앱주문');
-assert.equal(manual.CATEGORIES.manual.label, '새 내용');
+assert.equal(manual.CATEGORIES.manual.label, '운영메뉴얼');
 assert.equal(manual.CATEGORIES.coupon.label, '쿠폰');
 assert.equal(manual.CATEGORIES.task.label, '할일');
 assert.equal(manual.CATEGORIES.discount.label, '행사');

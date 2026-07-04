@@ -8,7 +8,7 @@
   const CATEGORY_ORDER=['work','manual','customer_support','platform_help','coupon','chat','recipe','delivery','task','discount','weather','news','regulation','order','output','safety','etc'];
   const CATEGORIES={
     work:{label:'근무',keywords:['근무','근무표','스케줄','출근','퇴근','휴무','확정','시간','직원']},
-    manual:{label:'새 내용',keywords:['메뉴얼','매뉴얼','운영기준','운영 기준','편입','색인','원문','정리','새 내용','알려주는 방법']},
+    manual:{label:'운영메뉴얼',keywords:['운영메뉴얼','메뉴얼','매뉴얼','운영기준','운영 기준','편입','색인','원문','정리','새 내용','알려주는 방법']},
     customer_support:{label:'고객응대',keywords:['고객센터','고객 센터','문의','상담','안내','취소','변경']},
     platform_help:{label:'앱주문',keywords:['플랫폼','앱주문','배민','배달의민족','쿠팡이츠','BBQ','앱 상태','주문 상태','주문 변경']},
     coupon:{label:'쿠폰',keywords:['쿠폰','기프티콘','gifticon','쿠폰 등록','장바구니','사용 가능']},
@@ -27,7 +27,7 @@
   };
   const TAGS=[
     ['schedule','근무표',['근무표','스케줄','휴무','출근','퇴근']],
-    ['manual','메뉴얼',['메뉴얼','매뉴얼','운영기준','운영 기준','편입','정리']],
+    ['manual','운영메뉴얼',['운영메뉴얼','메뉴얼','매뉴얼','운영기준','운영 기준','편입','정리']],
     ['customer_support','고객안내',['고객센터','고객 센터','문의','상담','안내','취소','변경']],
     ['platform_help','앱주문',['플랫폼','앱주문','배민','배달의민족','쿠팡이츠','BBQ','앱 상태','주문 상태','주문 변경']],
     ['coupon','쿠폰',['쿠폰','기프티콘','gifticon','쿠폰 등록','장바구니','사용 가능']],
@@ -72,7 +72,7 @@
     {
       id:'default_memo_manual',
       category:'manual',
-      title:'새 내용 알려주는 방법',
+      title:'운영메뉴얼 새 내용 추가 방법',
       summary:'새로 들어온 내용은 한 문장으로 먼저 알려준다.',
       body:'- 새 내용은 한 문장으로 먼저 알린다.\n- 같은 주제는 묶고, 다른 주제는 나눠 적는다.\n- 직원이 바로 볼 수 있게 표현을 다듬는다.',
       tags:['manual','memo'],
@@ -82,8 +82,8 @@
       id:'default_intake_envelope',
       category:'manual',
       title:'입력 정리 기준',
-      summary:'텍스트, URL, 이미지, 카카오 대화, CLI, 타이머앱, 사이트 입력은 바로 정리한다.',
-      body:'- 들어온 내용은 바로 정리해서 다음 사람이 읽기 쉽게 만든다.\n- 텍스트, 링크, 이미지, 대화, 알림, 사이트 정보는 각각 구분해서 적는다.\n- 기다리지 말고 먼저 모아 두고, 나중에 분류한다.',
+      summary:'텍스트, 주소, 이미지, 카카오 대화, 자동정리, 타이머, 사이트 입력은 바로 정리한다.',
+      body:'- 들어온 내용은 바로 정리해서 다음 사람이 읽기 쉽게 만든다.\n- 텍스트, 주소, 이미지, 카카오 대화, 타이머, 사이트 정보는 각각 구분해서 적는다.\n- 자동정리 후보는 따로 모아 두고, 검토 후 반영한다.',
       tags:['cli','text','url','image','kakao','timer','site','manual'],
       updatedAt:0
     },
@@ -124,9 +124,11 @@
       .replace(/메뉴\s*변경\s*문의\s*답변\s*기준/gi,'주문 변경 응대 기준')
       .replace(/BBQ\s*기프티콘\s*메뉴\s*변경\s*안내/gi,'BBQ 쿠폰 사용 안내')
       .replace(/\b(source|status|updated_at|updatedAt|search_text|searchText|sourceIds?|sourceTypes?|sourceUrls?|source_urls?|codex_seed|id|db|database)\b/gi,'')
+      .replace(/메뉴얼|매뉴얼/g,'운영메뉴얼')
       .replace(/원문/g,'내용')
       .replace(/복붙/g,'그대로 옮김')
       .replace(/관리자/g,'직원')
+      .replace(/운영메뉴얼\s*운영메뉴얼/g,'운영메뉴얼')
       .replace(/\s{2,}/g,' ')
       .replace(/([,;])\s*([,;]+)/g,'$1'),limit);
   }
@@ -254,7 +256,7 @@
   function titleFromText(text,category){
     const body=String(text||'');
     const tag=categoryLabel(category);
-    if(/메뉴얼|매뉴얼|운영기준|편입|색인|원문|정리|새 내용|알려주는 방법/.test(body))return '새 내용 알려주는 방법';
+    if(/운영메뉴얼|메뉴얼|매뉴얼|운영기준|편입|색인|원문|정리|새 내용|알려주는 방법/.test(body))return '운영메뉴얼 새 내용 추가 방법';
     if(/근무표|스케줄|휴무|출근|퇴근/.test(body))return '근무 변경 요청 방법';
     if(/레시피|타이머|조리|메뉴/.test(body))return '레시피 확인 범위';
     if(/배달|주소|건물명|비번|비밀번호|group_only/.test(body.toLowerCase()))return '배달정보 기준';
@@ -315,7 +317,8 @@
       .replace(/해야함|해야 함|해야한다/g,'한다')
       .replace(/하면 안됨|하면 안 됨|하지말것|금지/g,'하지 않는다')
       .replace(/카톡/g,'카카오톡')
-      .replace(/메뉴얼|매뉴얼/g,'메뉴얼')
+      .replace(/메뉴얼|매뉴얼/g,'운영메뉴얼')
+      .replace(/운영메뉴얼\s*운영메뉴얼/g,'운영메뉴얼')
       .replace(/\s+/g,' ')
       .replace(/[~]+/g,' ')
       .trim();
@@ -419,7 +422,7 @@
       conflicts:(normalized.conflicts||[]).slice(0,3)
     };
   }
-  const INTAKE_SOURCE_LABELS={text:'텍스트',url:'주소',image:'이미지',kakao:'카카오',cli:'운영메뉴얼',timer:'타이머',site:'사이트',manual:'운영메뉴얼',default:'입력'};
+  const INTAKE_SOURCE_LABELS={text:'텍스트',url:'주소',image:'이미지',kakao:'카카오',cli:'자동정리',timer:'타이머',site:'사이트',manual:'운영메뉴얼',default:'입력'};
   const INTAKE_SOURCE_ORDER=['text','url','image','kakao','cli','timer','site','manual'];
   function normalizeIntakeSource(value){
     const key=String(value||'').trim().toLowerCase();

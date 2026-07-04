@@ -32,11 +32,14 @@ assert.match(indexSource, /ops_manual_seed\.js/);
 assert.match(indexSource, /data-tab="dashboard">브리핑</);
 assert.match(indexSource, /data-tab="ops">운영메뉴얼</);
 
+for (const term of ['source text', 'preview queue', 'source_event_id', 'upsert_shift', 'execute_live_write', 'confirmed request preview', 'CLI 보정', 'note 실제']) {
+  assert.doesNotMatch(indexSource, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+}
 assert.doesNotMatch(publicText, /(?<!운영)메뉴얼/);
 for (const term of ['source_event_id', 'execute_live_write', 'preview queue', 'confirmed request preview', 'upsert_shift', 'source text url image kakao cli timer site', 'CLI 보정 후보']) {
   assert.doesNotMatch(publicText, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
 }
-for (const term of ['운영메뉴얼', '카톡 이미지 확인', '확인 요청 미리보기', '반영 요청 내용', '보조정보 정리 대기', '텍스트', '주소', '이미지', '카카오', '타이머', '사이트']) {
+for (const term of ['운영메뉴얼', '카톡 이미지 확인', '선택한 이미지를 고르면 반영 요청 내용이 보입니다.', '선택한 이미지 반영 요청', '보조정보 정리 대기', '텍스트', '주소', '이미지', '카카오', '타이머', '사이트']) {
   assert.match(publicText, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
 
@@ -44,6 +47,7 @@ assert.match(appSource, /syncPreviewModeUI/);
 assert.match(appSource, /PREVIEW_ONLY/);
 assert.match(appSource, /publicManualCardModel/);
 assert.match(appSource, /confirmPayloadPreviewText/);
+assert.match(appSource, /CONFIRM_ACTION_VALUE_TO_CODE/);
 assert.match(appSource, /authModeBadge/);
 assert.match(appSource, /previewBanner/);
 assert.match(appSource, /seedManualEntries/);

@@ -19,6 +19,8 @@ const AUTH=Object.assign({},AUTH_DEFAULTS,readJsonFromLocalStorage(AUTH_DEFAULTS
 const PREVIEW_MODE_LABEL=AUTH_STD.authModeLabel?AUTH_STD.authModeLabel({previewMode:PREVIEW_ONLY,testAuth:TEST_AUTH}):(TEST_AUTH?'테스트 인증':'읽기 전용 검증 모드');
 const STD_REQUEST_PREVIEW_KEY='workschedule_std_request_preview_v1';
 const DRY_RUN_WRITES_KEY='workschedule_dry_run_writes_v1';
+const CONFIRM_ACTION_VALUE_TO_CODE={work_edit:'upsert_shift',day_off:'off',clear_entry:'clear'};
+const CONFIRM_ACTION_CODE_TO_VALUE={upsert_shift:'work_edit',off:'day_off',clear:'clear_entry'};
 const DSH=6,TLM=1440,DOW_KR=['일','월','화','수','목','금','토'],DOW_EN=['sun','mon','tue','wed','thu','fri','sat'];
 const WEATHER_LOCATION={name:'이천시 부발읍',lat:37.2816,lng:127.4892};
 const RC={'주방':'#E67E22','차배달':'#4ECDC4','오토바이':'#FFD700'},RL={'주방':'주방','차배달':'차','오토바이':'바이크'};
@@ -121,6 +123,8 @@ function pickPreviewValue(item,keys){for(const root of previewRoots(item||{})){f
 function previewTs(item){const n=Number(pickPreviewValue(item,['ts_ms','created_at_ms','updated_at_ms','timestamp','event_ts_ms','received_at_ms']));return Number.isFinite(n)?(n<10000000000?n*1000:n):0;}
 function fmtTs(ms){if(!ms)return'-';const d=new Date(ms);return (d.getMonth()+1)+'/'+d.getDate()+' '+pad(d.getHours())+':'+pad(d.getMinutes());}
 function normalizeConfirmAction(v){const t=String(v||'').trim().toLowerCase();if(t.includes('clear'))return'clear';if(t.includes('off')||t.includes('dayoff'))return'off';if(t.includes('shift')||t.includes('upsert')||t==='work')return'upsert_shift';return'';}
+function confirmActionValueFromCode(code){return CONFIRM_ACTION_CODE_TO_VALUE[normalizeConfirmAction(code)]||'work_edit';}
+function confirmActionCodeFromValue(value){return CONFIRM_ACTION_VALUE_TO_CODE[String(value||'').trim()]||normalizeConfirmAction(value)||'upsert_shift';}
 function previewRows(raw){if(!raw||typeof raw!=='object')return[];return Object.keys(raw).map(key=>({key,item:raw[key]||{}})).filter(r=>r.item&&typeof r.item==='object').sort((a,b)=>previewTs(b.item)-previewTs(a.item)).slice(0,30);}
 function previewField(item,key){const map={event_id:['event_id','eventId','source_event_id'],room:['room','room_name','roomName','room_id'],sender:['sender','sender_name','author'],media_kind:['media_kind','mediaKind','kind','attachment_kind'],status_text:['status_text','status','message','summary'],ocr_status:['ocr_status','ocrStatus'],parse_status:['parse_status','parseStatus'],write_status:['write_status','writeStatus']};return plainText(pickPreviewValue(item,map[key]||[key]));}
 function previewSafetyFlags(item){
@@ -158,15 +162,15 @@ function confirmPreviewSummary(row){
 function confirmPreviewDetailText(row){
   if(!row)return'확인할 근무표 이미지가 없습니다.';
   const s=previewSuggestion(row);
-  const lines=['반영 요청 내용',confirmPreviewSummary(row)];
+  const lines=['선택한 이미지 반영 요청',confirmPreviewSummary(row)];
   if(s.shift)lines.push('시간: '+s.shift);
   if(s.role)lines.push('역할: '+s.role);
   if(s.note)lines.push('메모: '+s.note);
   return lines.filter(Boolean).join('\n');
 }
 function confirmPayloadPreviewText(payload){
-  if(!payload||payload.error)return payload&&payload.error?payload.error:'반영 요청 내용';
-  const lines=['반영 요청 내용',payload.date?('날짜: '+payload.date):'',payload.employee?('직원: '+payload.employee):'',confirmActionLabel(payload.action),payload.action==='upsert_shift'&&payload.shift?('시간: '+payload.shift):'',payload.role?('역할: '+payload.role):'',payload.note?('메모: '+payload.note):'',payload.dry_run?'미리보기 저장':'실제 반영 요청'];
+  if(!payload||payload.error)return payload&&payload.error?payload.error:'선택한 이미지 반영 요청';
+  const lines=['선택한 이미지 반영 요청',payload.date?('날짜: '+payload.date):'',payload.employee?('직원: '+payload.employee):'',confirmActionLabel(payload.action),payload.action==='upsert_shift'&&payload.shift?('시간: '+payload.shift):'',payload.role?('역할: '+payload.role):'',payload.note?('메모: '+payload.note):'',payload.dry_run?'확인 요청 등록':'실제 반영 요청'];
   return lines.filter(Boolean).join('\n');
 }
 function parseShiftRange(text){const m=String(text||'').trim().match(/^([01]?\d|2[0-3])(?::?([0-5]\d))?\s*(?:시)?\s*[-~–—]\s*([01]?\d|2[0-3])(?::?([0-5]\d))?\s*(?:시)?$/);if(!m)return null;return{start:pad(parseInt(m[1]))+':'+(m[2]||'00'),end:pad(parseInt(m[3]))+':'+(m[4]||'00')};}
@@ -187,7 +191,7 @@ function fillConfirmEditor(row){
   if($('confirmSource'))$('confirmSource').value=s.source_event_id;
   if($('confirmDate'))$('confirmDate').value=s.date;
   if($('confirmEmployee'))$('confirmEmployee').value=s.employee;
-  if($('confirmAction'))$('confirmAction').value=s.action;
+  if($('confirmAction'))$('confirmAction').value=confirmActionValueFromCode(s.action);
   if($('confirmShift'))$('confirmShift').value=s.shift;
   if($('confirmRole'))$('confirmRole').value=s.role;
   if($('confirmOff'))$('confirmOff').checked=!!s.off;
@@ -197,9 +201,9 @@ function fillConfirmEditor(row){
   updateConfirmActionFields();
 }
 function confirmFormPayload(quiet){
-  const row=selectedConfirmRow(),now=Date.now(),source=plainText($('confirmSource')?.value)||row?.key||'',date=plainText($('confirmDate')?.value),employee=plainText($('confirmEmployee')?.value),action=$('confirmAction')?.value||'upsert_shift',shift=plainText($('confirmShift')?.value),role=plainText($('confirmRole')?.value),note=plainText($('confirmNote')?.value),live=PREVIEW_ONLY?false:!!$('confirmLive')?.checked;
+  const row=selectedConfirmRow(),now=Date.now(),source=plainText($('confirmSource')?.value)||row?.key||'',date=plainText($('confirmDate')?.value),employee=plainText($('confirmEmployee')?.value),action=confirmActionCodeFromValue($('confirmAction')?.value),shift=plainText($('confirmShift')?.value),role=plainText($('confirmRole')?.value),note=plainText($('confirmNote')?.value),live=PREVIEW_ONLY?false:!!$('confirmLive')?.checked;
   function bad(m){if(!quiet)toast(m);return{error:m};}
-  if(!row)return bad('확인할 항목을 선택해주세요');
+  if(!row)return bad('확인 대기 이미지를 선택해주세요');
   if(!source)return bad('확인 항목 정보가 없습니다');
   if(!date)return bad('날짜를 입력해주세요');
   if(!employee)return bad('직원을 입력해주세요');
@@ -220,7 +224,7 @@ function confirmFormPayload(quiet){
 }
 function renderConfirmPayloadPreview(){const el=$('confirmPayloadPreview');if(!el)return;const p=confirmFormPayload(true);el.textContent=confirmPayloadPreviewText(p);}
 function updateConfirmActionFields(){
-  const action=$('confirmAction')?.value||'upsert_shift',isShift=action==='upsert_shift',isOff=action==='off',isClear=action==='clear';
+  const action=confirmActionCodeFromValue($('confirmAction')?.value),isShift=action==='upsert_shift',isOff=action==='off',isClear=action==='clear';
   if($('confirmShift'))$('confirmShift').disabled=!isShift||!selectedConfirmRow();
   if($('confirmRole'))$('confirmRole').disabled=!isShift||!selectedConfirmRow();
   if($('confirmOff')){$('confirmOff').checked=isOff;$('confirmOff').disabled=!isOff||!selectedConfirmRow();}
@@ -234,7 +238,7 @@ function rConfirmPanel(){
   if(list){
     if(S.confirm.loading&&!S.confirm.items.length)list.innerHTML='<div class="confirm-empty">불러오는 중...</div>';
     else if(!S.confirm.items.length)list.innerHTML='<div class="confirm-empty">확인할 근무표 이미지가 없습니다.</div>';
-    else list.innerHTML=S.confirm.items.map(row=>{const sel=row.key===S.confirm.selected,summary=esc(confirmPreviewSummary(row)||'반영 요청'),detail=esc(confirmPreviewDetailText(row).split(String.fromCharCode(10)).slice(1,3).join(' · '));return'<button type="button" class="confirm-item'+(sel?' active':'')+'" data-confirm-key="'+esc(row.key)+'"><strong>'+summary+'</strong><em>'+detail+'</em><small>이미지 확인</small></button>';}).join('');
+    else list.innerHTML=S.confirm.items.map(row=>{const sel=row.key===S.confirm.selected,summary=esc(confirmPreviewSummary(row)||'반영 요청'),detail=esc(confirmPreviewDetailText(row).split(String.fromCharCode(10)).slice(1,3).join(' · '));return'<button type="button" class="confirm-item'+(sel?' active':'')+'" data-confirm-key="'+esc(row.key)+'"><strong>'+summary+'</strong><em>'+detail+'</em><small>선택한 이미지 확인</small></button>';}).join('');
   }
   const row=selectedConfirmRow(),detail=$('confirmPreviewDetail');
   if(detail){detail.textContent=confirmPreviewDetailText(row);}
@@ -255,13 +259,13 @@ async function enqueueConfirmedScheduleRequest(){
     const ok=await fbP(CONFIRMED_QUEUE_URL+'/'+safeFbKey(payload.request_id),payload);
     if(!ok)return;
     await markPreviewReview(payload.execute_live_write?'confirmed_live_requested':'confirmed_dry_run_requested',payload);
-    toast(payload.execute_live_write?'실제 반영 요청 등록됨':'미리보기 확인 요청 등록됨');
+    toast(payload.execute_live_write?'실제 반영 요청 등록됨':'선택한 이미지 반영 요청 등록됨');
     loadConfirmQueue();
   }finally{if(btn)btn.disabled=false;}
 }
 async function decideConfirmPreview(decision){
-  const row=selectedConfirmRow();if(!row){toast('preview를 선택해주세요');return;}
-  if(decision==='rejected'&&!confirm('이 preview를 반려로 표시할까요?'))return;
+  const row=selectedConfirmRow();if(!row){toast('확인 대기 이미지를 선택해주세요');return;}
+  if(decision==='rejected'&&!confirm('이 이미지를 반려로 표시할까요?'))return;
   const ok=await markPreviewReview(decision,null);
   if(ok){toast(decision==='hold'?'보류 표시됨':'반려 표시됨');loadConfirmQueue();}
 }
