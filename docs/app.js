@@ -144,6 +144,31 @@ function previewSuggestion(row){
   if(!action)action=clear?'clear':off?'off':'upsert_shift';
   return{source_event_id:eventId,date:plainText(pickPreviewValue(item,['date','work_date','schedule_date']))||dk(S.date),employee:plainText(pickPreviewValue(item,['employee','employee_name','employee_id','name','staff'])),action,shift:shiftTextFromPreview(item),role:plainText(pickPreviewValue(item,['role','job_role'])),off:action==='off'||off,clear:action==='clear'||clear,note:plainText(pickPreviewValue(item,['note','memo','status_text','summary']))};
 }
+function confirmActionLabel(action){
+  return action==='off'?'휴무':action==='clear'?'해제':'근무 추가/수정';
+}
+function confirmPreviewSummary(row){
+  if(!row)return'';
+  const s=previewSuggestion(row);
+  const parts=[s.date||'날짜 미지정',s.employee||'직원 미지정',confirmActionLabel(s.action)];
+  if(s.action==='upsert_shift'&&s.shift)parts.push(s.shift);
+  if(s.note)parts.push(s.note);
+  return parts.filter(Boolean).join(' · ');
+}
+function confirmPreviewDetailText(row){
+  if(!row)return'확인할 근무표 이미지가 없습니다.';
+  const s=previewSuggestion(row);
+  const lines=['반영 요청 내용',confirmPreviewSummary(row)];
+  if(s.shift)lines.push('시간: '+s.shift);
+  if(s.role)lines.push('역할: '+s.role);
+  if(s.note)lines.push('메모: '+s.note);
+  return lines.filter(Boolean).join('\n');
+}
+function confirmPayloadPreviewText(payload){
+  if(!payload||payload.error)return payload&&payload.error?payload.error:'반영 요청 내용';
+  const lines=['반영 요청 내용',payload.date?('날짜: '+payload.date):'',payload.employee?('직원: '+payload.employee):'',confirmActionLabel(payload.action),payload.action==='upsert_shift'&&payload.shift?('시간: '+payload.shift):'',payload.role?('역할: '+payload.role):'',payload.note?('메모: '+payload.note):'',payload.dry_run?'미리보기 저장':'실제 반영 요청'];
+  return lines.filter(Boolean).join('\n');
+}
 function parseShiftRange(text){const m=String(text||'').trim().match(/^([01]?\d|2[0-3])(?::?([0-5]\d))?\s*(?:시)?\s*[-~–—]\s*([01]?\d|2[0-3])(?::?([0-5]\d))?\s*(?:시)?$/);if(!m)return null;return{start:pad(parseInt(m[1]))+':'+(m[2]||'00'),end:pad(parseInt(m[3]))+':'+(m[4]||'00')};}
 function confirmActor(){const a=authStore();return plainText(a&&a.name)||'workschedule_web';}
 async function loadConfirmQueue(){
@@ -174,8 +199,8 @@ function fillConfirmEditor(row){
 function confirmFormPayload(quiet){
   const row=selectedConfirmRow(),now=Date.now(),source=plainText($('confirmSource')?.value)||row?.key||'',date=plainText($('confirmDate')?.value),employee=plainText($('confirmEmployee')?.value),action=$('confirmAction')?.value||'upsert_shift',shift=plainText($('confirmShift')?.value),role=plainText($('confirmRole')?.value),note=plainText($('confirmNote')?.value),live=PREVIEW_ONLY?false:!!$('confirmLive')?.checked;
   function bad(m){if(!quiet)toast(m);return{error:m};}
-  if(!row)return bad('확인할 preview를 선택해주세요');
-  if(!source)return bad('source_event_id 없음');
+  if(!row)return bad('확인할 항목을 선택해주세요');
+  if(!source)return bad('확인 항목 정보가 없습니다');
   if(!date)return bad('날짜를 입력해주세요');
   if(!employee)return bad('직원을 입력해주세요');
   const reqId='confirmed_schedule_write_request_'+safeFbKey(source)+'_'+now;
@@ -193,7 +218,7 @@ function confirmFormPayload(quiet){
   else if(action==='clear'){payload.clear=true;}
   return payload;
 }
-function renderConfirmPayloadPreview(){const el=$('confirmPayloadPreview');if(!el)return;const p=confirmFormPayload(true);el.textContent=p.error?p.error:JSON.stringify({request_type:p.request_type,queue_path:CONFIRMED_QUEUE_PATH,source_event_id:p.source_event_id,date:p.date,employee:p.employee,action:p.action,dry_run:p.dry_run,execute_live_write:p.execute_live_write,preview_mode:PREVIEW_ONLY},null,2);}
+function renderConfirmPayloadPreview(){const el=$('confirmPayloadPreview');if(!el)return;const p=confirmFormPayload(true);el.textContent=confirmPayloadPreviewText(p);}
 function updateConfirmActionFields(){
   const action=$('confirmAction')?.value||'upsert_shift',isShift=action==='upsert_shift',isOff=action==='off',isClear=action==='clear';
   if($('confirmShift'))$('confirmShift').disabled=!isShift||!selectedConfirmRow();
@@ -205,14 +230,14 @@ function updateConfirmActionFields(){
 }
 function rConfirmPanel(){
   renderConfirmEmployeeOptions();
-  const status=$('confirmQueueStatus'),list=$('confirmList');if(status){status.textContent=S.confirm.loading?'preview queue 불러오는 중':S.confirm.items.length+'건 / '+(S.confirm.lastLoadMs?fmtTs(S.confirm.lastLoadMs):'미조회');}
+  const status=$('confirmQueueStatus'),list=$('confirmList');if(status){status.textContent=S.confirm.loading?'카톡 이미지 확인 대기 불러오는 중':S.confirm.items.length?'확인 대기 '+S.confirm.items.length+'건':'카톡 이미지 확인 대기 없음';}
   if(list){
     if(S.confirm.loading&&!S.confirm.items.length)list.innerHTML='<div class="confirm-empty">불러오는 중...</div>';
-    else if(!S.confirm.items.length)list.innerHTML='<div class="confirm-empty">대기 중인 preview가 없습니다.</div>';
-    else list.innerHTML=S.confirm.items.map(row=>{const it=row.item,sel=row.key===S.confirm.selected,ev=previewField(it,'event_id')||row.key,room=previewField(it,'room')||'-',sender=previewField(it,'sender')||'-',wr=previewField(it,'write_status')||'-',ts=fmtTs(previewTs(it)),flags=previewSafetyFlags(it).slice(0,4).map(x=>'<span>'+esc(x)+'</span>').join('');return'<button type="button" class="confirm-item'+(sel?' active':'')+'" data-confirm-key="'+esc(row.key)+'"><strong>'+esc(ev)+'</strong><em>'+esc(ts)+' · '+esc(room)+' · '+esc(sender)+'</em><small>write '+esc(wr)+'</small><div class="confirm-flags">'+flags+'</div></button>';}).join('');
+    else if(!S.confirm.items.length)list.innerHTML='<div class="confirm-empty">확인할 근무표 이미지가 없습니다.</div>';
+    else list.innerHTML=S.confirm.items.map(row=>{const sel=row.key===S.confirm.selected,summary=esc(confirmPreviewSummary(row)||'반영 요청'),detail=esc(confirmPreviewDetailText(row).split(String.fromCharCode(10)).slice(1,3).join(' · '));return'<button type="button" class="confirm-item'+(sel?' active':'')+'" data-confirm-key="'+esc(row.key)+'"><strong>'+summary+'</strong><em>'+detail+'</em><small>이미지 확인</small></button>';}).join('');
   }
   const row=selectedConfirmRow(),detail=$('confirmPreviewDetail');
-  if(detail){if(!row)detail.textContent='preview item을 선택하세요.';else{const it=row.item;detail.innerHTML='<div><b>event_id</b><span>'+esc(previewField(it,'event_id')||row.key)+'</span></div><div><b>room</b><span>'+esc(previewField(it,'room')||'-')+'</span></div><div><b>sender</b><span>'+esc(previewField(it,'sender')||'-')+'</span></div><div><b>media</b><span>'+esc(previewField(it,'media_kind')||'-')+'</span></div><div><b>status</b><span>'+esc(previewField(it,'status_text')||'-')+'</span></div><div><b>ocr</b><span>'+esc(previewField(it,'ocr_status')||'-')+'</span></div><div><b>parse</b><span>'+esc(previewField(it,'parse_status')||'-')+'</span></div><div><b>write</b><span>'+esc(previewField(it,'write_status')||'-')+'</span></div><div><b>ts_ms</b><span>'+esc(String(previewTs(it)||''))+'</span></div><div><b>safety</b><span>'+previewSafetyFlags(it).map(esc).join(' / ')+'</span></div>';}}
+  if(detail){detail.textContent=confirmPreviewDetailText(row);}
   if(S.confirm.renderedSelected!==S.confirm.selected){S.confirm.renderedSelected=S.confirm.selected;fillConfirmEditor(row);}else renderConfirmPayloadPreview();
 }
 async function markPreviewReview(decision,payload){
@@ -224,13 +249,13 @@ async function markPreviewReview(decision,payload){
 }
 async function enqueueConfirmedScheduleRequest(){
   let payload=confirmFormPayload(false);if(payload.error)return;
-  if(payload.execute_live_write&&!confirm('실제 근무표 반영 요청을 backend queue에 등록합니다. 계속할까요?'))return;
+  if(payload.execute_live_write&&!confirm('실제 근무표 반영 요청을 등록합니다. 계속할까요?'))return;
   const btn=$('confirmSend');if(btn)btn.disabled=true;
   try{
     const ok=await fbP(CONFIRMED_QUEUE_URL+'/'+safeFbKey(payload.request_id),payload);
     if(!ok)return;
     await markPreviewReview(payload.execute_live_write?'confirmed_live_requested':'confirmed_dry_run_requested',payload);
-    toast(payload.execute_live_write?'live 확인 요청 등록됨':'dry-run 확인 요청 등록됨');
+    toast(payload.execute_live_write?'실제 반영 요청 등록됨':'미리보기 확인 요청 등록됨');
     loadConfirmQueue();
   }finally{if(btn)btn.disabled=false;}
 }
@@ -260,7 +285,7 @@ function renderDeliveryPanel(){
   if(d.due){stEl.textContent=(d.dueReason==='periodic'?'6시간 주기 도래':'5분 무작업 완료')+' - 최신 근무표 이미지 준비';stEl.classList.add('ready');ensureCliPatchCandidate(gaps,d.dueReason);}
   else if(d.nextDueAtMs){stEl.textContent='최신 근무표 공유 대기 - 다음 판단 '+fmtClock(d.nextDueAtMs);stEl.classList.add('waiting');}
   else{stEl.textContent='최신 근무표 변경 대기';}
-  cliEl.textContent=gaps.length?'CLI 보정 후보: '+gaps.map(x=>x==='weather'?'날씨':'뉴스').join(', ')+' (외부 호출 없음)':'보조정보 준비됨';
+  cliEl.textContent=gaps.length?'보조정보 정리 대기: '+gaps.map(x=>x==='weather'?'날씨':'뉴스').join(', '):'보조정보 준비됨';
   if(btn)btn.disabled=false;
 }
 function queueDeliveryRender(){clearTimeout(deliveryTimer);const d=deliveryState(),now=Date.now(),wait=d.nextDueAtMs?Math.max(1000,Math.min(60000,d.nextDueAtMs-now)):60000;deliveryTimer=setTimeout(()=>{renderDeliveryPanel();queueDeliveryRender();},wait);}
@@ -272,7 +297,7 @@ function makeCompositeScheduleImage(){
   ctx.fillStyle='#9090A8';ctx.font='28px sans-serif';ctx.fillText(dd+' ('+DOW_KR[S.date.getDay()]+') / 웹 이미지 출력 후 대상 방 확인',52,118);
   ctx.fillStyle='#242444';ctx.fillRect(52,150,w-104,58);ctx.fillStyle='#FFD700';ctx.font='700 28px sans-serif';ctx.fillText('자동 카카오 전송 없음 · 사용자가 이미지 대상 직접 선택',78,187);
   let y=235;rows.forEach(r=>{ctx.fillStyle='#242444';ctx.fillRect(52,y,w-104,rowH-12);ctx.fillStyle=r.color;ctx.fillRect(52,y,10,rowH-12);ctx.fillStyle='#FFFFFF';ctx.font='700 30px sans-serif';ctx.fillText(r.name,82,y+42);ctx.font='26px sans-serif';ctx.fillStyle=r.off?'#E74C3C':'#E0E0EC';let line=r.off?'휴무':(r.shift&&r.shift.start?r.shift.start+' ~ '+r.shift.end+'  '+(r.shift.role||'')+'  '+cH(r.shift.start,r.shift.end)+'h':'미입력');ctx.fillText(line,320,y+42);y+=rowH;});
-  ctx.fillStyle='#1e1e3a';ctx.fillRect(52,y+8,w-104,70);ctx.fillStyle=gaps.length?'#E67E22':'#2ECC71';ctx.font='700 26px sans-serif';ctx.fillText(gaps.length?'보조정보 CLI 보정 후보: '+gaps.map(x=>x==='weather'?'날씨':'뉴스').join(', '):'보조정보 준비됨',78,y+51);
+  ctx.fillStyle='#1e1e3a';ctx.fillRect(52,y+8,w-104,70);ctx.fillStyle=gaps.length?'#E67E22':'#2ECC71';ctx.font='700 26px sans-serif';ctx.fillText(gaps.length?'보조정보 정리 대기: '+gaps.map(x=>x==='weather'?'날씨':'뉴스').join(', '):'보조정보 준비됨',78,y+51);
   return c.toDataURL('image/png');
 }
 function downloadCompositeImage(dataUrl,fileName){
@@ -289,7 +314,7 @@ async function outputCompositeImage(dataUrl,fileName){
 }
 async function queueCompositeShare(reason){
   const gaps=collectSupportGaps();ensureCliPatchCandidate(gaps,reason||'manual_share');
-  const msg='브라우저 공유 메뉴 또는 PNG 파일로 이미지를 출력합니다.\n카카오 자동 전송은 하지 않습니다.'+(gaps.length?'\n\n날씨/뉴스 보조정보 누락은 CLI 보정 후보로만 기록됩니다. 실제 발송 전 보강 여부를 확인하세요.':'');
+  const msg='브라우저 공유 메뉴 또는 PNG 파일로 이미지를 출력합니다.\n카카오 자동 전송은 하지 않습니다.'+(gaps.length?'\n\n날씨/뉴스 보조정보가 비어 있어 자동 정리 대기 상태입니다. 실제 발송 전 보강 여부를 확인하세요.':'');
   if(!confirm(msg))return;
   const dataUrl=makeCompositeScheduleImage();
   if(!await outputCompositeImage(dataUrl,'workschedule_'+dk(S.date)+'.png')){toast('이미지 출력 취소됨');return;}
@@ -604,11 +629,11 @@ function rBrief(){
     summary:d+' '+(DOW_KR[S.date.getDay()]||''),
     count:wC,
     workSummary:wC+'명 출근 / '+tH.toFixed(1).replace('.0','')+'h',
-    taskSummary:'할일·알람 · 입력 큐 '+intakeQueueCount()+'건',
+    taskSummary:'할일·알람 · 입력 대기 '+intakeQueueCount()+'건',
     discountSummary:'할인/행사 확인 필요',
     newsSummary:'뉴스/월드컵 확인 필요',
     weatherSummary:WEATHER_LOCATION.name,
-    manualSummary:'오늘 필요한 메뉴얼 '+(entries.length?entries[0].title:'대기')
+    manualSummary:'오늘 필요한 운영메뉴얼 '+(entries.length?entries[0].title:'대기')
   },intakeCount:intakeQueueCount()}):null;
   let h='<div class="briefing-wrap">';
   h+='<div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap;">';
@@ -716,7 +741,7 @@ function rDashboard(){
     discountSummary:'할인/행사 확인 필요',
     newsSummary:'뉴스/월드컵 확인 필요',
     weatherSummary:WEATHER_LOCATION.name,
-    manualSummary:'오늘 필요한 메뉴얼 '+(entries.length?entries[0].title:'대기')
+    manualSummary:'오늘 필요한 운영메뉴얼 '+(entries.length?entries[0].title:'대기')
   },intakeCount:intakeQueueCount()}):null;
   const focusEntries=entries.filter(item=>/배민|쿠팡|BBQ|쿠폰|기프티콘/.test(String(item.title||''))).slice(0,4);
   const manualHighlights=(focusEntries.length?focusEntries:entries).slice(0,4);
@@ -724,7 +749,7 @@ function rDashboard(){
   h+='<div class="dash-grid">'+statCard(st.work.length+'명','근무','#E0E0EC')+statCard(fmtH(st.hours)+'h','총시간','#FFD700')+statCard(st.missing.length+'명','미입력','#9090A8')+statCard(st.off.length+'명','휴무','#E74C3C')+statCard(st.attStart+'건','실출근','#2ECC71')+statCard(st.attEnd+'건','실퇴근','#4ECDC4')+'</div>';
   if(dashBriefing){
     h+='<div class="summary-card dash-callout-card"><div class="summary-title"><div>브리핑</div><span>첫 화면 요약</span></div>';
-    h+='<div class="dash-callout-copy">근무, 일정/할일/행사/뉴스/날씨, 오늘 필요한 메뉴얼을 한 화면에서 먼저 확인합니다.</div>';
+    h+='<div class="dash-callout-copy">근무, 일정/할일/행사/뉴스/날씨, 오늘 필요한 운영메뉴얼을 한 화면에서 먼저 확인합니다.</div>';
     h+='<div class="dash-preview-grid">'+dashBriefing.sections.slice(0,7).map(section=>{const itemLabel=section.items&&section.items[0]?(section.items[0].title||section.items[0].summary||'항목 대기'):(section.emptyState||'항목 대기');return '<section class="briefing-section'+((section.count||0)===0?' is-empty':'')+'"><div class="briefing-section-head"><strong>'+esc(section.title)+'</strong><span>'+esc(section.count?section.count+'건':(section.emptyState||'대기'))+'</span></div><div class="briefing-section-body">'+esc(itemLabel)+'</div></section>';}).join('')+'</div>';
     h+='<div class="dash-link-row"><button type="button" class="dash-link-btn" data-go-tab="ops">운영메뉴얼 열기</button><button type="button" class="dash-link-btn" data-go-tab="day">날짜별 근무 보기</button><button type="button" class="dash-link-btn" data-go-std="1">근무 수정 요청</button></div></div>';
   }
@@ -836,6 +861,7 @@ function queueIntakeItem(item){
 function queueItemLabel(item){
   if(!item)return'입력';
   if(item.sourceLabel)return item.sourceLabel;
+  if(window.WorkScheduleManualLogic?.intakeLabel&&item.sourceType)return window.WorkScheduleManualLogic.intakeLabel(item.sourceType);
   if(item.sourceType)return item.sourceType;
   return item.title||'입력';
 }
@@ -872,21 +898,21 @@ function intakeDraftHasContent(){
 function intakeFileInput(){return $('intakeFile');}
 function intakeQueueStatusText(){
   const items=readIntakeQueue();
-  if(!items.length)return'큐 대기 없음';
-  return items.length+'건 큐 대기 · 최신 '+fmtTs(items[0].queuedAtMs||items[0].capturedAtMs||items[0].createdAtMs||0);
+  if(!items.length)return'대기 없음';
+  return items.length+'건 대기 · 최신 '+fmtTs(items[0].queuedAtMs||items[0].capturedAtMs||items[0].createdAtMs||0);
 }
 function renderIntakeQueue(){
   const list=$('intakeQueueList'),status=$('intakeStatus');if(!list||!status)return;
   const items=readIntakeQueue();S.intake.items=items;S.intake.loaded=true;S.intake.lastLoadMs=Date.now();
   status.textContent=intakeQueueStatusText();status.className='intake-status'+(items.length?' ready':'');
-  if(!items.length){list.innerHTML='<div class="intake-empty">큐 대기 항목이 없습니다.</div>';return;}
+  if(!items.length){list.innerHTML='<div class="intake-empty">대기 항목이 없습니다.</div>';return;}
   list.innerHTML=items.slice(0,6).map(item=>{
     const logic=window.WorkScheduleManualLogic||{};
     const memo=logic.inputEnvelopeToManualMemo?logic.inputEnvelopeToManualMemo(item,{sourceType:item.sourceType||'text'}):null;
     const cls=item.classificationHints||{};
     const attachCount=(item.attachments||[]).length;
     const candidates=(item.candidateDomains||cls.candidateDomains||[]).slice(0,4).map(key=>logic.categoryLabel?logic.categoryLabel(key):key);
-    const tagBits=[item.sourceType,cls.categoryLabel||item.categoryLabel||'',attachCount?('첨부 '+attachCount):'',item.queueState||'queued'].filter(Boolean);
+    const tagBits=[logic.intakeLabel?logic.intakeLabel(item.sourceType):item.sourceLabel||item.sourceType,cls.categoryLabel||item.categoryLabel||'',attachCount?('첨부 '+attachCount):'','정리 대기'].filter(Boolean);
     return '<article class="intake-item">'+
       '<div class="intake-item-head"><strong>'+esc(item.title||queueItemLabel(item))+'</strong><span>'+esc(fmtTs(item.queuedAtMs||item.capturedAtMs||0))+'</span></div>'+
       '<div class="intake-item-meta">'+tagBits.slice(0,4).map(x=>'<span class="intake-pill">'+esc(x)+'</span>').join('')+'</div>'+
@@ -917,7 +943,7 @@ async function queueIntakeFromForm(reason){
   const payload={sourceType:state.sourceType,text:state.text,url:state.url,sourceOrigin:'workschedule_web',reason:reason||'form_submit'};
   const envelope=queueIntakeItem(payload);
   if(!envelope)return false;
-  toast('입력 큐잉됨');
+  toast('입력 등록됨');
   renderIntakePanel();
   return true;
 }
@@ -930,7 +956,7 @@ async function queueIntakeFiles(files,reason){
     const envelope=queueIntakeItem({sourceType:'image',sourceLabel:'이미지',sourceOrigin:'workschedule_web',payload:{title:file.name||'이미지',text:file.name||'',note:reason||'file_upload',attachments:[{name:file.name||'image',type:'image',mime:file.type||'image/*',size:file.size||0,dataUrl}]}});
     if(envelope)added.push(envelope);
   }
-  if(added.length){toast(added.length+'건 이미지 큐잉됨');renderIntakePanel();return true;}
+  if(added.length){toast(added.length+'건 이미지 등록됨');renderIntakePanel();return true;}
   return false;
 }
 function rOpsManual(){
@@ -952,7 +978,7 @@ function rOpsManual(){
     }).join('');
     const more=refs?'<details class="ops-manual-more"><summary>참고</summary><div class="ops-manual-more-body">'+refs+'</div></details>':'';
     return '<article class="ops-manual-card" data-category="'+esc(safe.category||'etc')+'">'+
-      '<div class="ops-manual-card-head"><h3>'+esc(safe.title||'직원메뉴얼')+'</h3><span class="ops-cat">'+esc(safe.displayCategoryLabel||safe.categoryLabel||logic?.categoryLabel(safe.category)||'기타')+'</span></div>'+
+      '<div class="ops-manual-card-head"><h3>'+esc(safe.title||'운영메뉴얼')+'</h3><span class="ops-cat">'+esc(safe.displayCategoryLabel||safe.categoryLabel||logic?.categoryLabel(safe.category)||'기타')+'</span></div>'+
       '<p class="ops-summary">'+esc(safe.summary||'')+'</p>'+
       '<div class="ops-section"><span>해야 할 일</span><p>'+esc(actions)+'</p></div>'+
       '<div class="ops-section caution"><span>주의</span><p>'+esc(cautions)+'</p></div>'+
@@ -961,7 +987,7 @@ function rOpsManual(){
     '</article>';
   }).join(''):'<div class="ops-empty">조건에 맞는 운영메뉴얼이 없습니다.</div>';
   con.innerHTML='<div class="ops-manual-view">'+
-    '<div class="ops-manual-head"><div class="ops-manual-title"><strong>직원메뉴얼</strong><span class="ops-manual-count">'+filtered.length+' / '+all.length+'</span></div>'+
+    '<div class="ops-manual-head"><div class="ops-manual-title"><strong>운영메뉴얼</strong><span class="ops-manual-count">'+filtered.length+' / '+all.length+'</span></div>'+
     '<input class="ops-search" id="opsSearch" type="search" placeholder="내용 검색" value="'+esc(q)+'">'+
     '<div class="ops-chip-row">'+catChips+'</div></div>'+
     '<div class="ops-manual-list">'+cards+'</div></div>';

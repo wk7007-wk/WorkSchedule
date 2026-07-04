@@ -419,7 +419,7 @@
       conflicts:(normalized.conflicts||[]).slice(0,3)
     };
   }
-  const INTAKE_SOURCE_LABELS={text:'텍스트',url:'URL',image:'이미지',kakao:'카카오',cli:'CLI',timer:'타이머앱',site:'사이트',manual:'메뉴얼',default:'입력'};
+  const INTAKE_SOURCE_LABELS={text:'텍스트',url:'주소',image:'이미지',kakao:'카카오',cli:'운영메뉴얼',timer:'타이머',site:'사이트',manual:'운영메뉴얼',default:'입력'};
   const INTAKE_SOURCE_ORDER=['text','url','image','kakao','cli','timer','site','manual'];
   function normalizeIntakeSource(value){
     const key=String(value||'').trim().toLowerCase();
@@ -585,7 +585,7 @@
       discount:'행사 '+cleanText(schedule.discountSummary||'',60),
       news:'뉴스 '+cleanText(schedule.newsSummary||'',60),
       weather:'날씨 '+cleanText(schedule.weatherSummary||'',60),
-      manual:'오늘 필요한 메뉴얼 '+cleanText(schedule.manualSummary||'',60)
+      manual:'오늘 필요한 운영메뉴얼 '+cleanText(schedule.manualSummary||'',60)
     };
     const sections=[
       {key:'schedule',title:'일정',summary:cleanText(schedule.summary||'',120),count:Number(schedule.count||0)||0,items:[],emptyState:Number(schedule.count||0)?'':'일정 대기',pendingCount:Number(schedule.count||0)?0:1},
@@ -594,7 +594,7 @@
       sectionForCategory(all,'news','뉴스',sectionSummary.news),
       sectionForCategory(all,'weather','날씨',sectionSummary.weather),
       sectionForCategory(all,'work','근무',sectionSummary.work),
-      sectionForCategory(all,'manual','오늘 필요한 메뉴얼',sectionSummary.manual),
+      sectionForCategory(all,'manual','오늘 필요한 운영메뉴얼',sectionSummary.manual),
       sectionForCategory(all,'recipe','레시피/타이머','카카오봇이 참고할 레시피와 타이머 기준'),
       sectionForCategory(all,'delivery','배달정보','주소, 건물명, 비번처럼 group_only가 필요한 정보'),
       sectionForCategory(all,'regulation','규정','일반음식점 규정은 MCP 조회 후 요약/출처/갱신일을 붙인다')
@@ -605,7 +605,7 @@
       sections,
       topCategories:top,
       indexable,
-      needsManual:sectionForCategory(all,'manual','오늘 필요한 메뉴얼'),
+      needsManual:sectionForCategory(all,'manual','오늘 필요한 운영메뉴얼'),
       counts:Object.keys(byCategory).reduce((acc,key)=>{acc[key]=byCategory[key].length;return acc;},{}),
       pendingCount:all.filter(item=>String(item.status||'').toLowerCase()==='queued').length,
       schedule:options&&options.schedule||{},

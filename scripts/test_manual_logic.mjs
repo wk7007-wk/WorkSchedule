@@ -143,13 +143,13 @@ const briefing = manual.buildBriefingSections(
       discountSummary: '0건',
       newsSummary: '0건',
       weatherSummary: '맑음',
-      manualSummary: '오늘 필요한 메뉴얼',
+      manualSummary: '오늘 필요한 운영메뉴얼',
     },
     intakeCount: 1,
   },
 );
 assert.ok(briefing.sections.some((section) => section.title === '할일/알람'));
-assert.ok(briefing.sections.some((section) => section.title === '오늘 필요한 메뉴얼'));
+assert.ok(briefing.sections.some((section) => section.title === '오늘 필요한 운영메뉴얼'));
 assert.ok(briefing.indexable.some((item) => String(item.searchIndex || '').includes('shot.png')));
 
 const emptyBriefing = manual.buildBriefingSections([], {
