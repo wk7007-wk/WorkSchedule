@@ -82,6 +82,7 @@ const firebasePayload = {
       title: '공유 기준',
       body: '카카오 공유는 PNG 파일로 직접 확인',
       tags: ['kakao'],
+      source_urls: ['https://example.com/share'],
       updated_at_ms: 3,
     },
   },
@@ -95,6 +96,7 @@ const firebasePayload = {
 const firebaseManual = manual.normalizeFirebaseManualPayload(firebasePayload, { sourcePath: '/packhelper/ops_manual' });
 assert.equal(firebaseManual.entries.length, 1);
 assert.equal(firebaseManual.entries[0].category, 'chat');
+assert.ok(firebaseManual.entries[0].sourceUrls.includes('https://example.com/share'));
 assert.equal(firebaseManual.memos.length, 1);
 assert.equal(firebaseManual.memos[0].category, 'order');
 

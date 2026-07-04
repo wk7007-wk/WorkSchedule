@@ -5,10 +5,12 @@
 })(typeof window!=='undefined'?window:globalThis,function(){
   'use strict';
 
-  const CATEGORY_ORDER=['work','manual','chat','recipe','delivery','task','discount','weather','news','regulation','order','output','safety','etc'];
+  const CATEGORY_ORDER=['work','manual','customer_support','platform_help','chat','recipe','delivery','task','discount','weather','news','regulation','order','output','safety','etc'];
   const CATEGORIES={
     work:{label:'근무',keywords:['근무','근무표','스케줄','출근','퇴근','휴무','확정','시간','직원']},
     manual:{label:'운영메뉴얼',keywords:['메뉴얼','매뉴얼','운영기준','운영 기준','편입','색인','원문','정리']},
+    customer_support:{label:'고객안내',keywords:['고객센터','고객 센터','문의','상담','안내','취소','변경']},
+    platform_help:{label:'플랫폼안내',keywords:['플랫폼','배민','배달의민족','쿠팡이츠','BBQ','앱 상태','주문 상태']},
     chat:{label:'카카오/대화',keywords:['카카오','카톡','채팅','답변','운영방','전송','공유','브리핑','메시지']},
     recipe:{label:'레시피/타이머',keywords:['레시피','타이머','조리','메뉴','수량','재료','주의사항','치킨']},
     delivery:{label:'배달정보',keywords:['배달','주소','건물명','호수','비번','비밀번호','group_only','group only','도착']},
@@ -25,6 +27,8 @@
   const TAGS=[
     ['schedule','근무표',['근무표','스케줄','휴무','출근','퇴근']],
     ['manual','메뉴얼',['메뉴얼','매뉴얼','운영기준','운영 기준','편입','정리']],
+    ['customer_support','고객안내',['고객센터','고객 센터','문의','상담','안내','취소','변경']],
+    ['platform_help','플랫폼안내',['플랫폼','배민','배달의민족','쿠팡이츠','BBQ','앱 상태','주문 상태']],
     ['kakao','카카오',['카카오','카톡','운영방','공유','전송','답변']],
     ['memo','메모',['메모','기록','원문']],
     ['text','텍스트',['텍스트','문자','본문','문장','노트']],
@@ -316,7 +320,8 @@
       entry.categoryLabel,
       (entry.tags||[]).join(' '),
       (entry.sourceIds||[]).join(' '),
-      (entry.sourceTypes||[]).join(' ')
+      (entry.sourceTypes||[]).join(' '),
+      (entry.sourceUrls||[]).join(' ')
     ].join(' '),800);
   }
   function normalizeManualEntry(entry,options){
@@ -341,6 +346,8 @@
       updatedAt,
       sourceIds:uniq([sourceId].concat(item.sourceIds||item.source_ids||[])),
       sourceTypes:uniq([sourceType].concat(item.sourceTypes||item.source_types||[])),
+      sourceUrls:uniq([].concat(item.sourceUrls||item.source_urls||item.sourceUrl||item.source_url||[])),
+      source_urls:uniq([].concat(item.sourceUrls||item.source_urls||item.sourceUrl||item.source_url||[])),
       sourceCount:Number(item.sourceCount||item.source_count||0)||1,
       searchIndex:'',
       conflicts:[]
@@ -570,6 +577,7 @@
     const tags=uniq([].concat(base.tags||[],addition.tags||[])).slice(0,8);
     const sourceIds=uniq([].concat(base.sourceIds||[],addition.sourceIds||[]));
     const sourceTypes=uniq([].concat(base.sourceTypes||[],addition.sourceTypes||[]));
+    const sourceUrls=uniq([].concat(base.sourceUrls||[],addition.sourceUrls||[]));
     const merged=Object.assign({},base,{
       title:base.title||addition.title,
       summary:summarize(lines.join('\n'),base.category),
@@ -578,6 +586,8 @@
       updatedAt:Math.max(Number(base.updatedAt||0),Number(addition.updatedAt||0),Date.now()),
       sourceIds,
       sourceTypes,
+      sourceUrls,
+      source_urls:sourceUrls,
       sourceCount:(Number(base.sourceCount||1)+Number(addition.sourceCount||1))
     });
     merged.conflicts=detectManualConflicts([merged]);
