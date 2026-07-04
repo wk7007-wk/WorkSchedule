@@ -7,6 +7,7 @@
 ## 실행 경로
 - Firebase DB SOT: `/workschedule_v2`
 - 웹 출력: `docs/` 정적 파일, GitHub Pages `https://wk7007-wk.github.io/WorkSchedule/`
+- 루트 `index.html`은 Pages source가 root일 때도 최신 `docs/`로 넘기는 canonical redirect다.
 - 하이닉스 소비자: `/root/my-first-project/AttendanceBoard/docs/hynix/index.html` 근무표 탭
 - 카톡 이미지 출력: `docs/app.js`가 최신 근무표 PNG를 만들고 웹 공유 메뉴 또는 다운로드로 넘긴다.
 - 카톡 이미지 근무 확인: `docs/app.js` confirmation panel이 `/packhelper/storebot_termux/work_schedule_image_preview_queue`를 읽고, 확인 시 `/packhelper/storebot_termux/confirmed_schedule_write_requests`에 `confirmed_schedule_write_request`만 enqueue한다. 이 panel은 `/workschedule_v2` 직접 write를 하지 않는다.
