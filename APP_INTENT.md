@@ -15,12 +15,13 @@
 ## 절대 기준
 - Firebase `/workschedule_v2`가 단일 근무 데이터 원본이다.
 - 운영메뉴얼 durable source는 Firebase `/packhelper/ops_manual`이다. WorkSchedule/HynixOps는 이 경로를 읽기 전용으로 합산하고, `localStorage`는 인증 토큰, UI 상태, 운영메뉴얼 초안 후보, 이미지 출력 due 상태 같은 브라우저 보조 상태만 맡는다.
-- 메모추가 통합 입력은 텍스트, URL, 이미지(붙여넣기/드래그/업로드), 카카오 대화, CLI, 타이머앱, 사이트 입력을 즉시 envelope로 바꾸고, CLI가 리소스/모델/MCP 필요 여부/카테고리/태그/반영 방식을 판단하도록 큐잉한다.
+- 메모추가 통합 입력은 텍스트, URL, 이미지(붙여넣기/드래그/업로드), 카카오 대화, CLI, 타이머앱, 사이트 입력을 즉시 envelope로 바꾸고, 후보 도메인(운영메뉴얼/레시피/배달정보/할일/할인행사/근무표/뉴스/날씨/규정)을 같이 보여준 뒤 CLI가 리소스/모델/MCP 필요 여부/카테고리/태그/반영 방식을 판단하도록 큐잉한다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제와 근무 clear는 삭제가 아니라 명시 값으로 남긴다.
 - 표준입력은 공식 WorkSchedule 웹에서 `/workschedule_v2/overrides`, `status`에 직접 저장한다.
 - 카톡 이미지 근무 확인 panel은 `/workschedule_v2`에 직접 저장하지 않는다. preview queue를 읽고, 확인 시 `/packhelper/storebot_termux/confirmed_schedule_write_requests`에 `confirmed_schedule_write_request`를 enqueue한다.
 - 브리핑 탭은 일정, 알람, 할인/행사, 뉴스, 날씨, 근무, 오늘 필요한 메뉴얼을 함께 요약하고, 사이트 상세/카카오 요약/근무표 이미지 출력 기준을 짧게 보여준다.
+- 브리핑 탭은 데이터가 없어도 섹션과 대기/빈 상태를 보여야 하며, 일정/할일/알람/예약/할인행사/뉴스/날씨/근무/오늘 필요한 메뉴얼을 함께 요약한다.
 - confirmed request live 실행 의도는 `dry_run=false`와 `execute_live_write=true`가 동시에 있을 때만 보낸다. 기본은 dry-run 확인 요청이다.
 - 공통 해석 순서는 날짜별 `overrides` state=shift/off/clear -> `fixed_schedules/{empId}` fallback -> 미입력이다.
 - 출근 원본 `/packhelper/storebot_attendance/{date}`는 수정하지 않고, 읽은 일자 데이터만 `/workschedule_v2/attendance_history/{date}`에 idempotent PUT으로 보존한다.
@@ -36,6 +37,7 @@
 - WorkSchedule 웹은 Firebase DB 상세 확인/보정/출력 화면이다.
 - HynixOps 근무표 조정은 safe queue 중심의 간단 입력 front이고, WorkSchedule 원본과 경계를 섞지 않는다.
 - 운영탭은 하이닉스 메모/운영 기준을 정리된 메뉴얼로 보여준다. 메모 원문은 기본 화면에 복사 노출하지 않는다.
+- 근무 직접 수정은 직원/날짜를 고른 뒤 확인-저장 흐름으로 `/workschedule_v2` 원천을 직접 갱신한다. 카톡 PNG 출력과 같은 원천을 본다.
 - 운영메뉴얼 구현 위치는 `docs/manual_logic.js`와 `docs/app.js` 운영탭이다. 하이닉스 메모탭/운영메뉴얼 소비자는 `/root/my-first-project/AttendanceBoard/docs/hynix/index.html`이고, durable source는 `/packhelper/ops_manual` read-only다.
 - 운영메뉴얼은 원문 복사본이 아니라 분석/편입된 색인형 DB로 유지한다. 카카오봇 상황 답변용 검색 키와 태그는 `docs/manual_logic.js` 계약을 따른다.
 - 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.

@@ -61,10 +61,19 @@ assert.ok(intakeEnvelope.decisionRequired.resource);
 assert.match(intakeEnvelope.body, /URL: https:\/\/example.com\/memo/);
 assert.match(intakeEnvelope.body, /\[image\] shot\.png/);
 assert.ok(intakeEnvelope.searchIndex.includes('shot.png'));
+assert.ok(Array.isArray(intakeEnvelope.candidateDomains));
+assert.ok(intakeEnvelope.candidateDomains.includes('chat'));
 
 const intakeMemo = manual.inputEnvelopeToManualMemo(intakeEnvelope);
 assert.ok(intakeMemo.sourceTypes.includes('intake'));
 assert.ok(intakeMemo.searchIndex.includes('shot.png'));
+
+const candidateEnvelope = manual.classifyIntakeEnvelope({
+  sourceType: 'cli',
+  text: '근무표 수정하고 운영메뉴얼 정리',
+});
+assert.ok(candidateEnvelope.candidateDomains.includes('work'));
+assert.ok(candidateEnvelope.candidateDomains.includes('manual'));
 
 const firebasePayload = {
   entries: {
@@ -113,6 +122,22 @@ assert.ok(briefing.sections.some((section) => section.title === '할일/알람')
 assert.ok(briefing.sections.some((section) => section.title === '오늘 필요한 메뉴얼'));
 assert.ok(briefing.indexable.some((item) => String(item.searchIndex || '').includes('shot.png')));
 
+const emptyBriefing = manual.buildBriefingSections([], {
+  schedule: {
+    summary: '',
+    count: 0,
+    workSummary: '대기',
+    taskSummary: '대기',
+    discountSummary: '대기',
+    newsSummary: '대기',
+    weatherSummary: '대기',
+    manualSummary: '대기',
+  },
+  intakeCount: 0,
+});
+assert.equal(emptyBriefing.sections[0].emptyState, '일정 대기');
+assert.ok(emptyBriefing.sections.some((section) => section.pendingCount === 1));
+
 const nestedFirebase = manual.normalizeFirebaseManualPayload({
   data: {
     remote_output: {
@@ -138,14 +163,18 @@ assert.match(indexSource, /manual_logic\.js/);
 assert.match(indexSource, /data-tab="ops"/);
 assert.match(indexSource, /intakePanel/);
 assert.match(indexSource, /intakeQueueBtn/);
+assert.match(indexSource, /근무 직접 수정/);
 
 const appSource = readFileSync(new URL('../docs/app.js', import.meta.url), 'utf8');
 assert.match(appSource, /briefing-sections/);
 assert.match(appSource, /queueIntakeFromForm/);
+assert.match(appSource, /ops-contract/);
+assert.match(appSource, /intake-candidates/);
 
 const manualSource = readFileSync(new URL('../docs/manual_logic.js', import.meta.url), 'utf8');
 assert.doesNotMatch(manualSource, /app\/src\/main\/assets|NativeBridge|adb|apk|usb|서버폰/i);
 assert.match(manualSource, /buildInputEnvelope/);
 assert.match(manualSource, /buildBriefingSections/);
+assert.match(manualSource, /candidateDomainsForText/);
 
 console.log('manual logic tests passed');

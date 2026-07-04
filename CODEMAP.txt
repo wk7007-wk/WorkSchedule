@@ -13,15 +13,15 @@
 - StoreBotTermux/대시보드/HynixOps는 WorkSchedule 데이터를 소비한다. 원본 저장 경계는 Firebase `/workschedule_v2`다.
 - `/packhelper/storebot_summary/schedule`은 캐시/표시용이고 canonical 근무표 근거가 아니다.
 - 운영메뉴얼 조회: `docs/manual_logic.js` + `docs/app.js` 운영탭. Firebase `/packhelper/ops_manual`을 read-only durable source로 합산하고, 브라우저 `localStorage` 키는 초안/보조 후보와 intake 큐만 쓴다.
-- 메모추가 통합 입력: `docs/index.html`/`docs/app.js` intake panel. 텍스트, URL, 이미지(붙여넣기/드래그/업로드), 카카오 대화, CLI, 타이머앱, 사이트 입력을 즉시 envelope로 큐잉한다.
+- 메모추가 통합 입력: `docs/index.html`/`docs/app.js` intake panel. 텍스트, URL, 이미지(붙여넣기/드래그/업로드), 카카오 대화, CLI, 타이머앱, 사이트 입력을 즉시 envelope로 큐잉하고 후보 도메인 chips를 함께 보여준다.
 - 공통 스키마 계약: `/root/my-first-project/rules/workschedule_schema_contract.txt`
 
 ## 파일 구조
-- `docs/index.html` — WorkSchedule 웹 UI, 인증 gate, intake panel, 표준입력, 종합 이미지 출력 버튼
+- `docs/index.html` — WorkSchedule 웹 UI, 인증 gate, intake panel, 근무 직접 수정, 종합 이미지 출력 버튼
 - `docs/app.js` — 단일 IIFE 웹 로직. Firebase fetch/write, SSE, 렌더, 이미지 출력, intake 큐잉, 브리핑 요약
 - `docs/style.css` — WorkSchedule 웹 스타일
 - `docs/schedule_delivery_logic.js` — 5분 idle/6시간 최신 근무표 이미지 출력 due 계산 순수 모듈
-- `docs/manual_logic.js` — 하이닉스 메모 -> 운영메뉴얼 병합/정규화/충돌 감지 + intake envelope/briefing contract 순수 모듈
+- `docs/manual_logic.js` — 하이닉스 메모 -> 운영메뉴얼 병합/정규화/충돌 감지 + intake envelope 후보 도메인/briefing empty-state contract 순수 모듈
 - `scripts/test_schedule_logic.mjs` — delivery 상태 계산 + docs 이미지 출력 경로 회귀 테스트
 - `scripts/test_manual_logic.mjs` — 운영메뉴얼 병합/출력 분류 회귀 테스트
 - `scripts/test_confirmation_panel_static.mjs` — confirmation panel queue contract/static write-boundary smoke 테스트

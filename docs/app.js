@@ -527,7 +527,9 @@ function rBrief(){
     h+='<div class="briefing-summary">'+esc(briefing.summary||'브리핑 항목을 확인한다.')+'</div>';
     h+='<div class="briefing-sections">'+briefing.sections.map(section=>{
       const items=(section.items||[]).slice(0,2).map(item=>'<span class="briefing-item">'+esc(item.title||item.summary||'항목')+'</span>').join('');
-      return '<section class="briefing-section"><div class="briefing-section-head"><strong>'+esc(section.title)+'</strong><span>'+esc(section.count?section.count+'건':'대기')+'</span></div><div class="briefing-section-body">'+esc(section.summary||'')+'</div>'+ (items?'<div class="briefing-items">'+items+'</div>':'') +'</section>';
+      const emptyText=section.emptyState||'대기';
+      const body=section.summary||emptyText;
+      return '<section class="briefing-section'+((section.count||0)===0?' is-empty':'')+'"><div class="briefing-section-head"><strong>'+esc(section.title)+'</strong><span>'+esc(section.count?section.count+'건':emptyText)+'</span></div><div class="briefing-section-body">'+esc(body)+'</div>'+ (items?'<div class="briefing-items">'+items+'</div>':'') +'</section>';
     }).join('')+'</div>';
   }
   h+='<div class="briefing-criteria"><span>사이트 상세는 현재 화면 기준으로만 읽는다</span><span>카카오 요약은 짧게, 출처를 함께 둔다</span><span>근무표 이미지는 PNG 한 장과 대상 방 확인으로 끝낸다</span></div>';
@@ -750,10 +752,12 @@ function renderIntakeQueue(){
     const memo=logic.inputEnvelopeToManualMemo?logic.inputEnvelopeToManualMemo(item,{sourceType:item.sourceType||'text'}):null;
     const cls=item.classificationHints||{};
     const attachCount=(item.attachments||[]).length;
+    const candidates=(item.candidateDomains||cls.candidateDomains||[]).slice(0,4).map(key=>logic.categoryLabel?logic.categoryLabel(key):key);
     const tagBits=[item.sourceType,cls.categoryLabel||item.categoryLabel||'',attachCount?('첨부 '+attachCount):'',item.queueState||'queued'].filter(Boolean);
     return '<article class="intake-item">'+
       '<div class="intake-item-head"><strong>'+esc(item.title||queueItemLabel(item))+'</strong><span>'+esc(fmtTs(item.queuedAtMs||item.capturedAtMs||0))+'</span></div>'+
       '<div class="intake-item-meta">'+tagBits.slice(0,4).map(x=>'<span class="intake-pill">'+esc(x)+'</span>').join('')+'</div>'+
+      (candidates.length?'<div class="intake-candidates"><span class="intake-candidate-label">도메인 후보</span>'+candidates.map(x=>'<span class="intake-domain">'+esc(x)+'</span>').join('')+'</div>':'')+
       '<div class="intake-item-body">'+esc(item.summary||item.body||memo?.summary||'')+'</div>'+
     '</article>';
   }).join('');
@@ -819,6 +823,7 @@ function rOpsManual(){
   }).join(''):'<div class="ops-empty">조건에 맞는 운영메뉴얼이 없습니다.</div>';
   con.innerHTML='<div class="ops-manual-view">'+
     '<div class="ops-manual-head"><div class="ops-manual-title"><strong>운영메뉴얼</strong><span class="ops-manual-count">'+filtered.length+' / '+all.length+'</span></div>'+
+    '<div class="ops-contract"><span class="ops-contract-chip">DB 원천: /packhelper/ops_manual</span><span class="ops-contract-chip">입력 원천: 메모추가 envelope</span><span class="ops-contract-chip">정리 주체: Codex / CLI</span></div>'+
     '<input class="ops-search" id="opsSearch" type="search" placeholder="메뉴얼 검색" value="'+esc(q)+'">'+
     '<div class="ops-chip-row">'+catChips+'</div><div class="ops-chip-row">'+tagChips+'</div></div>'+
     '<div class="ops-manual-list">'+cards+'</div></div>';

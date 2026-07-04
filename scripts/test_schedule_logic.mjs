@@ -107,12 +107,14 @@ assert.equal(nextPeriodic.nextDueAtMs, sentState.lastSentAtMs + delivery.PERIODI
 assert.equal(nextPeriodic.targetKind, 'latest_work_schedule');
 
 const appSource = readFileSync(new URL('../docs/app.js', import.meta.url), 'utf8');
+const indexSource = readFileSync(new URL('../docs/index.html', import.meta.url), 'utf8');
 assert.match(appSource, /최신 근무표/);
 assert.match(appSource, /queueCompositeShare/);
 assert.match(appSource, /navigator\.share|downloadCompositeImage/);
 assert.match(appSource, /workschedule_delivery_cli_patch/);
 assert.match(appSource, /function canonicalFixedSchedule\(empId\)/);
 assert.match(appSource, /DFX\[empId\]\|\|S\.fix\[empId\]/);
+assert.match(indexSource, /근무 직접 수정/);
 assert.doesNotMatch(appSource, /NativeBridge|shareImage|app\/src\/main\/assets/);
 assert.doesNotMatch(appSource, new RegExp('최신' + ' 상태'));
 

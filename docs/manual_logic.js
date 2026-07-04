@@ -204,6 +204,31 @@
     if(category&&category!=='etc')found.push(category);
     return uniq(found).slice(0,8);
   }
+  function candidateDomainsForText(text,sourceType,category){
+    const body=String(text||'').toLowerCase();
+    const scores={};
+    function bump(cat,score){
+      if(!cat||cat==='etc'||!score)return;
+      scores[cat]=(scores[cat]||0)+score;
+    }
+    Object.keys(CATEGORIES).forEach(cat=>{
+      if(cat==='etc')return;
+      const score=(CATEGORIES[cat].keywords||[]).reduce((sum,kw)=>sum+(body.includes(String(kw||'').toLowerCase())?1:0),0);
+      if(score)bump(cat,score);
+    });
+    const source=String(sourceType||'').trim().toLowerCase();
+    if(source==='image'||source==='site'||source==='url')bump('output',2);
+    if(source==='kakao')bump('chat',3);
+    if(source==='cli')bump('manual',2);
+    if(source==='timer')bump('task',2);
+    if(source==='manual')bump('manual',2);
+    if(category&&category!=='etc')bump(category,4);
+    return Object.entries(scores)
+      .sort((a,b)=>b[1]-a[1]||CATEGORY_ORDER.indexOf(a[0])-CATEGORY_ORDER.indexOf(b[0]))
+      .map(([cat])=>cat)
+      .filter((cat,index,self)=>self.indexOf(cat)===index)
+      .slice(0,6);
+  }
   function titleFromText(text,category){
     const body=String(text||'');
     const tag=categoryLabel(category);
@@ -391,7 +416,8 @@
       else if(item.sourceType==='cli'||item.sourceType==='manual')category='manual';
     }
     const tags=tagsForText(raw,category,[].concat(item.tags||[]));
-    return {category,tags,categoryLabel:categoryLabel(category)};
+    const candidateDomains=candidateDomainsForText(raw,item.sourceType,category);
+    return {category,tags,candidateDomains,categoryLabel:categoryLabel(category)};
   }
   function buildInputEnvelope(input,options){
     const sourceType=normalizeIntakeSource(options&&options.sourceType||input&&input.sourceType||input&&input.source_type||input&&input.kind||input&&input.type||'text');
@@ -421,6 +447,7 @@
       decisionRequired:{resource:true,model:true,needsMcp:true,category:true,tags:true,reflectionMethod:true},
       decision:null,
       classificationHints:classification,
+      candidateDomains:classification.candidateDomains||[],
       sourceHints:{
         sourceType,
         sourceLabel,
@@ -467,7 +494,15 @@
   }
   function sectionForCategory(entries,category,title,summary){
     const list=(entries||[]).filter(item=>item.category===category).slice(0,4);
-    return {key:category,title:title||categoryLabel(category),summary:summary||'',count:list.length,items:list};
+    return {
+      key:category,
+      title:title||categoryLabel(category),
+      summary:summary||'',
+      count:list.length,
+      items:list,
+      emptyState:list.length?'':(title||categoryLabel(category))+' 항목 대기',
+      pendingCount:list.length?0:1
+    };
   }
   function buildBriefingSections(entries,options){
     const all=(entries||[]).map(item=>normalizeManualEntry(item,{sourceType:item&&item.sourceType||item&&item.source_type||'manual'}));
@@ -484,7 +519,7 @@
       manual:'오늘 필요한 메뉴얼 '+cleanText(schedule.manualSummary||'',60)
     };
     const sections=[
-      {key:'schedule',title:'일정',summary:cleanText(schedule.summary||'',120),count:Number(schedule.count||0)||0,items:[]},
+      {key:'schedule',title:'일정',summary:cleanText(schedule.summary||'',120),count:Number(schedule.count||0)||0,items:[],emptyState:Number(schedule.count||0)?'':'일정 대기',pendingCount:Number(schedule.count||0)?0:1},
       sectionForCategory(all,'task','할일/알람',sectionSummary.task),
       sectionForCategory(all,'discount','할인/행사',sectionSummary.discount),
       sectionForCategory(all,'news','뉴스',sectionSummary.news),
@@ -503,6 +538,7 @@
       indexable,
       needsManual:sectionForCategory(all,'manual','오늘 필요한 메뉴얼'),
       counts:Object.keys(byCategory).reduce((acc,key)=>{acc[key]=byCategory[key].length;return acc;},{}),
+      pendingCount:all.filter(item=>String(item.status||'').toLowerCase()==='queued').length,
       schedule:options&&options.schedule||{},
       intakeCount:Number(options&&options.intakeCount||0)||0
     };
@@ -620,6 +656,7 @@
     mergeManualFromMemo,
     detectManualConflicts,
     filterManualEntries,
-    categoryLabel
+    categoryLabel,
+    candidateDomainsForText
   };
 });
