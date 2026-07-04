@@ -112,10 +112,18 @@ assert.match(appSource, /최신 근무표/);
 assert.match(appSource, /queueCompositeShare/);
 assert.match(appSource, /navigator\.share|downloadCompositeImage/);
 assert.match(appSource, /workschedule_delivery_cli_patch/);
+assert.match(appSource, /get\('readonly'\)===?'1'/);
+assert.match(appSource, /get\('testAuth'\)===?'1'/);
+assert.match(appSource, /previewBanner/);
+assert.match(appSource, /authModeBadge/);
+assert.match(appSource, /PREVIEW_ONLY/);
 assert.match(appSource, /function canonicalFixedSchedule\(empId\)/);
 assert.match(appSource, /DFX\[empId\]\|\|S\.fix\[empId\]/);
+assert.match(appSource, /publicManualCardModel/);
 assert.match(indexSource, /근무 수정/);
 assert.match(indexSource, /workEditBtn/);
+assert.match(indexSource, /preview-banner/);
+assert.match(indexSource, /authModeBadge/);
 assert.doesNotMatch(appSource, /NativeBridge|shareImage|app\/src\/main\/assets/);
 assert.doesNotMatch(appSource, new RegExp('최신' + ' 상태'));
 

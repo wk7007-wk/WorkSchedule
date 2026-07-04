@@ -123,7 +123,7 @@
       .replace(/할일\/?\s*알람\s*등록\s*기준/gi,'할일/알림 등록 방법')
       .replace(/메뉴\s*변경\s*문의\s*답변\s*기준/gi,'주문 변경 응대 기준')
       .replace(/BBQ\s*기프티콘\s*메뉴\s*변경\s*안내/gi,'BBQ 쿠폰 사용 안내')
-      .replace(/\b(source|status|updated_at|updatedAt|search_text|searchText|sourceIds?|sourceTypes?|sourceUrls?|source_urls?|db|database)\b/gi,'')
+      .replace(/\b(source|status|updated_at|updatedAt|search_text|searchText|sourceIds?|sourceTypes?|sourceUrls?|source_urls?|codex_seed|id|db|database)\b/gi,'')
       .replace(/원문/g,'내용')
       .replace(/복붙/g,'그대로 옮김')
       .replace(/관리자/g,'직원')
@@ -401,6 +401,23 @@
     normalized.summary=summarize(normalized.summary||normalized.body,category);
     normalized.searchIndex=searchIndexForEntry(normalized);
     return normalized;
+  }
+  function publicManualCardModel(entry,options){
+    const normalized=normalizeManualEntry(entry,options);
+    return {
+      id:normalized.id,
+      category:normalized.category,
+      categoryLabel:normalized.categoryLabel,
+      displayCategoryLabel:normalized.displayCategoryLabel,
+      title:normalized.title,
+      summary:normalized.summary,
+      actions:(normalized.actions||[]).slice(0,3),
+      cautions:(normalized.cautions||[]).slice(0,2),
+      body:normalized.body,
+      tags:(normalized.tags||[]).slice(0,8),
+      sourceUrls:(normalized.sourceUrls||[]).slice(0,3),
+      conflicts:(normalized.conflicts||[]).slice(0,3)
+    };
   }
   const INTAKE_SOURCE_LABELS={text:'텍스트',url:'URL',image:'이미지',kakao:'카카오',cli:'CLI',timer:'타이머앱',site:'사이트',manual:'메뉴얼',default:'입력'};
   const INTAKE_SOURCE_ORDER=['text','url','image','kakao','cli','timer','site','manual'];
@@ -702,6 +719,7 @@
     DEFAULT_MANUAL_ENTRIES,
     cleanText,
     normalizeManualEntry,
+    publicManualCardModel,
     buildInputEnvelope,
     classifyIntakeEnvelope,
     inputEnvelopeToManualMemo,

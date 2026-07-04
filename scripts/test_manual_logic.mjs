@@ -53,6 +53,21 @@ const employeeFacing = manual.normalizeManualEntry(
 assert.match(employeeFacing.title, /새 내용 알려주는 방법|입력 정리 기준|주문 변경 응대 기준|근무 변경 요청 방법/);
 assert.doesNotMatch([employeeFacing.title, employeeFacing.summary, employeeFacing.body].join(' '), /source|status|updated_at|search_text|원문|복붙|DB|database/i);
 
+const publicCard = manual.publicManualCardModel({
+  id: 'memo-5',
+  title: 'source id search_text updated_at codex_seed sourceTypes',
+  body: 'source id search_text updated_at codex_seed sourceTypes',
+  summary: 'source id search_text updated_at codex_seed sourceTypes',
+  category: 'manual',
+  sourceTypes: ['sourceTypes'],
+  sourceIds: ['id'],
+  sourceUrls: ['https://example.com/manual'],
+});
+const publicVisibleText = [publicCard.title, publicCard.summary, publicCard.body, publicCard.actions.join(' '), publicCard.cautions.join(' ')].join(' ');
+assert.doesNotMatch(publicVisibleText, /source|id|search_text|updated_at|codex_seed|sourceTypes/i);
+assert.equal(publicCard.category, 'manual');
+assert.equal(publicCard.sourceUrls.length, 1);
+
 const intakeEnvelope = manual.buildInputEnvelope(
   {
     text: '카카오 대화 정리',

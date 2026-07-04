@@ -45,6 +45,12 @@ assert.equal(statusRows[1].label, '위치');
 assert.match(statusRows[1].value, /반경 150m/);
 assert.equal(statusRows[2].value, '저장됨');
 
+const previewRows = authStd.authStatusRows(authConfig, { token: 'saved-token' }, { previewMode: true, testAuth: false });
+assert.equal(previewRows.length, 4);
+assert.equal(previewRows[3].label, '검증');
+assert.equal(previewRows[3].value, '읽기 전용 검증 모드');
+assert.equal(authStd.authModeLabel({ previewMode: true, testAuth: true }), '테스트 인증');
+
 const request = authStd.buildStdWriteRequest(
   {
     date: '2026-07-04',

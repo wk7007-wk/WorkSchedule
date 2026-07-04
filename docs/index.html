@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no"><title>근무표</title><link rel="stylesheet" href="style.css"></head><body class="auth-locked">
-<div class="auth-gate" id="authGate"><div class="auth-card"><div class="auth-title">WorkSchedule 인증</div><div class="auth-note">PIN을 먼저 확인한 뒤, 등록 단말 또는 매장 반경 GPS로 들어갑니다.</div><div class="auth-status" id="authStatus"></div><input class="form-input" id="authPin" type="password" placeholder="PIN"><input class="form-input" id="authDevice" type="text" placeholder="단말명"><button class="btn btn-accent" id="authBtn">인증</button><div class="auth-msg" id="authMsg">PIN은 매번 입력하고, 위치는 매장 반경으로 확인합니다.</div></div></div>
+<div class="auth-gate" id="authGate"><div class="auth-card"><div class="auth-title">WorkSchedule 인증</div><div class="auth-note">PIN을 먼저 확인한 뒤, 등록 단말 또는 매장 반경 GPS로 들어갑니다.</div><div class="auth-mode-badge" id="authModeBadge" hidden></div><div class="auth-status" id="authStatus"></div><input class="form-input" id="authPin" type="password" placeholder="PIN"><input class="form-input" id="authDevice" type="text" placeholder="단말명"><button class="btn btn-accent" id="authBtn">인증</button><div class="auth-msg" id="authMsg">PIN은 매번 입력하고, 위치는 매장 반경으로 확인합니다.</div></div></div>
 <main class="ws-shell" id="appShell">
+<section class="preview-banner" id="previewBanner" hidden></section>
 <div style="position:sticky;top:0;z-index:100;background:#1A1A30;border-bottom:1px solid #2E2E52;">
 <div style="display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:4px;">
 <button class="btn nav-btn" id="prevW" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">◀◀</button>

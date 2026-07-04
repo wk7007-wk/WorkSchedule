@@ -47,13 +47,21 @@
     return f==='device'?'등록 단말':f==='gps'?'GPS':f==='debug'?'개발 GPS 우회':f==='ip'?'허용 IP':'factor';
   }
 
-  function authStatusRows(auth,device){
+  function authModeLabel(options){
+    const cfg=options||{};
+    if(!cfg.previewMode)return'';
+    return cfg.testAuth?'테스트 인증':'읽기 전용 검증 모드';
+  }
+
+  function authStatusRows(auth,device,options){
     const cfg=auth||{};
     const rows=[
       {label:'PIN',value:cfg.pinSha256?'설정됨':'미설정'},
       {label:'위치',value:(typeof cfg.storeLat==='number'&&typeof cfg.storeLng==='number')?('매장 좌표 · 반경 '+Math.round(Number(cfg.radiusM)||150)+'m'):'미설정'},
       {label:'단말',value:device&&device.token?'저장됨':'미설정'}
     ];
+    const modeLabel=authModeLabel(options);
+    if(modeLabel)rows.push({label:'검증',value:modeLabel});
     return rows;
   }
 
@@ -127,6 +135,7 @@
     DEFAULT_TARGET_PATHS:DEFAULT_TARGET_PATHS,
     authFactorLabel:authFactorLabel,
     authStatusRows:authStatusRows,
+    authModeLabel:authModeLabel,
     buildStdWriteRequest:buildStdWriteRequest,
     distanceMeters:distanceMeters,
     verifyGpsPosition:verifyGpsPosition,
