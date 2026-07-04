@@ -18,7 +18,7 @@
 - 메모추가 통합 입력은 텍스트, URL, 이미지(붙여넣기/드래그/업로드), 카카오 대화, CLI, 타이머앱, 사이트 입력을 즉시 envelope로 바꾸고, 후보 도메인(운영메뉴얼/레시피/배달정보/할일/할인행사/근무표/뉴스/날씨/규정)을 같이 보여준 뒤 CLI가 리소스/모델/MCP 필요 여부/카테고리/태그/반영 방식을 판단하도록 큐잉한다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제와 근무 clear는 삭제가 아니라 명시 값으로 남긴다.
-- 표준입력은 공식 WorkSchedule 웹에서 `/workschedule_v2/overrides`, `status`에 직접 저장한다.
+- 상단 표준입력은 확인 큐용 request object를 만들고, 실제 반영은 승인 흐름을 거쳐 `/workschedule_v2/overrides`, `status`에만 적용한다.
 - 카톡 이미지 근무 확인 panel은 `/workschedule_v2`에 직접 저장하지 않는다. preview queue를 읽고, 확인 시 `/packhelper/storebot_termux/confirmed_schedule_write_requests`에 `confirmed_schedule_write_request`를 enqueue한다.
 - 브리핑 탭은 일정, 알람, 할인/행사, 뉴스, 날씨, 근무, 오늘 필요한 메뉴얼을 함께 요약하고, 사이트 상세/카카오 요약/근무표 이미지 출력 기준을 짧게 보여준다.
 - 브리핑 탭은 데이터가 없어도 섹션과 대기/빈 상태를 보여야 하며, 일정/할일/알람/예약/할인행사/뉴스/날씨/근무/오늘 필요한 메뉴얼을 함께 요약한다.
@@ -31,6 +31,7 @@
 - `이원규(emp1)` 고정근무 fallback은 매일 `17:00~06:00`으로 해석한다.
 - 타임바/리스트 게이지는 06시 day-boundary 기준 선택 근무일의 당일 근무자 첫 출근~마지막 퇴근 범위만 쓴다.
 - 정적 프론트 인증은 `PIN 통과 AND (CLI 허용 단말 OR 서버/호스팅 허용 IP OR 매장 GPS 150m)` 구조다. 웹 화면에서 PIN+GPS로 단말을 자동 허용하지 않는다.
+- 인증 화면은 PIN, 매장 좌표/반경, 단말 저장 상태를 한글로 보여주고, PIN 값은 화면에 노출하지 않는다.
 - IP allowlist는 CLI 기록/서버·호스팅 앞단 적용용이다. 정적 클라이언트의 임의 IP/X-Forwarded-For 값은 신뢰하지 않는다.
 
 ## UI/동선 기준

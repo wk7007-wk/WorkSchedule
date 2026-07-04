@@ -11,8 +11,10 @@ const INTAKE_QUEUE_LIMIT=24;
 const CONFIRM_ALLOWED_TARGETS=['/workschedule_v2/overrides','/workschedule_v2/status'];
 const READONLY=new URLSearchParams(location.search).get('readonly')==='1';
 const AUTH_DEBUG=new URLSearchParams(location.search).get('authDebug')==='1'&&['','localhost','127.0.0.1'].includes(location.hostname);
-const AUTH={pinSha256:'38083c7ee9121e17401883566a148aa5c2e2d55dc53bc4a94a026517dbff3c6b',storeLat:37.2528352,storeLng:127.4900516,radiusM:150,storageKey:'workschedule_auth_device_v1',allowedDeviceHashes:['d21a6620a9a24efe29e7b6921076e2ccd25c6f9b977154e9f8dfe4653d21bd08','c1aa36e7f5eabff58103bbc86257f3350c222b55c0d883592e438f021721681c'],
-      allowedDevices:{"d21a6620a9a24efe29e7b6921076e2ccd25c6f9b977154e9f8dfe4653d21bd08":{"enabled":true,"label":"사장","updatedAt":"2026-06-26T18:39:12+00:00"},"c1aa36e7f5eabff58103bbc86257f3350c222b55c0d883592e438f021721681c":{"enabled":true,"label":"메인피시","updatedAt":"2026-06-27T11:30:18+00:00","phoneLast4":"0000"}},ipFactorReserved:true};
+const AUTH_STD=window.WorkScheduleAuthStdLogic||{};
+const AUTH_DEFAULTS={pinSha256:'38083c7ee9121e17401883566a148aa5c2e2d55dc53bc4a94a026517dbff3c6b',storeLat:37.2528352,storeLng:127.4900516,radiusM:150,storageKey:'workschedule_auth_device_v1',allowedDeviceHashes:['d21a6620a9a24efe29e7b6921076e2ccd25c6f9b977154e9f8dfe4653d21bd08','c1aa36e7f5eabff58103bbc86257f3350c222b55c0d883592e438f021721681c'],allowedDevices:{"d21a6620a9a24efe29e7b6921076e2ccd25c6f9b977154e9f8dfe4653d21bd08":{"enabled":true,"label":"사장","updatedAt":"2026-06-26T18:39:12+00:00"},"c1aa36e7f5eabff58103bbc86257f3350c222b55c0d883592e438f021721681c":{"enabled":true,"label":"메인피시","updatedAt":"2026-06-27T11:30:18+00:00","phoneLast4":"0000"}},ipFactorReserved:true};
+const AUTH=Object.assign({},AUTH_DEFAULTS,readJsonFromLocalStorage(AUTH_DEFAULTS.storageKey)||{},window.WorkScheduleAuthConfig||{});
+const STD_REQUEST_PREVIEW_KEY='workschedule_std_request_preview_v1';
 const DSH=6,TLM=1440,DOW_KR=['일','월','화','수','목','금','토'],DOW_EN=['sun','mon','tue','wed','thu','fri','sat'];
 const WEATHER_LOCATION={name:'이천시 부발읍',lat:37.2816,lng:127.4892};
 const RC={'주방':'#E67E22','차배달':'#4ECDC4','오토바이':'#FFD700'},RL={'주방':'주방','차배달':'차','오토바이':'바이크'};
@@ -263,22 +265,31 @@ async function queueCompositeShare(reason){
 // === front auth gate ===
 function authMsg(m,cls){const el=$('authMsg');if(!el)return;el.textContent=m;el.className='auth-msg '+(cls||'');}
 function authStore(){try{return JSON.parse(localStorage.getItem(AUTH.storageKey)||'null');}catch(e){return null;}}
+function readJsonFromLocalStorage(key){try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}}
 async function sha256(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 function ensureAuthDevice(name){let d=authStore();if(!d||!d.token){d={token:(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random()),name:name||'단말',createdAt:Date.now()};localStorage.setItem(AUTH.storageKey,JSON.stringify(d));return d;}if(name&&d.name!==name){d=Object.assign({},d,{name});localStorage.setItem(AUTH.storageKey,JSON.stringify(d));}return d;}
 async function deviceHashText(device){try{return await sha256(device.token);}catch(e){return '생성됨';}}
 async function hasAllowedAuthDevice(device){const hashes=AUTH.allowedDeviceHashes||[];if(!device||!device.token||!hashes.length)return false;return hashes.includes(await sha256(device.token));}
 function gpsReady(){return typeof AUTH.storeLat==='number'&&typeof AUTH.storeLng==='number';}
-function distM(a,b,c,d){const R=6371000,to=x=>x*Math.PI/180,la1=to(a),la2=to(c),dl=to(c-a),dn=to(d-b),q=Math.sin(dl/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dn/2)**2;return 2*R*Math.atan2(Math.sqrt(q),Math.sqrt(1-q));}
+function distM(a,b,c,d){return AUTH_STD.distanceMeters?AUTH_STD.distanceMeters(a,b,c,d):(()=>{const R=6371000,to=x=>x*Math.PI/180,la1=to(a),la2=to(c),dl=to(c-a),dn=to(d-b),q=Math.sin(dl/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dn/2)**2;return 2*R*Math.atan2(Math.sqrt(q),Math.sqrt(1-q));})();}
 function getPos(){return new Promise((res,rej)=>{if(!navigator.geolocation){rej(new Error('GPS 사용 불가'));return;}navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:true,timeout:10000,maximumAge:60000});});}
 function hasTrustedIpFactor(){return false;} // Static clients cannot trust forwarded IP headers; reserve this for server/hosting enforcement.
 async function verifyGps(){
   if(AUTH_DEBUG)return 'debug';
-  if(!gpsReady())throw new Error('매장 GPS 기준 설정 필요');
-  const p=await getPos(),m=distM(p.coords.latitude,p.coords.longitude,AUTH.storeLat,AUTH.storeLng);
-  if(m>AUTH.radiusM)throw new Error('매장 반경 밖입니다 ('+Math.round(m)+'m)');
+  const p=await getPos(),res=AUTH_STD.verifyGpsPosition?AUTH_STD.verifyGpsPosition(p,AUTH):null;
+  if(res&&res.error)throw new Error(res.error);
+  if(!res){if(!gpsReady())throw new Error('매장 GPS 기준 설정 필요');const m=distM(p.coords.latitude,p.coords.longitude,AUTH.storeLat,AUTH.storeLng);if(m>AUTH.radiusM)throw new Error('매장 반경 밖입니다 ('+Math.round(m)+'m)');}
   return 'gps';
 }
 async function verifyPin(pin){
+  if(AUTH_STD.verifyPinText){
+    const res=await AUTH_STD.verifyPinText(pin,AUTH,async text=>{
+      if(!crypto.subtle)throw new Error('이 브라우저는 PIN 검증을 지원하지 않습니다');
+      return await sha256(text);
+    });
+    if(res&&res.error)throw new Error(res.error);
+    return true;
+  }
   if(!AUTH.pinSha256)throw new Error('PIN 해시 설정 필요');
   if(!pin)throw new Error('PIN을 입력해주세요');
   if(!crypto.subtle)throw new Error('이 브라우저는 PIN 검증을 지원하지 않습니다');
@@ -291,7 +302,16 @@ async function verifyAuthFactor(deviceName){
   if(hasTrustedIpFactor())return 'ip';
   return await verifyGps();
 }
-function authFactorLabel(f){return f==='device'?'인증 단말':f==='gps'?'GPS':f==='debug'?'개발 GPS 우회':f==='ip'?'허용 IP':'factor';}
+function authFactorLabel(f){return AUTH_STD.authFactorLabel?AUTH_STD.authFactorLabel(f):(f==='device'?'등록 단말':f==='gps'?'GPS':f==='debug'?'개발 GPS 우회':f==='ip'?'허용 IP':'factor');}
+function renderAuthStatus(){
+  const el=$('authStatus');if(!el)return;
+  const device=authStore(),rows=AUTH_STD.authStatusRows?AUTH_STD.authStatusRows(AUTH,device):[
+    {label:'PIN',value:AUTH.pinSha256?'설정됨':'미설정'},
+    {label:'위치',value:gpsReady()?('매장 좌표 · 반경 '+Math.round(Number(AUTH.radiusM)||150)+'m'):'미설정'},
+    {label:'단말',value:device&&device.token?'저장됨':'미설정'}
+  ];
+  el.innerHTML=rows.map(row=>'<div class="auth-status-item"><span class="label">'+esc(row.label)+'</span><span class="value">'+esc(row.value)+'</span></div>').join('');
+}
 function unlockApp(start){document.body.classList.remove('auth-locked');start();}
 function initAuthGate(start){
   const btn=$('authBtn'),pin=$('authPin'),dev=$('authDevice'),stored=authStore();
@@ -299,7 +319,9 @@ function initAuthGate(start){
   const run=async()=>{btn.disabled=true;authMsg('인증 확인 중...');try{await verifyPin(pin.value);const factor=await verifyAuthFactor(dev.value.trim());pin.value='';authMsg('인증됨 ('+authFactorLabel(factor)+')','ok');unlockApp(start);}catch(e){authMsg(e.message||'인증 실패','err');pin.value='';}finally{btn.disabled=false;}};
   btn.addEventListener('click',run);pin.addEventListener('keydown',e=>{if(e.key==='Enter')run();});
   const device=ensureAuthDevice(dev?.value?.trim()||'단말');
-  deviceHashText(device).then(id=>{if(AUTH_DEBUG)authMsg('개발 검증 모드: PIN은 필요, GPS만 우회. 단말ID '+id,'ok');else authMsg('PIN + CLI 허용 단말 또는 매장 GPS. 단말ID '+id);});
+  renderAuthStatus();
+  deviceHashText(device).then(id=>{renderAuthStatus();if(AUTH_DEBUG)authMsg('개발 검증 모드: PIN은 필요, GPS만 우회. 단말ID '+id,'ok');else authMsg('PIN은 매번 입력하고, 등록 단말 또는 매장 반경 GPS로 확인합니다. 단말 상태는 저장됨으로 유지됩니다.');});
+  dev.addEventListener('input',()=>renderAuthStatus());
   if(pin)pin.focus();
 }
 // === getFixedScheduleForDate ===
@@ -485,30 +507,31 @@ function stdPreviewText(){
 function renderStdPreview(){const el=$('stdPreview');if(!el)return;el.innerHTML='<strong>저장 내용</strong> '+esc(stdPreviewText());}
 function focusStdPanel(){const panel=$('stdPanel');if(!panel)return;panel.scrollIntoView({behavior:'smooth',block:'start'});panel.classList.add('highlight');clearTimeout(panel._hl);panel._hl=setTimeout(()=>panel.classList.remove('highlight'),1200);}
 function setStdDisabled(){const off=$('stdOff')?.checked;['stdStart','stdEnd','stdRole'].forEach(id=>{const el=$(id);if(el)el.disabled=!!off;});renderStdPreview();}
+function saveStdRequestPreview(payload){try{localStorage.setItem(STD_REQUEST_PREVIEW_KEY,JSON.stringify(payload));}catch(e){}}
 async function saveStd(){
+  if(document.body.classList.contains('auth-locked')){toast('먼저 인증하세요');return;}
   const d=$('stdDate').value||dk(S.date),eid=$('stdEmp').value,off=$('stdOff').checked;
   if(!eid||!S.emp[eid]){toast('직원을 선택해주세요');return;}
-  const stUrl=FW+'/status/'+d+'/'+eid,ovUrl=FW+'/overrides/'+d+'/'+eid;
   const btn=$('stdSave');btn.disabled=true;
   try{
-    if(!confirm((off?'휴무':'근무')+' 저장 요청을 보낼까요?\n\n'+stdPreviewText()))return;
-    if(off){
-      const ok=await Promise.all([fbP(ovUrl,offRowData()),fbP(stUrl,statusRow('off'))]);
-      if(!ok.every(Boolean)){toast('저장 실패');return;}
-      if(!S.dof[eid])S.dof[eid]={};S.dof[eid][d]=true;S.sst[d+'_'+eid]='off';
-      if(d===dk(S.date))S.sc[eid]=offRowData();if(S.wsc[d])S.wsc[d][eid]=offRowData();if(S.msc[d])S.msc[d][eid]=offRowData();
-      toast('휴무 저장됨');
-    }else{
-      const s=$('stdStart').value,e=$('stdEnd').value,role=$('stdRole').value;
-      if(!s||!e){toast('시간을 입력해주세요');return;}
-      const data={start:s,end:e,role:role||''};
-      const ok=await Promise.all([fbP(ovUrl,shiftRow(data)),fbP(stUrl,statusRow('confirmed',{state:'shift',start:s,end:e,role:role||''}))]);
-      if(!ok.every(Boolean)){toast('저장 실패');return;}
-      if(!S.dof[eid])S.dof[eid]={};delete S.dof[eid][d];S.sst[d+'_'+eid]='confirmed';
-      if(d===dk(S.date))S.sc[eid]=shiftRow(data);if(S.wsc[d])S.wsc[d][eid]=shiftRow(data);if(S.msc[d])S.msc[d][eid]=shiftRow(data);
-      toast('근무 저장됨');
-    }
-    renderAll(true);loadWk();if(S.tab==='month')loadMonth(true);
+    const payload=AUTH_STD.buildStdWriteRequest?AUTH_STD.buildStdWriteRequest({
+      date:d,
+      employee:S.emp[eid].name||eid,
+      employee_id:eid,
+      action:off?'off':'upsert_shift',
+      start:off?'':($('stdStart').value||''),
+      end:off?'':($('stdEnd').value||''),
+      role:off?'':($('stdRole').value||''),
+      note:'근무 수정 요청'
+    },{actor:confirmActor(),nowMs:Date.now(),targetPaths:CONFIRM_ALLOWED_TARGETS}):null;
+    if(payload&&payload.error){toast(payload.error);return;}
+    if(!payload){toast('저장 요청을 만들 수 없습니다');return;}
+    if(!confirm((off?'휴무':'근무')+' 저장 요청을 확인 큐에 보낼까요?\n\n'+stdPreviewText()))return;
+    if(READONLY){saveStdRequestPreview(payload);if($('stdHint'))$('stdHint').textContent='읽기 전용: 요청 미리보기만 저장했습니다.';toast('읽기 전용: 요청 미리보기 저장됨');return;}
+    const ok=await fbP(CONFIRMED_QUEUE_URL+'/'+safeFbKey(payload.request_id),payload);
+    if(!ok){toast('저장 요청 실패');return;}
+    if($('stdHint'))$('stdHint').textContent='저장 요청이 확인 큐에 등록되었습니다.';
+    toast('저장 요청 등록됨');
   }finally{btn.disabled=false;}
 }
 // === briefing ===

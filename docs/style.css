@@ -7,6 +7,10 @@ body:not(.auth-locked) .auth-gate{display:none;}
 .auth-card{width:100%;max-width:360px;background:#242444;border:1px solid #2E2E52;border-radius:10px;padding:16px;box-shadow:0 12px 40px #0008;}
 .auth-title{font-size:1.05rem;font-weight:850;color:#FFD700;margin-bottom:5px;}
 .auth-note{font-size:.74rem;line-height:1.45;color:#A8A8BF;margin-bottom:10px;}
+.auth-status{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px;}
+.auth-status-item{border:1px solid #2E2E52;border-radius:7px;background:#1A1A30;padding:6px 7px;min-width:0;}
+.auth-status-item .label{display:block;font-size:.56rem;color:#9090A8;font-weight:800;line-height:1;}
+.auth-status-item .value{display:block;margin-top:3px;font-size:.7rem;color:#E0E0EC;font-weight:700;line-height:1.25;overflow-wrap:anywhere;}
 .auth-card .form-input{margin-bottom:8px;}
 .auth-card .btn{width:100%;min-height:40px;}
 .auth-msg{min-height:20px;margin-top:9px;font-size:.72rem;line-height:1.4;color:#9090A8;overflow-wrap:anywhere;}
@@ -38,6 +42,7 @@ body:not(.auth-locked) .auth-gate{display:none;}
 .std-off input{width:18px;height:18px;accent-color:#E74C3C;}
 .std-preview{margin:0 0 8px;padding:7px 8px;border:1px solid #2E2E52;border-radius:7px;background:#1A1A30;color:#A8A8BF;font-size:.72rem;line-height:1.45;overflow-wrap:anywhere;}
 .std-preview strong{color:#E0E0EC;}
+.std-hint{margin:0 0 8px;padding:6px 8px;border:1px solid #2E2E5240;border-radius:7px;background:#121225;color:#9090A8;font-size:.62rem;line-height:1.45;overflow-wrap:anywhere;}
 .std-panel.highlight{box-shadow:inset 0 0 0 1px #2ECC7144,0 0 0 1px #2ECC7118;}
 .std-grid{display:grid;grid-template-columns:1.05fr 1.2fr .9fr .9fr 1fr auto;gap:6px;align-items:end;}
 .std-grid label{min-width:0;font-size:.62rem;color:#9090A8;font-weight:600;}
@@ -289,4 +294,4 @@ select.form-input{appearance:none;-webkit-appearance:none;background-image:url("
 .dp-jump button:active{background:#2E2E52;}
 
 @media(max-width:720px){.std-grid{grid-template-columns:1fr 1.1fr .8fr .8fr;}.std-grid label:nth-of-type(5){grid-column:1/3;}.std-save{grid-column:3/5;width:100%;}.confirm-grid{grid-template-columns:1fr;}.confirm-list{max-height:250px;}.confirm-form-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.confirm-detail{grid-template-columns:1fr;}.dash-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.compact-row{grid-template-columns:minmax(52px,.7fr) minmax(88px,1.15fr) auto;}.compact-row .meta{display:none;}.people-row{grid-template-columns:minmax(58px,.9fr) repeat(4,minmax(38px,.55fr));}.month-cell{min-height:52px;padding:4px 3px;}}
-@media(max-width:400px){.date-display{font-size:.9rem;min-width:90px;}.std-grid{grid-template-columns:1fr 1fr;}.std-save,.std-grid label:nth-of-type(5){grid-column:auto;}.confirm-head{align-items:stretch;flex-direction:column;}.confirm-head .btn{width:100%;}.confirm-form-grid{grid-template-columns:1fr;}.confirm-actions .btn{flex:1;min-width:0;}.layout-tab{min-width:50px;font-size:.72rem;padding-left:5px;padding-right:5px;}.delivery-panel{align-items:stretch;}.delivery-copy span{font-size:.64rem;}#deliveryShareBtn{min-width:72px;padding-left:6px;padding-right:6px;}.month-cell{min-height:48px;}.month-cell .m-line{font-size:.5rem;}.people-row{grid-template-columns:minmax(54px,.9fr) repeat(4,minmax(34px,.55fr));gap:3px;padding:7px 5px;}}
+@media(max-width:400px){.date-display{font-size:.9rem;min-width:90px;}.auth-status{grid-template-columns:1fr;}.std-grid{grid-template-columns:1fr 1fr;}.std-save,.std-grid label:nth-of-type(5){grid-column:auto;}.confirm-head{align-items:stretch;flex-direction:column;}.confirm-head .btn{width:100%;}.confirm-form-grid{grid-template-columns:1fr;}.confirm-actions .btn{flex:1;min-width:0;}.layout-tab{min-width:50px;font-size:.72rem;padding-left:5px;padding-right:5px;}.delivery-panel{align-items:stretch;}.delivery-copy span{font-size:.64rem;}#deliveryShareBtn{min-width:72px;padding-left:6px;padding-right:6px;}.month-cell{min-height:48px;}.month-cell .m-line{font-size:.5rem;}.people-row{grid-template-columns:minmax(54px,.9fr) repeat(4,minmax(34px,.55fr));gap:3px;padding:7px 5px;}}
