@@ -3,6 +3,8 @@
 // === config ===
 const FB='https://poskds-4ba60-default-rtdb.asia-southeast1.firebasedatabase.app',FW=FB+'/workschedule_v2';
 const OPS_MANUAL_URL=FB+'/packhelper/ops_manual';
+const OPS_MANUAL_CANDIDATE_PATH='/packhelper/ops_manual/candidates';
+const OPS_MANUAL_CANDIDATE_URL=FB+OPS_MANUAL_CANDIDATE_PATH;
 const PREVIEW_QUEUE_PATH='/packhelper/storebot_termux/work_schedule_image_preview_queue';
 const CONFIRMED_QUEUE_PATH='/packhelper/storebot_termux/confirmed_schedule_write_requests';
 const PREVIEW_QUEUE_URL=FB+PREVIEW_QUEUE_PATH,CONFIRMED_QUEUE_URL=FB+CONFIRMED_QUEUE_PATH;
@@ -846,21 +848,64 @@ function readManualMemos(){return OPS_MEMO_KEYS.flatMap(k=>manualArray(manualJso
 function manualTagLabel(tag){const row=(window.WorkScheduleManualLogic?.TAGS||[]).find(x=>x[0]===tag);return row?row[1]:tag;}
 function readIntakeQueue(){return manualArray(loadJsonFromLocalStorage(INTAKE_QUEUE_KEY)).filter(item=>item&&typeof item==='object');}
 function writeIntakeQueue(items){return writeJsonToLocalStorage(INTAKE_QUEUE_KEY,(items||[]).slice(0,INTAKE_QUEUE_LIMIT));}
-function queueIntakeItem(item){
-  const logic=window.WorkScheduleManualLogic;if(!logic)return null;
-  const envelope=logic.buildInputEnvelope(item&&item.payload!=null?item.payload:item,{sourceType:item&&item.sourceType||item&&item.source_type||item&&item.kind||'text',sourceLabel:item&&item.sourceLabel||'',sourceOrigin:item&&item.sourceOrigin||'workschedule_web',targetContext:'codex_ops'});
-  envelope.queueState='queued';
-  envelope.queueTarget='codex_ops';
-  envelope.queueName='codex_ops_intake';
-  envelope.queuedAtMs=Date.now();
-  envelope.queuePosition=(readIntakeQueue().length||0)+1;
-  const next=[envelope].concat(readIntakeQueue()).slice(0,INTAKE_QUEUE_LIMIT);
+function uniqTextList(list){
+  const out=[],seen=new Set();
+  (list||[]).forEach(value=>{const text=plainText(value);const key=text.toLowerCase();if(text&&!seen.has(key)){seen.add(key);out.push(text);}});
+  return out;
+}
+function candidateRawValue(value,depth){
+  if(value==null)return value;
+  if(depth>3)return'[omitted]';
+  if(Array.isArray(value))return value.slice(0,20).map(item=>candidateRawValue(item,(depth||0)+1));
+  if(typeof value==='object'){
+    const out={};
+    Object.keys(value).slice(0,80).forEach(key=>{
+      if(/^(dataUrl|data_url|base64)$/i.test(key))out[key]='[local image omitted]';
+      else out[key]=candidateRawValue(value[key],(depth||0)+1);
+    });
+    return out;
+  }
+  if(typeof value==='string'&&value.length>8000)return value.slice(0,8000);
+  return value;
+}
+function buildOpsManualCandidate(envelope,rawInput,now){
+  const hints=envelope.classificationHints||{},sourceEventId=plainText(envelope.id)||('site_'+now),actor=confirmActor();
+  const categoryHints=uniqTextList([hints.category,envelope.category].concat(envelope.candidateDomains||[],hints.candidateDomains||[]));
+  const candidateId='site_'+safeFbKey(sourceEventId);
+  const candidate={id:candidateId,candidate_id:candidateId,schema_version:1,source_channel:'site',source_event_id:sourceEventId,captured_at_ms:Number(envelope.capturedAtMs)||now,enqueued_at_ms:now,text:envelope.text||'',title:envelope.title||'',body:envelope.body||'',url:envelope.url||'',category:hints.category||envelope.category||'',category_hints:categoryHints,tags:hints.tags||[],raw_payload:candidateRawValue(rawInput,0),classification_hints:Object.assign({},hints,{candidate_domains:hints.candidateDomains||envelope.candidateDomains||[]}),status:'pending',status_history:[{status:'pending',at_ms:now,source:'workschedule_web'}]};
+  if(actor){candidate.actor=actor;candidate.status_history[0].actor=actor;}
+  return candidate;
+}
+async function enqueueOpsManualCandidate(candidate){
+  const url=OPS_MANUAL_CANDIDATE_URL+'/'+safeFbKey(candidate.id||candidate.source_event_id);
+  if(PREVIEW_ONLY){recordDryRunWrite('PUT',url,candidate);return true;}
+  try{
+    const r=await fetch(url+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(candidate)});
+    if(!r.ok)throw r.status;
+    return true;
+  }catch(e){
+    console.warn('ops manual candidate enqueue failed',e);
+    return false;
+  }
+}
+function storeIntakeLocalRecord(record){
+  const next=[record].concat(readIntakeQueue()).slice(0,INTAKE_QUEUE_LIMIT);
   writeIntakeQueue(next);
   S.intake.items=next;
   S.intake.loaded=true;
   S.intake.lastLoadMs=Date.now();
-  S.intake.lastError='';
-  return envelope;
+  return next;
+}
+async function queueIntakeItem(item){
+  const logic=window.WorkScheduleManualLogic;if(!logic)return null;
+  const rawInput=item&&item.payload!=null?item.payload:item,now=Date.now();
+  const envelope=logic.buildInputEnvelope(rawInput,{sourceType:item&&item.sourceType||item&&item.source_type||item&&item.kind||'text',sourceLabel:item&&item.sourceLabel||'',sourceOrigin:item&&item.sourceOrigin||'workschedule_web',targetContext:'ops_manual_candidate'});
+  const candidate=buildOpsManualCandidate(envelope,rawInput,now),ok=await enqueueOpsManualCandidate(candidate);
+  const localRecord=Object.assign({},envelope,{queueState:ok?'submitted':'pending local backup',queueTarget:ok?'ops_manual_candidates':'local_backup',queueName:'ops_manual_candidate',queuedAtMs:now,queuePosition:(readIntakeQueue().length||0)+1,candidateId:candidate.id,candidateStatus:candidate.status,status:ok?'pending':'pending local backup',localBackup:!ok});
+  if(!ok)localRecord.localBackupReason='candidate enqueue failed';
+  storeIntakeLocalRecord(localRecord);
+  S.intake.lastError=ok?'':'입력 등록 실패';
+  return localRecord;
 }
 function queueItemLabel(item){
   if(!item)return'입력';
@@ -873,7 +918,7 @@ function intakeQueueCount(){return readIntakeQueue().length;}
 function queuedManualEntries(){
   const logic=window.WorkScheduleManualLogic;
   if(!logic)return[];
-  return readIntakeQueue().map(item=>logic.inputEnvelopeToManualMemo(item,{sourceType:item.sourceType||'text'})).filter(Boolean);
+  return readIntakeQueue().filter(item=>item.localBackup||item.queueState==='pending local backup').map(item=>logic.inputEnvelopeToManualMemo(item,{sourceType:item.sourceType||'text'})).filter(Boolean);
 }
 function manualEntries(){
   const logic=window.WorkScheduleManualLogic;
@@ -903,7 +948,8 @@ function intakeFileInput(){return $('intakeFile');}
 function intakeQueueStatusText(){
   const items=readIntakeQueue();
   if(!items.length)return'대기 없음';
-  return items.length+'건 대기 · 최신 '+fmtTs(items[0].queuedAtMs||items[0].capturedAtMs||items[0].createdAtMs||0);
+  const localBackups=items.filter(item=>item.localBackup||item.queueState==='pending local backup').length;
+  return (localBackups?localBackups+'건 임시 보관':items.length+'건 최근 등록')+' · 최신 '+fmtTs(items[0].queuedAtMs||items[0].capturedAtMs||items[0].createdAtMs||0);
 }
 function renderIntakeQueue(){
   const list=$('intakeQueueList'),status=$('intakeStatus');if(!list||!status)return;
@@ -916,11 +962,11 @@ function renderIntakeQueue(){
     const cls=item.classificationHints||{};
     const attachCount=(item.attachments||[]).length;
     const candidates=(item.candidateDomains||cls.candidateDomains||[]).slice(0,4).map(key=>logic.categoryLabel?logic.categoryLabel(key):key);
-    const tagBits=[logic.intakeLabel?logic.intakeLabel(item.sourceType):item.sourceLabel||item.sourceType,cls.categoryLabel||item.categoryLabel||'',attachCount?('첨부 '+attachCount):'','정리 대기'].filter(Boolean);
+    const tagBits=[logic.intakeLabel?logic.intakeLabel(item.sourceType):item.sourceLabel||item.sourceType,cls.categoryLabel||item.categoryLabel||'',attachCount?('첨부 '+attachCount):'',item.localBackup?'임시 보관':'등록됨'].filter(Boolean);
     return '<article class="intake-item">'+
       '<div class="intake-item-head"><strong>'+esc(item.title||queueItemLabel(item))+'</strong><span>'+esc(fmtTs(item.queuedAtMs||item.capturedAtMs||0))+'</span></div>'+
       '<div class="intake-item-meta">'+tagBits.slice(0,4).map(x=>'<span class="intake-pill">'+esc(x)+'</span>').join('')+'</div>'+
-      (candidates.length?'<div class="intake-candidates"><span class="intake-candidate-label">도메인 후보</span>'+candidates.map(x=>'<span class="intake-domain">'+esc(x)+'</span>').join('')+'</div>':'')+
+      (candidates.length?'<div class="intake-candidates"><span class="intake-candidate-label">분류 후보</span>'+candidates.map(x=>'<span class="intake-domain">'+esc(x)+'</span>').join('')+'</div>':'')+
       '<div class="intake-item-body">'+esc(item.summary||item.body||memo?.summary||'')+'</div>'+
     '</article>';
   }).join('');
@@ -945,9 +991,9 @@ async function queueIntakeFromForm(reason){
   const state=intakeFormState();
   if(!String(state.text||state.url||'').trim()){toast('입력 내용을 넣어주세요');return false;}
   const payload={sourceType:state.sourceType,text:state.text,url:state.url,sourceOrigin:'workschedule_web',reason:reason||'form_submit'};
-  const envelope=queueIntakeItem(payload);
+  const envelope=await queueIntakeItem(payload);
   if(!envelope)return false;
-  toast('입력 등록됨');
+  toast(envelope.localBackup?'임시 보관됨':'입력 등록됨');
   renderIntakePanel();
   return true;
 }
@@ -957,10 +1003,10 @@ async function queueIntakeFiles(files,reason){
   const added=[];
   for(const file of list){
     const dataUrl=await fileToDataUrl(file);
-    const envelope=queueIntakeItem({sourceType:'image',sourceLabel:'이미지',sourceOrigin:'workschedule_web',payload:{title:file.name||'이미지',text:file.name||'',note:reason||'file_upload',attachments:[{name:file.name||'image',type:'image',mime:file.type||'image/*',size:file.size||0,dataUrl}]}});
+    const envelope=await queueIntakeItem({sourceType:'image',sourceLabel:'이미지',sourceOrigin:'workschedule_web',payload:{title:file.name||'이미지',text:file.name||'',note:reason||'file_upload',attachments:[{name:file.name||'image',type:'image',mime:file.type||'image/*',size:file.size||0,dataUrl}]}});
     if(envelope)added.push(envelope);
   }
-  if(added.length){toast(added.length+'건 이미지 등록됨');renderIntakePanel();return true;}
+  if(added.length){toast(added.some(item=>item.localBackup)?added.length+'건 임시 보관됨':added.length+'건 이미지 등록됨');renderIntakePanel();return true;}
   return false;
 }
 function rOpsManual(){

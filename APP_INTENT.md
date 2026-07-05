@@ -14,9 +14,9 @@
 
 ## 절대 기준
 - Firebase `/workschedule_v2`가 단일 근무 데이터 원본이다.
-- 운영메뉴얼 durable source는 Firebase `/packhelper/ops_manual`이다. WorkSchedule/HynixOps는 이 경로를 읽기 전용으로 합산하고, `localStorage`는 인증 토큰, UI 상태, 운영메뉴얼 초안 후보, 이미지 출력 due 상태 같은 브라우저 보조 상태만 맡는다.
+- 운영메뉴얼 durable source는 Firebase `/packhelper/ops_manual`이다. WorkSchedule/HynixOps는 원본 항목을 읽기 전용으로 합산하고, 사이트 입력은 `/packhelper/ops_manual/candidates/{id}` 후보 큐에만 등록한다. `localStorage`는 인증 토큰, UI 상태, 실패 시 임시 보관 백업, 이미지 출력 due 상태 같은 브라우저 보조 상태만 맡는다.
 - `/packhelper/ops_manual`가 비어도 직원용 운영메뉴얼 필수 항목(배민/쿠팡/BBQ앱/BBQ쿠폰 안내)은 공개 seed fallback으로 보여야 한다.
-- 메모추가 통합 입력은 텍스트, URL, 이미지(붙여넣기/드래그/업로드), 카카오 대화, CLI, 타이머앱, 사이트 입력을 즉시 envelope로 바꾸고, 후보 도메인(운영메뉴얼/레시피/배달정보/할일/할인행사/근무표/뉴스/날씨/규정)을 같이 보여준 뒤 CLI가 리소스/모델/MCP 필요 여부/카테고리/태그/반영 방식을 판단하도록 큐잉한다.
+- 메모추가 통합 입력은 텍스트, URL, 이미지(붙여넣기/드래그/업로드), 카카오 대화, CLI, 타이머앱, 사이트 입력을 즉시 envelope로 바꾸고, 분류 후보(운영메뉴얼/레시피/배달정보/할일/할인행사/근무표/뉴스/날씨/규정)를 같이 보여준 뒤 후보 큐에서 리소스/모델/MCP 필요 여부/카테고리/태그/반영 방식을 판단하게 한다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제와 근무 clear는 삭제가 아니라 명시 값으로 남긴다.
 - 상단 표준입력은 확인 큐용 request object를 만들고, 실제 반영은 승인 흐름을 거쳐 `/workschedule_v2/overrides`, `status`에만 적용한다.
@@ -40,7 +40,7 @@
 - HynixOps 근무표 조정은 safe queue 중심의 간단 입력 front이고, WorkSchedule 원본과 경계를 섞지 않는다.
 - 운영탭은 하이닉스 메모/운영 기준을 직원용 메뉴얼로 보여준다. 제목, 요약, 해야 할 일, 주의만 기본 노출하고 source/id/search_text/sourceTypes/updated_at 같은 메타는 내부에만 둔다.
 - 근무 직접 수정은 직원/날짜를 고른 뒤 확인-저장 흐름으로 `/workschedule_v2` 원천을 직접 갱신한다. 카톡 PNG 출력과 같은 원천을 본다.
-- 운영메뉴얼 구현 위치는 `docs/manual_logic.js`와 `docs/app.js` 운영탭이다. 하이닉스 메모탭/운영메뉴얼 소비자는 `/root/my-first-project/AttendanceBoard/docs/hynix/index.html`이고, durable source는 `/packhelper/ops_manual` read-only다.
+- 운영메뉴얼 구현 위치는 `docs/manual_logic.js`와 `docs/app.js` 운영탭이다. 하이닉스 메모탭/운영메뉴얼 소비자는 `/root/my-first-project/AttendanceBoard/docs/hynix/index.html`이고, durable source는 `/packhelper/ops_manual` read-only다. 사이트 입력은 `/packhelper/ops_manual/candidates/{id}` 후보 큐만 쓴다.
 - 운영메뉴얼은 원문 복사본이 아니라 분석/편입된 색인형 DB로 유지한다. 카카오봇 상황 답변용 검색 키와 태그는 `docs/manual_logic.js` 계약을 따른다.
 - 기능 축소/숨김보다 근무표 입력과 상태 판별을 우선한다.
 - 스와이프는 날짜 변경이며 탭 전환으로 바꾸지 않는다.
@@ -61,7 +61,7 @@
 - 카톡 이미지 preview 확인 경로는 `/packhelper/storebot_termux/work_schedule_image_preview_queue/{event_id}` read + review metadata patch, `/packhelper/storebot_termux/confirmed_schedule_write_requests/{request_id}` enqueue다.
 - MCP/브라우저 검증의 DB 증거는 `/workschedule_v2`, `/packhelper/ops_manual` 등 필요한 Firebase read source를 읽기 전용으로 확인한다.
 - 스키마 계약과 read-only 점검은 `/root/my-first-project/rules/workschedule_schema_contract.txt`와 `scripts/workschedule_schema_audit.py`를 기준으로 한다.
-- Firebase 쓰기 실패를 localStorage 단일 원본처럼 숨기지 않는다. 실패는 화면에서 알리고 재시도 가능해야 한다.
+- Firebase 쓰기 실패를 localStorage 단일 원본처럼 숨기지 않는다. 운영메뉴얼 후보 등록 실패는 임시 보관 백업으로 분리해 화면에 짧게 알리고 재시도 가능해야 한다.
 - StoreBotTermux/근무표 PNG 경로를 바꿀 때는 StoreBotTermux와 `.agents/skills/storebot-kakao-reply` 기준을 같이 확인한다.
 
 ## C&I / AI Ops 경계
