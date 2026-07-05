@@ -597,32 +597,122 @@ function stdPreviewText(){
 }
 function renderStdPreview(){const el=$('stdPreview');if(!el)return;el.innerHTML='<strong>저장 내용</strong> '+esc(stdPreviewText());}
 function focusStdPanel(){const panel=$('stdPanel');if(!panel)return;panel.scrollIntoView({behavior:'smooth',block:'start'});panel.classList.add('highlight');clearTimeout(panel._hl);panel._hl=setTimeout(()=>panel.classList.remove('highlight'),1200);}
+const surfaceCollapseSyncs=[];
+function isCompactViewport(){return window.matchMedia&&window.matchMedia('(max-width: 760px)').matches;}
+function bindSurfaceCollapse(panelId,headSelector,collapseOnMobile){
+  const panel=$(panelId);
+  const head=panel&&panel.querySelector(headSelector);
+  if(!panel||!head||panel.dataset.collapseBound==='1')return;
+  panel.dataset.collapseBound='1';
+  panel.classList.add('surface-panel');
+  head.classList.add('surface-head');
+  let toggle=head.querySelector('.surface-toggle');
+  if(!toggle){
+    toggle=document.createElement('button');
+    toggle.type='button';
+    toggle.className='surface-toggle';
+    toggle.setAttribute('aria-label','패널 펼치기/접기');
+    toggle.innerHTML='<span class="surface-toggle-icon">▾</span>';
+    head.appendChild(toggle);
+  }
+  function syncState(forceOpen){
+    const compact=isCompactViewport();
+    const shouldCollapse=forceOpen===true?false:(forceOpen===false?true:(compact&&collapseOnMobile));
+    panel.classList.toggle('collapsed',shouldCollapse);
+    toggle.setAttribute('aria-expanded',String(!shouldCollapse));
+  }
+  head.addEventListener('click',e=>{
+    if(e.target.closest('button,input,label,select,textarea,a'))return;
+    syncState(panel.classList.contains('collapsed'));
+  });
+  toggle.addEventListener('click',e=>{e.stopPropagation();syncState(panel.classList.contains('collapsed'));});
+  surfaceCollapseSyncs.push(syncState);
+  syncState();
+}
+window.addEventListener('resize',()=>{surfaceCollapseSyncs.forEach(fn=>fn());},{passive:true});
 function setStdDisabled(){const off=$('stdOff')?.checked;['stdStart','stdEnd','stdRole'].forEach(id=>{const el=$(id);if(el)el.disabled=!!off;});renderStdPreview();}
 function saveStdRequestPreview(payload){try{localStorage.setItem(STD_REQUEST_PREVIEW_KEY,JSON.stringify(payload));}catch(e){}}
+function dailyScheduleStatus(action){return action==='off'?'off':action==='clear'?'clear':'confirmed';}
+function dailyScheduleRow(action,shift){
+  if(action==='off')return offRowData();
+  if(action==='clear')return clearRow(shift&&shift.role||'');
+  return shiftRow(shift||{start:'',end:'',role:''});
+}
+function syncDailyScheduleLocal(date,eid,action,row){
+  const k=date+'_'+eid;
+  S.sc[eid]=row;
+  const st=dailyScheduleStatus(action);
+  if(st==='auto')delete S.sst[k];else S.sst[k]=st;
+  if(action==='off'){if(!S.dof[eid])S.dof[eid]={};S.dof[eid][date]=true;}
+  else if(S.dof[eid])delete S.dof[eid][date];
+}
+async function commitDailySchedule(date,eid,action,shift,options){
+  const row=dailyScheduleRow(action,shift),status=dailyScheduleStatus(action),statusPayload=statusRow(status,status==='clear'?{state:'clear'}:undefined),reload=options&&options.reload||'week';
+  if(!PREVIEW_ONLY){syncDailyScheduleLocal(date,eid,action,row);renderAll();}
+  const ok=await Promise.all([fbP(FW+'/overrides/'+date+'/'+eid,row),fbP(FW+'/status/'+date+'/'+eid,statusPayload)]);
+  if(!ok.every(Boolean)){
+    if(!PREVIEW_ONLY){
+      if(reload==='full')await loadData();
+      else await loadWk();
+    }
+    return false;
+  }
+  if(!PREVIEW_ONLY){
+    if(reload==='full')await loadData();
+    else await loadWk();
+  }
+  return true;
+}
+async function commitFixedSchedule(empId,row,options){
+  if(!PREVIEW_ONLY){S.fix[empId]=row;renderAll();}
+  const ok=await fbP(FW+'/fixed_schedules/'+empId,row);
+  if(!ok){
+    if(!PREVIEW_ONLY){
+      const reload=options&&options.reload||'full';
+      if(reload==='week')await loadWk();
+      else await loadData();
+    }
+    return false;
+  }
+  if(!PREVIEW_ONLY){
+    const reload=options&&options.reload||'full';
+    if(reload==='week')await loadWk();
+    else await loadData();
+  }
+  return true;
+}
 async function saveStd(){
   if(document.body.classList.contains('auth-locked')){toast('먼저 인증하세요');return;}
   const d=$('stdDate').value||dk(S.date),eid=$('stdEmp').value,off=$('stdOff').checked;
   if(!eid||!S.emp[eid]){toast('직원을 선택해주세요');return;}
   const btn=$('stdSave');btn.disabled=true;
   try{
-    const payload=AUTH_STD.buildStdWriteRequest?AUTH_STD.buildStdWriteRequest({
-      date:d,
-      employee:S.emp[eid].name||eid,
-      employee_id:eid,
-      action:off?'off':'upsert_shift',
-      start:off?'':($('stdStart').value||''),
-      end:off?'':($('stdEnd').value||''),
-      role:off?'':($('stdRole').value||''),
-      note:'근무 수정 요청'
-    },{actor:confirmActor(),nowMs:Date.now(),targetPaths:CONFIRM_ALLOWED_TARGETS}):null;
-    if(payload&&payload.error){toast(payload.error);return;}
-    if(!payload){toast('저장 요청을 만들 수 없습니다');return;}
-    if(!confirm((off?'휴무':'근무')+' 저장 요청을 확인 큐에 보낼까요?\n\n'+stdPreviewText()))return;
-    if(PREVIEW_ONLY){saveStdRequestPreview(payload);if($('stdHint'))$('stdHint').textContent=PREVIEW_MODE_LABEL+' : 요청 미리보기만 저장했습니다.';toast(PREVIEW_MODE_LABEL+' : 요청 미리보기 저장됨');return;}
-    const ok=await fbP(CONFIRMED_QUEUE_URL+'/'+safeFbKey(payload.request_id),payload);
-    if(!ok){toast('저장 요청 실패');return;}
-    if($('stdHint'))$('stdHint').textContent='저장 요청이 확인 큐에 등록되었습니다.';
-    toast('저장 요청 등록됨');
+    const action=off?'off':'upsert_shift';
+    const shift=off?null:{start:($('stdStart').value||''),end:($('stdEnd').value||''),role:($('stdRole').value||'')};
+    if(PREVIEW_ONLY){
+      const payload=AUTH_STD.buildStdWriteRequest?AUTH_STD.buildStdWriteRequest({
+        date:d,
+        employee:S.emp[eid].name||eid,
+        employee_id:eid,
+        action:action,
+        start:off?'':shift.start,
+        end:off?'':shift.end,
+        role:off?'':shift.role,
+        note:'근무 수정 요청'
+      },{actor:confirmActor(),nowMs:Date.now(),targetPaths:CONFIRM_ALLOWED_TARGETS}):null;
+      if(payload&&payload.error){toast(payload.error);return;}
+      if(!payload){toast('저장 요청을 만들 수 없습니다');return;}
+      if(!confirm((off?'휴무':'근무')+' 저장 요청을 확인 큐에 보낼까요?\n\n'+stdPreviewText()))return;
+      saveStdRequestPreview(payload);
+      if($('stdHint'))$('stdHint').textContent=PREVIEW_MODE_LABEL+' : 요청 미리보기만 저장했습니다.';
+      toast(PREVIEW_MODE_LABEL+' : 요청 미리보기 저장됨');
+      return;
+    }
+    if(!confirm((off?'휴무':'근무')+'를 원천에 바로 반영할까요?\n\n'+stdPreviewText()))return;
+    const ok=await commitDailySchedule(d,eid,action,shift,{reload:'week'});
+    if(!ok){toast('저장 실패');return;}
+    if($('stdHint'))$('stdHint').textContent='원천 반영/출력 동기화됨';
+    toast('원천 반영/출력 동기화됨');
   }finally{btn.disabled=false;}
 }
 // === briefing ===
@@ -1020,7 +1110,8 @@ function rOpsManual(){
   const cards=filtered.length?filtered.map(item=>{
     const safe=logic?.publicManualCardModel?logic.publicManualCardModel(item,{sourceType:item.sourceType||item.source_type||'manual'}):item;
     const conflicts=(item.conflicts||[]).length?'<div class="ops-conflict">확인 필요: '+esc((item.conflicts||[]).join(' / '))+'</div>':'';
-    const actions=(safe.actions||[]).slice(0,3).join(' · ')||(safe.body||safe.summary||'');
+    const bodyText=String(safe.body||safe.summary||'').split('\n').map(x=>x.trim()).filter(Boolean).slice(0,4).join('\n');
+    const actions=(safe.actions||[]).slice(0,3).join(' · ')||(safe.summary||'');
     const cautions=(safe.cautions||[]).slice(0,2).join(' · ')||(safe.summary||'');
     const refs=(safe.sourceUrls||[]).slice(0,3).map((url,index)=>{
       const label='참고 '+(index+1);
@@ -1030,7 +1121,8 @@ function rOpsManual(){
     return '<article class="ops-manual-card" data-category="'+esc(safe.category||'etc')+'">'+
       '<div class="ops-manual-card-head"><h3>'+esc(safe.title||'운영메뉴얼')+'</h3><span class="ops-cat">'+esc(safe.displayCategoryLabel||safe.categoryLabel||logic?.categoryLabel(safe.category)||'기타')+'</span></div>'+
       '<p class="ops-summary">'+esc(safe.summary||'')+'</p>'+
-      '<div class="ops-section"><span>해야 할 일</span><p>'+esc(actions)+'</p></div>'+
+      '<div class="ops-section ops-body"><span>본문</span><p>'+esc(bodyText||safe.summary||'')+'</p></div>'+
+      '<div class="ops-section"><span>체크</span><p>'+esc(actions)+'</p></div>'+
       '<div class="ops-section caution"><span>주의</span><p>'+esc(cautions)+'</p></div>'+
       more+
       conflicts+
@@ -1151,6 +1243,22 @@ function setupGauge(){const g=$('gauge');let dr=null;function xT(x){const r=g.ge
 }
 function bChips(){const c=$('shiftChips');c.innerHTML='';empIds().forEach(eid=>{const emp=S.emp[eid],ch=document.createElement('div');ch.className='emp-chip';if(eid===smE)ch.classList.add('selected');ch.innerHTML='<div class="chip-dot" style="background:'+(emp.color||'#9090A8')+'"></div>'+esc(emp.name);ch.addEventListener('click',()=>{smE=eid;c.querySelectorAll('.emp-chip').forEach(x=>x.classList.remove('selected'));ch.classList.add('selected');const raw=explicitShift(S.sc[eid]),ex=getShift(dk(S.date),eid);if(ex&&ex.start){sS(ex.start);sE(ex.end);smR=ex.role?ex.role.split(',').filter(Boolean):[];uRP();$('shiftDel').style.display=raw?'':'none';smEd=!!raw;}else{$('shiftDel').style.display='none';smEd=false;}});c.appendChild(ch);});}
 function uRP(){document.querySelectorAll('#rolePills .role-pill').forEach(p=>{p.classList.toggle('selected',smR.includes(p.dataset.role));});}
+async function saveQuickShift(){
+  try{
+    if(!smE){toast('직원을 선택해주세요');return false;}
+    if(!smS||!smN){toast('시간을 선택해주세요');return false;}
+    const d=dk(S.date),data={start:smS,end:smN,role:smR.join(',')};
+    closeM($('shiftModal'));
+    if(await commitDailySchedule(d,smE,'upsert_shift',data,{reload:'week'})){toast('원천 반영/출력 동기화됨');return true;}
+    toast('저장 실패');
+    return false;
+  }catch(e){console.error('saveQuickShift',e);toast('저장 실패');return false;}
+}
+function setShiftPreset(start,end,saveNow){
+  sS(start);
+  sE(end);
+  if(saveNow!==false&&smE&&smS&&smN)void saveQuickShift();
+}
 function openSh(eid){smE=eid||null;smR=[];smS=null;smN=null;smEd=false;bChips();
   const raw=eid?explicitShift(S.sc[eid]):null,sh=eid?getShift(dk(S.date),eid):null;
   if(eid&&sh&&sh.start){smR=sh.role?sh.role.split(',').filter(Boolean):[];smEd=!!raw;sS(sh.start);sE(sh.end);$('shiftDel').style.display=raw?'':'none';}
@@ -1162,13 +1270,13 @@ function openSh(eid){smE=eid||null;smR=[];smS=null;smN=null;smEd=false;bChips();
   openM($('shiftModal'));
 }
 document.querySelectorAll('#rolePills .role-pill').forEach(p=>{p.addEventListener('click',()=>{const r=p.dataset.role,i=smR.indexOf(r);i>=0?smR.splice(i,1):smR.push(r);uRP();});});
-document.querySelectorAll('#presets .preset-btn').forEach(b=>{b.addEventListener('click',()=>{sS(b.dataset.s);sE(b.dataset.e);});});
-$('shiftSave').addEventListener('click',async()=>{if(!smE){toast('직원을 선택해주세요');return;}if(!smS||!smN){toast('시간을 선택해주세요');return;}const d=dk(S.date),data={start:smS,end:smN,role:smR.join(',')},row=shiftRow(data);closeM($('shiftModal'));S.sc[smE]=row;sSt(d,smE,'confirmed');renderAll();if(await fbP(FW+'/overrides/'+d+'/'+smE,row)){toast('저장 확정');loadWk();}else toast('저장 실패');});
-$('shiftDel').addEventListener('click',async()=>{if(!smE)return;const d=dk(S.date),row=clearRow(S.emp[smE]?.role||'');closeM($('shiftModal'));S.sc[smE]=row;renderAll();const ok=await Promise.all([fbP(FW+'/overrides/'+d+'/'+smE,row),fbP(FW+'/status/'+d+'/'+smE,statusRow('clear',{state:'clear'}))]);if(ok.every(Boolean)){toast('삭제됨');loadWk();}});
-$('shiftFixed').addEventListener('click',async()=>{if(!smE||!smS||!smN){toast('시간을 선택해주세요');return;}const n=S.emp[smE]?.name;if(!n){toast('직원 오류');return;}S.fix[smE]={start:smS,end:smN,role:smR.join(','),kind:'fixed',type:'fixed'};fbP(FW+'/fixed_schedules/'+smE,S.fix[smE]);const d=dk(S.date),row=clearRow(smR.join(','));S.sc[smE]=row;sSt(d,smE,'confirmed');closeM($('shiftModal'));await fbP(FW+'/overrides/'+d+'/'+smE,row);toast(n+' 고정값 변경됨');renderAll();loadWk();});
+document.querySelectorAll('#presets .preset-btn').forEach(b=>{b.addEventListener('click',()=>setShiftPreset(b.dataset.s,b.dataset.e,true));});
+$('shiftSave').addEventListener('click',saveQuickShift);
+$('shiftDel').addEventListener('click',async()=>{if(!smE)return;const d=dk(S.date);closeM($('shiftModal'));if(await commitDailySchedule(d,smE,'clear',{role:S.emp[smE]?.role||''},{reload:'week'})){toast('원천 반영/출력 동기화됨');}});
+$('shiftFixed').addEventListener('click',async()=>{if(!smE||!smS||!smN){toast('시간을 선택해주세요');return;}const n=S.emp[smE]?.name;if(!n){toast('직원 오류');return;}const fixed={start:smS,end:smN,role:smR.join(','),kind:'fixed',type:'fixed'};closeM($('shiftModal'));if(await commitFixedSchedule(smE,fixed,{reload:'full'})){toast(n+' 고정근무 반영됨 · 원천 반영/출력 동기화됨');}else toast('저장 실패');});
 $('shiftDayoff').addEventListener('click',()=>{if(!smE)return;const d=dk(S.date),io=isOff(smE,d);
-  if(io){if(!S.dof[smE])S.dof[smE]={};delete S.dof[smE][d];const row=clearRow(S.emp[smE]?.role||'');S.sc[smE]=row;fbP(FW+'/overrides/'+d+'/'+smE,row);fbP(FW+'/status/'+d+'/'+smE,statusRow('clear',{state:'clear'}));closeM($('shiftModal'));toast('휴무 해제');}
-  else{if(!S.dof[smE])S.dof[smE]={};S.dof[smE][d]=true;const row=offRowData();S.sc[smE]=row;fbP(FW+'/overrides/'+d+'/'+smE,row);fbP(FW+'/status/'+d+'/'+smE,statusRow('off'));closeM($('shiftModal'));toast('휴무 지정');}renderAll();});
+  if(io){closeM($('shiftModal'));void commitDailySchedule(d,smE,'clear',{role:S.emp[smE]?.role||''},{reload:'week'}).then(ok=>{if(ok)toast('원천 반영/출력 동기화됨');else toast('저장 실패');});}
+  else{closeM($('shiftModal'));void commitDailySchedule(d,smE,'off',null,{reload:'week'}).then(ok=>{if(ok)toast('원천 반영/출력 동기화됨');else toast('저장 실패');});}});
 $('shiftCancel').addEventListener('click',()=>closeM($('shiftModal')));$('shiftClose').addEventListener('click',()=>closeM($('shiftModal')));
 // === employee management ===
 $('empMgrBtn').addEventListener('click',()=>{rEL();openM($('empModal'));});$('empClose').addEventListener('click',()=>closeM($('empModal')));
@@ -1196,8 +1304,8 @@ function pBulk(text){const res=[],lines=text.split('\n').map(l=>l.trim()).filter
     const iM=rest.match(/(\d{4})-(\d{1,2})-(\d{1,2})/g);if(iM){iM.forEach(ds=>{const[y,m,d]=ds.split('-').map(Number);res.push({e:mE,d:y+'-'+pad(m)+'-'+pad(d)});});continue;}
     const sD=rest.match(/(\d{1,2})[\/](\d{1,2})/g);if(sD){sD.forEach(ds=>{const[m,d]=ds.split('/').map(Number);res.push({e:mE,d:yr+'-'+pad(m)+'-'+pad(d)});});}}return res;}
 $('dayoffMgrBtn').addEventListener('click',()=>{rDL();openM(doMod);});$('dayoffClose').addEventListener('click',()=>closeM(doMod));doMod.addEventListener('click',e=>{if(e.target===doMod)closeM(doMod);});
-$('doAddBtn').addEventListener('click',async()=>{const e=$('doEmpSel').value,d=$('doDate').value;if(!e||!d)return;if(!S.dof[e])S.dof[e]={};S.dof[e][d]=true;const row=offRowData();fbP(FW+'/overrides/'+d+'/'+e,row);fbP(FW+'/status/'+d+'/'+e,statusRow('off'));if(d===dk(S.date)){S.sc[e]=row;renderAll();}toast((S.emp[e]?.name||'')+' '+d+' 휴무 등록');rDL();});
-$('doBulkBtn').addEventListener('click',async()=>{const t=$('doBulk').value.trim();if(!t)return;const entries=pBulk(t);if(!entries.length){toast('인식된 휴무 없음');return;}for(const x of entries){if(!S.dof[x.e])S.dof[x.e]={};S.dof[x.e][x.d]=true;const row=offRowData();await fbP(FW+'/overrides/'+x.d+'/'+x.e,row);await fbP(FW+'/status/'+x.d+'/'+x.e,statusRow('off'));if(x.d===dk(S.date))S.sc[x.e]=row;}$('doBulk').value='';toast(entries.length+'건 등록');rDL();if(entries.some(x=>x.d===dk(S.date)))renderAll();});
+$('doAddBtn').addEventListener('click',async()=>{const e=$('doEmpSel').value,d=$('doDate').value;if(!e||!d)return;if(await commitDailySchedule(d,e,'off',null,{reload:'week'})){toast((S.emp[e]?.name||'')+' '+d+' 원천 반영/출력 동기화됨');rDL();}});
+$('doBulkBtn').addEventListener('click',async()=>{const t=$('doBulk').value.trim();if(!t)return;const entries=pBulk(t);if(!entries.length){toast('인식된 휴무 없음');return;}for(const x of entries){await commitDailySchedule(x.d,x.e,'off',null,{reload:'week'});}$('doBulk').value='';toast(entries.length+'건 원천 반영/출력 동기화됨');rDL();if(entries.some(x=>x.d===dk(S.date)))renderAll();});
 // === standard input events ===
 $('stdOff').addEventListener('change',()=>{setStdDisabled();renderStdPreview();});
 $('stdSave').addEventListener('click',saveStd);
@@ -1248,5 +1356,11 @@ $('refreshBtn').addEventListener('click',()=>{toast('새로고침...');location.
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&!document.body.classList.contains('auth-locked')){connectSSE();loadData();loadConfirmQueue();}});
 [$('shiftModal'),$('empModal'),$('empEditModal')].forEach(m=>{if(m)m.addEventListener('click',e=>{if(e.target===m)closeM(m);});});
 // === init ===
-initAuthGate(()=>{S.date=new Date();updD();bTS();setupDel();loadData();loadConfirmQueue();connectSSE();renderDeliveryPanel();queueDeliveryRender();});
+initAuthGate(()=>{
+  bindSurfaceCollapse('deliveryPanel','.delivery-copy',false);
+  bindSurfaceCollapse('intakePanel','.intake-head',true);
+  bindSurfaceCollapse('stdPanel','.std-head',true);
+  bindSurfaceCollapse('confirmPanel','.confirm-head',true);
+  S.date=new Date();updD();bTS();setupDel();loadData();loadConfirmQueue();connectSSE();renderDeliveryPanel();queueDeliveryRender();
+});
 })();

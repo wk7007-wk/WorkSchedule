@@ -44,7 +44,7 @@
 - fixed schedule: 날짜별 overrides 우선, clear는 fixed fallback 차단, fixed는 `/workschedule_v2/fixed_schedules` 값만 사용
 - data loading: planned schedule은 employees/fixed_schedules/overrides/status, 실근태는 `/workschedule_v2/attendance`
 - render: dashboard/day/people/month/timebar/list/ops 탭, 주간 개요, 날짜 스트립
-- actions: shift 저장/휴무/고정값, 표준입력 요청 생성, 직원 disabled 처리, 휴무 일괄 파싱
+- actions: shift 저장/휴무/고정값, 표준입력 live write/preview request 분기, 직원 disabled 처리, 휴무 일괄 파싱
 - confirmation queue: 카톡 이미지 preview item 표시, date/employee/action/shift/off/clear 보정, confirmed request enqueue, reject/hold review metadata patch
 
 ## Firebase 경로

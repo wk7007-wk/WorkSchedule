@@ -19,7 +19,7 @@
 - 메모추가 통합 입력은 텍스트, URL, 이미지(붙여넣기/드래그/업로드), 카카오 대화, CLI, 타이머앱, 사이트 입력을 즉시 envelope로 바꾸고, 분류 후보(운영메뉴얼/레시피/배달정보/할일/할인행사/근무표/뉴스/날씨/규정)를 같이 보여준 뒤 후보 큐에서 리소스/모델/MCP 필요 여부/카테고리/태그/반영 방식을 판단하게 한다.
 - 직원 삭제는 노드 삭제가 아니라 `disabled:true`, `active:false` 저장이다.
 - 휴무 해제와 근무 clear는 삭제가 아니라 명시 값으로 남긴다.
-- 상단 표준입력은 확인 큐용 request object를 만들고, 실제 반영은 승인 흐름을 거쳐 `/workschedule_v2/overrides`, `status`에만 적용한다.
+- 상단 표준입력은 preview/testAuth/readonly에서 확인 큐용 request object를 만들고, 실제 인증 모드에서는 `/workschedule_v2/overrides`, `status`에 직접 적용한다.
 - 카톡 이미지 근무 확인 panel은 `/workschedule_v2`에 직접 저장하지 않는다. preview queue를 읽고, 확인 시 `/packhelper/storebot_termux/confirmed_schedule_write_requests`에 `confirmed_schedule_write_request`를 enqueue한다.
 - 브리핑 탭은 일정, 알람, 할인/행사, 뉴스, 날씨, 근무, 오늘 필요한 메뉴얼을 함께 요약하고, 사이트 상세/카카오 요약/근무표 이미지 출력 기준을 짧게 보여준다.
 - 브리핑 탭은 데이터가 없어도 섹션과 대기/빈 상태를 보여야 하며, 일정/할일/알람/예약/할인행사/뉴스/날씨/근무/오늘 필요한 메뉴얼을 함께 요약한다.
@@ -38,7 +38,10 @@
 ## UI/동선 기준
 - WorkSchedule 웹은 Firebase DB 상세 확인/보정/출력 화면이다.
 - HynixOps 근무표 조정은 safe queue 중심의 간단 입력 front이고, WorkSchedule 원본과 경계를 섞지 않는다.
+- 모바일에서는 보조 패널을 기본적으로 접어 스크롤을 줄이고, 날짜/인원/월별/리스트 탭과 하단 시트를 중심으로 본다.
+- 근무 수정은 날짜/직원 선택 후 하단 시트의 휴무/시간 프리셋으로 2~3터치 안에 마치는 흐름을 우선한다.
 - 운영탭은 하이닉스 메모/운영 기준을 직원용 메뉴얼로 보여준다. 제목, 요약, 해야 할 일, 주의만 기본 노출하고 source/id/search_text/sourceTypes/updated_at 같은 메타는 내부에만 둔다.
+- 운영메뉴얼 카드는 제목 나열보다 본문, 체크리스트, 주의가 먼저 읽히는 구조를 유지한다.
 - 근무 직접 수정은 직원/날짜를 고른 뒤 확인-저장 흐름으로 `/workschedule_v2` 원천을 직접 갱신한다. 카톡 PNG 출력과 같은 원천을 본다.
 - 운영메뉴얼 구현 위치는 `docs/manual_logic.js`와 `docs/app.js` 운영탭이다. 하이닉스 메모탭/운영메뉴얼 소비자는 `/root/my-first-project/AttendanceBoard/docs/hynix/index.html`이고, durable source는 `/packhelper/ops_manual` read-only다. 사이트 입력은 `/packhelper/ops_manual/candidates/{id}` 후보 큐만 쓴다.
 - 운영메뉴얼은 원문 복사본이 아니라 분석/편입된 색인형 DB로 유지한다. 카카오봇 상황 답변용 검색 키와 태그는 `docs/manual_logic.js` 계약을 따른다.

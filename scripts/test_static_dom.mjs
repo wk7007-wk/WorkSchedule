@@ -53,12 +53,21 @@ assert.match(appSource, /previewBanner/);
 assert.match(appSource, /seedManualEntries/);
 assert.match(appSource, /data-go-tab="ops"/);
 assert.match(appSource, /data-go-std="1"/);
+assert.match(appSource, /bindSurfaceCollapse/);
+assert.match(appSource, /commitDailySchedule/);
+assert.match(appSource, /commitFixedSchedule/);
+assert.match(appSource, /saveQuickShift/);
+assert.match(appSource, /setShiftPreset/);
+assert.match(appSource, /원천 반영\/출력 동기화됨/);
 
 assert.match(styleSource, /\.auth-mode-badge/);
 assert.match(styleSource, /\.preview-banner/);
 assert.match(styleSource, /\.ops-manual-card/);
 assert.match(styleSource, /\.dash-callout-card/);
 assert.match(styleSource, /\.dash-manual-item/);
+assert.match(styleSource, /\.surface-panel/);
+assert.match(styleSource, /\.ops-body/);
+assert.match(indexSource, /저장 전 내용을 확인한 뒤 반영합니다\./);
 
 assert.match(manualSource, /publicManualCardModel/);
 assert.doesNotMatch(manualSource, /NativeBridge|adb|apk|usb|서버폰/i);
