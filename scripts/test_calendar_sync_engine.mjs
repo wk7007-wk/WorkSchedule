@@ -49,6 +49,18 @@ const store = new MemorySyncStore(baseSnapshot);
 const provider = new MockCalendarProvider({ pageSize: 1, clock });
 const engine = new CalendarSyncEngine({ config: config(), store, provider, clock, sleep: async () => {} });
 
+async function claimPullGuard(targetStore, ownerId, atMs = nowMs) {
+  const claim = await targetStore.claimPullLease({ nowMs: atMs, leaseMs: 600000, ownerId });
+  assert.ok(claim, 'test must own the global pull fence');
+  return { kind: 'pull', id: 'global', claim };
+}
+
+async function seedMapping(targetStore, key, mapping, guard, atMs = nowMs) {
+  return await targetStore.casSetMapping(key, mapping, {
+    expectedEtag: 'null_etag', guard, nowMs: atMs
+  });
+}
+
 const item = core.buildOutboxItem({
   entity: 'daily_override', date: '2026-07-14', employeeId: 'emp1',
   row: baseSnapshot.overrides['2026-07-14'].emp1, nowMs
@@ -178,9 +190,9 @@ assert.equal(recoveredLease.lease_epoch, firstLease.lease_epoch + 1, 'expired le
 assert.equal(await leaseStore.finishOutbox(item.id, firstLease, { status: 'done' }), null, 'stale worker cannot complete a reclaimed row');
 assert.ok(await leaseStore.finishOutbox(item.id, recoveredLease, { status: 'done' }));
 
-function moveEvent(etag = '"move-new"') {
+function moveEvent(etag = '"move-new"', updated = '2026-07-14T03:00:02.000Z') {
   return {
-    id: 'move-event', etag, status: 'confirmed', summary: '이원규 · 주방',
+    id: 'move-event', etag, updated, status: 'confirmed', summary: '이원규 · 주방',
     start: { dateTime: '2026-07-15T10:00:00+09:00', timeZone: 'Asia/Seoul' },
     end: { dateTime: '2026-07-15T18:00:00+09:00', timeZone: 'Asia/Seoul' },
     extendedProperties: { private: {
@@ -194,12 +206,14 @@ occupiedSnapshot.overrides['2026-07-15'] = {
   emp1: { state: 'shift', start: '08:00', end: '16:00', shift: { start: '08:00', end: '16:00', role: '홀' }, updated_at_ms: 777 }
 };
 const occupiedStore = new MemorySyncStore(occupiedSnapshot);
-await occupiedStore.setMapping('daily|2026-07-14|emp1', {
+const occupiedGuard = await claimPullGuard(occupiedStore, 'occupied-pull');
+await seedMapping(occupiedStore, 'daily|2026-07-14|emp1', {
   mappingId: 'move-map', eventId: 'move-event', googleEtag: '"move-old"',
+  googleUpdated: '2026-07-14T03:00:01.000Z',
   canonicalRevision: revisionOf(occupiedSnapshot.overrides['2026-07-14'].emp1), employeeId: 'emp1', date: '2026-07-14'
-});
+}, occupiedGuard);
 const occupiedEngine = new CalendarSyncEngine({ config: config(), store: occupiedStore, provider: new MockCalendarProvider({ clock }), clock, workerId: 'move-worker' });
-const occupiedResult = await occupiedEngine.applyGoogleEvent(moveEvent(), await occupiedStore.getSnapshot());
+const occupiedResult = await occupiedEngine.applyGoogleEvent(moveEvent(), await occupiedStore.getSnapshot(), occupiedGuard);
 assert.equal(occupiedResult.reason, 'move_destination_occupied');
 assert.equal(occupiedStore.snapshot.overrides['2026-07-15'].emp1.start, '08:00', 'unrelated destination override is never overwritten');
 assert.equal(occupiedStore.snapshot.overrides['2026-07-14'].emp1.start, '10:00', 'source remains intact on destination conflict');
@@ -207,22 +221,27 @@ assert.equal(occupiedStore.snapshot.overrides['2026-07-14'].emp1.start, '10:00',
 const fixedDestinationSnapshot = structuredClone(baseSnapshot);
 fixedDestinationSnapshot.fixed_schedules.emp1 = { kind: 'weekly', days: ['wed'], start: '09:00', end: '17:00', role: '고정', updated_at_ms: 50 };
 const fixedDestinationStore = new MemorySyncStore(fixedDestinationSnapshot);
-await fixedDestinationStore.setMapping('daily|2026-07-14|emp1', {
+const fixedDestinationGuard = await claimPullGuard(fixedDestinationStore, 'fixed-destination-pull');
+await seedMapping(fixedDestinationStore, 'daily|2026-07-14|emp1', {
   mappingId: 'move-map', eventId: 'move-event', googleEtag: '"move-old"',
+  googleUpdated: '2026-07-14T03:00:01.000Z',
   canonicalRevision: revisionOf(fixedDestinationSnapshot.overrides['2026-07-14'].emp1), employeeId: 'emp1', date: '2026-07-14'
-});
+}, fixedDestinationGuard);
 const fixedDestinationEngine = new CalendarSyncEngine({ config: config(), store: fixedDestinationStore, provider: new MockCalendarProvider({ clock }), clock, workerId: 'fixed-move-worker' });
-assert.equal((await fixedDestinationEngine.applyGoogleEvent(moveEvent(), await fixedDestinationStore.getSnapshot())).status, 'imported');
+assert.equal((await fixedDestinationEngine.applyGoogleEvent(moveEvent(), await fixedDestinationStore.getSnapshot(), fixedDestinationGuard)).status, 'imported');
 assert.equal(fixedDestinationStore.snapshot.overrides['2026-07-15'].emp1.google_event_id, 'move-event', 'fixed schedule alone does not block a move');
 assert.equal(fixedDestinationStore.snapshot.overrides['2026-07-14'].emp1.state, 'clear');
-const repeatedMove = moveEvent('"move-newer"');
-assert.equal((await fixedDestinationEngine.applyGoogleEvent(repeatedMove, await fixedDestinationStore.getSnapshot())).status, 'imported');
+const repeatedMove = moveEvent('"move-newer"', '2026-07-14T03:00:03.000Z');
+assert.equal((await fixedDestinationEngine.applyGoogleEvent(repeatedMove, await fixedDestinationStore.getSnapshot(), fixedDestinationGuard)).status, 'imported');
 assert.equal(fixedDestinationStore.snapshot.overrides['2026-07-15'].emp1.google_event_id, 'move-event', 'same event can be applied idempotently');
+assert.equal(fixedDestinationStore.snapshot.overrides['2026-07-15'].emp1.google_etag, '"move-newer"', 'a newer version after a move updates the mapped destination');
+assert.equal((await fixedDestinationStore.getMapping('daily|2026-07-15|emp1')).googleEtag, '"move-newer"');
 
 const sourceRaceStore = new MemorySyncStore(baseSnapshot);
 const sourceRaceRevision = await sourceRaceStore.getCanonicalRevision('daily|2026-07-14|emp1');
 const sourceRaceExpectation = await sourceRaceStore.getExplicitOverrideState('2026-07-14', 'emp1');
 const sourceRaceDestination = await sourceRaceStore.getExplicitOverrideState('2026-07-15', 'emp1');
+const sourceRaceGuard = await claimPullGuard(sourceRaceStore, 'source-race-pull');
 sourceRaceStore.snapshot.overrides['2026-07-14'].emp1 = Object.assign(
   {}, sourceRaceStore.snapshot.overrides['2026-07-14'].emp1, { start: '11:00', updated_at_ms: 101 }
 );
@@ -231,13 +250,141 @@ await assert.rejects(
     action: 'move', date: '2026-07-15', priorDate: '2026-07-14', employeeId: 'emp1',
     row: { state: 'shift', start: '10:00', end: '18:00', google_event_id: 'race-event', google_etag: '"race"' }
   }, {
-    nowMs, sourceExpectedRevision: sourceRaceRevision,
-    sourceExpectation: sourceRaceExpectation, destinationExpectation: sourceRaceDestination
+    nowMs, expectedCanonicalRevision: sourceRaceRevision,
+    sourceExpectation: sourceRaceExpectation, destinationExpectation: sourceRaceDestination,
+    guard: sourceRaceGuard
   }),
   error => error && error.code === 'move_source_changed'
 );
 assert.equal(sourceRaceStore.snapshot.overrides['2026-07-14'].emp1.start, '11:00');
 assert.equal(sourceRaceStore.snapshot.overrides['2026-07-15'], undefined, 'Memory atomic move mutates neither side after a source race');
+
+function orderedPullEvent({ etag, updated, start, end }) {
+  return {
+    id: 'ordered-event', etag, updated, status: 'confirmed', summary: '이원규 · 주방',
+    start: { dateTime: `2026-07-14T${start}:00+09:00`, timeZone: 'Asia/Seoul' },
+    end: { dateTime: `2026-07-14T${end}:00+09:00`, timeZone: 'Asia/Seoul' },
+    extendedProperties: { private: {
+      wsCanonicalKey: 'daily|2026-07-14|emp1', wsEmployeeId: 'emp1',
+      wsMappingId: 'ordered-map', wsRole: '주방'
+    } }
+  };
+}
+
+const orderedSnapshot = structuredClone(baseSnapshot);
+orderedSnapshot.attendance_meta = { zero: 0, empty: [] };
+orderedSnapshot.unrelated_zero = 0;
+orderedSnapshot.unrelated_empty = [];
+orderedSnapshot.meta = { unrelated: { zero: 0, empty: [] } };
+const orderedStore = new MemorySyncStore(orderedSnapshot);
+const orderedGuard = await claimPullGuard(orderedStore, 'ordered-pull');
+await seedMapping(orderedStore, 'daily|2026-07-14|emp1', {
+  mappingId: 'ordered-map', eventId: 'ordered-event', googleEtag: '"e0"',
+  googleUpdated: '2026-07-14T03:00:00.000Z',
+  canonicalRevision: revisionOf(baseSnapshot.overrides['2026-07-14'].emp1),
+  employeeId: 'emp1', date: '2026-07-14', source: 'google_calendar'
+}, orderedGuard);
+const orderedEngine = new CalendarSyncEngine({
+  config: config(), store: orderedStore, provider: new MockCalendarProvider({ clock }),
+  clock, sleep: async () => {}, workerId: 'ordered-worker'
+});
+const e2 = orderedPullEvent({
+  etag: '"e2"', updated: '2026-07-14T03:00:02.000Z', start: '14:00', end: '22:00'
+});
+const e1 = orderedPullEvent({
+  etag: '"e1"', updated: '2026-07-14T03:00:01.000Z', start: '13:00', end: '21:00'
+});
+assert.equal((await orderedEngine.applyGoogleEvent(e2, await orderedStore.getSnapshot(), orderedGuard)).status, 'imported');
+assert.deepEqual(orderedStore.snapshot.attendance_meta, { zero: 0, empty: [] });
+assert.equal(orderedStore.snapshot.unrelated_zero, 0);
+assert.deepEqual(orderedStore.snapshot.unrelated_empty, []);
+assert.deepEqual(orderedStore.snapshot.meta.unrelated, { zero: 0, empty: [] }, 'Memory atomic import preserves unrelated root metadata');
+const orderedCanonicalAfterE2 = structuredClone(orderedStore.snapshot);
+const orderedMappingAfterE2 = await orderedStore.getMapping('daily|2026-07-14|emp1');
+const orderedMirrorAfterE2 = await orderedStore.getMirror('ordered-event');
+assert.equal((await orderedEngine.applyGoogleEvent(e1, await orderedStore.getSnapshot(), orderedGuard)).status, 'stale_ignored');
+assert.deepEqual(orderedStore.snapshot, orderedCanonicalAfterE2, 'e1 delayed after e2 cannot roll canonical back');
+assert.deepEqual(await orderedStore.getMapping('daily|2026-07-14|emp1'), orderedMappingAfterE2, 'e1 cannot roll mapping back');
+assert.deepEqual(await orderedStore.getMirror('ordered-event'), orderedMirrorAfterE2, 'e1 cannot roll mirror back');
+
+const ambiguous = orderedPullEvent({
+  etag: '"ambiguous"', updated: e2.updated, start: '15:00', end: '23:00'
+});
+assert.equal((await orderedEngine.applyGoogleEvent(ambiguous, await orderedStore.getSnapshot(), orderedGuard)).reason, 'equal_google_updated_ambiguity');
+assert.deepEqual(orderedStore.snapshot, orderedCanonicalAfterE2, 'equal timestamp ambiguity fails before canonical write');
+assert.deepEqual(await orderedStore.getMapping('daily|2026-07-14|emp1'), orderedMappingAfterE2);
+assert.deepEqual(await orderedStore.getMirror('ordered-event'), orderedMirrorAfterE2);
+
+const payloadAmbiguous = orderedPullEvent({
+  etag: e2.etag, updated: e2.updated, start: '16:00', end: '23:30'
+});
+assert.equal((await orderedEngine.applyGoogleEvent(payloadAmbiguous, await orderedStore.getSnapshot(), orderedGuard)).reason, 'equal_google_updated_ambiguity');
+assert.deepEqual(orderedStore.snapshot, orderedCanonicalAfterE2, 'equal timestamp and ETag with different payload also fails closed');
+assert.deepEqual(await orderedStore.getMapping('daily|2026-07-14|emp1'), orderedMappingAfterE2);
+assert.deepEqual(await orderedStore.getMirror('ordered-event'), orderedMirrorAfterE2);
+
+delete orderedStore.snapshot.status['2026-07-14'].emp1;
+const orderedOverrideBeforeRepair = structuredClone(orderedStore.snapshot.overrides['2026-07-14'].emp1);
+await orderedEngine.applyGoogleEvent(e2, await orderedStore.getSnapshot(), orderedGuard);
+assert.deepEqual(orderedStore.snapshot.overrides['2026-07-14'].emp1, orderedOverrideBeforeRepair, 'same event repairs only missing status');
+assert.equal(orderedStore.snapshot.status['2026-07-14'].emp1.google_event_id, 'ordered-event');
+assert.deepEqual(await orderedStore.getMapping('daily|2026-07-14|emp1'), orderedMappingAfterE2, 'same-event status repair does not churn mapping CAS');
+const orderedAfterRepair = structuredClone(orderedStore.snapshot);
+await orderedEngine.applyGoogleEvent(e2, await orderedStore.getSnapshot(), orderedGuard);
+assert.deepEqual(orderedStore.snapshot, orderedAfterRepair, 'completed Memory same-event repair is idempotent');
+
+const discoverStore = new MemorySyncStore(baseSnapshot);
+const discoverProvider = new MockCalendarProvider({ clock });
+const discoverEngine = new CalendarSyncEngine({
+  config: config(), store: discoverStore, provider: discoverProvider,
+  clock, sleep: async () => {}, workerId: 'discover-worker'
+});
+await discoverStore.enqueueOutbox(item);
+const discoverClaim = (await discoverStore.claimOutbox({
+  nowMs, limit: 1, leaseMs: 600000, ownerId: 'discover-worker'
+}))[0];
+const discoverGuard = discoverEngine.createOutboxGuard(discoverClaim);
+const discoverEntity = await discoverStore.getCanonicalForOutbox(discoverClaim);
+const discoverProjection = projectCanonicalToGoogleEvent(discoverEntity, {
+  locationName: '', timeZone: 'Asia/Seoul', operationalDayStartMin: 360
+});
+discoverProjection.extendedProperties.private.wsRevision = 'remote-stale-revision';
+await discoverProvider.seedEvent(Object.assign({ id: 'discover-event' }, discoverProjection));
+const discovered = await discoverEngine.discoverMapping(discoverEntity, discoverGuard);
+assert.equal(discovered.canonicalRevision, 'remote-stale-revision', 'discovery trusts remote private wsRevision, not current canonical');
+assert.equal((await discoverEngine.pushCanonicalEntity(discoverEntity, 'discover-test', discoverGuard)).status, 'updated');
+assert.equal(discoverProvider.calls.filter(call => call.method === 'updateEvent').length, 1, 'stale discovered revision forces push update');
+assert.equal(
+  (await discoverStore.getMapping(discoverEntity.canonicalKey)).canonicalRevision,
+  String(discoverEntity.revision)
+);
+
+const busyPullStore = new MemorySyncStore(baseSnapshot);
+const busyPullProvider = new MockCalendarProvider({ clock });
+const pullClaimLimits = [];
+const originalClaimPullSignals = busyPullStore.claimPullSignals.bind(busyPullStore);
+busyPullStore.claimPullSignals = async options => {
+  pullClaimLimits.push(options.limit);
+  return await originalClaimPullSignals(options);
+};
+await busyPullStore.enqueuePullSignal({
+  channel_id: 'busy-channel', resource_id: 'busy-resource', message_number: '1',
+  at_ms: nowMs, status: 'pending', next_attempt_at_ms: nowMs
+});
+const periodicOwner = new CalendarSyncEngine({
+  config: config(), store: busyPullStore, provider: busyPullProvider,
+  clock, sleep: async () => {}, workerId: 'periodic-owner'
+});
+const signalContender = new CalendarSyncEngine({
+  config: config(), store: busyPullStore, provider: busyPullProvider,
+  clock, sleep: async () => {}, workerId: 'signal-contender'
+});
+const heldPullGuard = await periodicOwner.claimGlobalPullGuard();
+const blockedSignal = await signalContender.processPullSignals({ limit: 1 });
+assert.equal(blockedSignal.results[0].retry, true, 'signal pull shares the periodic global pull fence');
+assert.equal(busyPullProvider.calls.filter(call => call.method === 'listEventsPage').length, 0);
+assert.ok(pullClaimLimits.every(limit => limit === 1), 'signal consumer claims exactly one row per iteration');
+await periodicOwner.releaseGlobalPullGuard(heldPullGuard);
 
 let fenceNow = 1000;
 let releaseOldRead;

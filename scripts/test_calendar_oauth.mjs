@@ -56,6 +56,21 @@ nowMs = 5000;
 assert.equal(await oauth.getAccessToken(), 'access-2');
 assert.equal((await tokenStore.load()).refresh_token, 'refresh-secret', 'refresh rotation must preserve an omitted refresh token');
 
+const timeoutStateStore = new MemoryOAuthStateStore({ clock: () => nowMs });
+const timeoutFlow = new GoogleOAuthServerFlow({
+  config,
+  tokenStore: new MemoryTokenStore(),
+  stateStore: timeoutStateStore,
+  fetchImpl: async () => { const error = new Error('aborted'); error.name = 'AbortError'; throw error; },
+  clock: () => nowMs,
+  requestTimeoutMs: 1000
+});
+const timeoutState = await timeoutStateStore.issue({ returnTo: '/' });
+await assert.rejects(
+  () => timeoutFlow.handleCallback({ code: 'timeout-code', state: timeoutState }),
+  error => error && error.code === 'oauth_timeout' && error.retryable === true
+);
+
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'workschedule-token-'));
 const encryptedPath = path.join(temp, 'token.enc');
 const encrypted = new EncryptedFileTokenStore({ filePath: encryptedPath, encryptionKey: config.tokenEncryptionKey });

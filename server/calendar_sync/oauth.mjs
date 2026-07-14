@@ -109,12 +109,13 @@ async function parseJsonResponse(response, label) {
 }
 
 export class GoogleOAuthServerFlow {
-  constructor({ config, tokenStore, stateStore, fetchImpl = fetch, clock = () => Date.now() }) {
+  constructor({ config, tokenStore, stateStore, fetchImpl = fetch, clock = () => Date.now(), requestTimeoutMs = null }) {
     this.config = config;
     this.tokenStore = tokenStore;
     this.stateStore = stateStore;
     this.fetch = fetchImpl;
     this.clock = clock;
+    this.requestTimeoutMs = Math.max(1000, Number(requestTimeoutMs || config.providerAttemptTimeoutMs) || 15000);
   }
 
   assertReady() {
@@ -136,13 +137,35 @@ export class GoogleOAuthServerFlow {
     return 'https://accounts.google.com/o/oauth2/v2/auth?' + params.toString();
   }
 
+  async requestToken(options, label) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    try {
+      const response = await this.fetch('https://oauth2.googleapis.com/token', Object.assign({}, options, {
+        signal: controller.signal
+      }));
+      return await parseJsonResponse(response, label);
+    } catch (error) {
+      if (controller.signal.aborted || error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+        const timeout = new Error(label + ' timed out');
+        timeout.code = 'oauth_timeout';
+        timeout.status = 504;
+        timeout.retryable = true;
+        throw timeout;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async handleCallback({ code, state, error }) {
     this.assertReady();
     if (error) throw new Error('Google OAuth denied: ' + String(error));
     const stateMetadata = await this.stateStore.consume(state);
     if (!stateMetadata) throw new Error('OAuth state mismatch or expired');
     if (!code) throw new Error('OAuth authorization code is missing');
-    const response = await this.fetch('https://oauth2.googleapis.com/token', {
+    const received = await this.requestToken({
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -152,8 +175,7 @@ export class GoogleOAuthServerFlow {
         redirect_uri: this.config.redirectUri,
         grant_type: 'authorization_code'
       })
-    });
-    const received = await parseJsonResponse(response, 'OAuth token exchange');
+    }, 'OAuth token exchange');
     const previous = await this.tokenStore.load();
     const stored = {
       access_token: received.access_token,
@@ -176,7 +198,7 @@ export class GoogleOAuthServerFlow {
     const stored = await this.tokenStore.load();
     if (!stored || !stored.refresh_token) throw new LiveAuthBlockedError('Google Calendar refresh token is not stored');
     if (stored.access_token && Number(stored.expires_at_ms || 0) > this.clock() + 60 * 1000) return stored.access_token;
-    const response = await this.fetch('https://oauth2.googleapis.com/token', {
+    const received = await this.requestToken({
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -185,8 +207,7 @@ export class GoogleOAuthServerFlow {
         refresh_token: stored.refresh_token,
         grant_type: 'refresh_token'
       })
-    });
-    const received = await parseJsonResponse(response, 'OAuth token refresh');
+    }, 'OAuth token refresh');
     const updated = Object.assign({}, stored, {
       access_token: received.access_token,
       refresh_token: received.refresh_token || stored.refresh_token,

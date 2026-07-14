@@ -43,6 +43,34 @@ export class AtomicMoveUnavailableError extends EtagConflictError {
   }
 }
 
+export class AtomicImportUnavailableError extends EtagConflictError {
+  constructor(message = 'Atomic WorkSchedule import writer is not configured') {
+    super(message);
+    this.code = 'atomic_import_unavailable';
+    this.status = 503;
+  }
+}
+
+export class MappingGuardRequiredError extends EtagConflictError {
+  constructor(message = 'A current outbox or global pull fence is required for mapping mutation') {
+    super(message);
+    this.code = 'mapping_guard_required';
+  }
+}
+
+export class StaleGoogleEventError extends EtagConflictError {
+  constructor(message = 'Google event update is older than the mapped update') {
+    super(message);
+    this.code = 'stale_google_event';
+  }
+}
+
+export class PullLeaseBusyError extends CalendarSyncError {
+  constructor(message = 'Another worker owns the global Google pull lease') {
+    super(message, { code: 'pull_lease_busy', status: 409, retryable: true });
+  }
+}
+
 export class StaleFenceError extends CalendarSyncError {
   constructor(message = 'Worker lease fence is no longer current') {
     super(message, { code: 'stale_fence', status: 409, retryable: false });

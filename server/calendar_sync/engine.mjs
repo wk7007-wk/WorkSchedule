@@ -1,5 +1,11 @@
 import crypto from 'node:crypto';
-import { FeatureDisabledError, EtagConflictError, StaleFenceError } from './errors.mjs';
+import {
+  EtagConflictError,
+  FeatureDisabledError,
+  PullLeaseBusyError,
+  StaleFenceError,
+  StaleGoogleEventError
+} from './errors.mjs';
 import {
   calendarCoreLogic,
   canonicalKey,
@@ -43,6 +49,34 @@ function todayInZone(nowMs, timeZone) {
       return out;
     }, {});
   return parts.year + '-' + parts.month + '-' + parts.day;
+}
+
+function mappingCasEtag(mapping) {
+  return String(mapping && mapping.cas_etag || 'null_etag');
+}
+
+function compareGoogleUpdated(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  if (a === b) return 0;
+  if (!a) return -1;
+  if (!b) return 1;
+  const aMs = Date.parse(a);
+  const bMs = Date.parse(b);
+  if (Number.isFinite(aMs) && Number.isFinite(bMs)) return aMs < bMs ? -1 : 1;
+  return a < b ? -1 : 1;
+}
+
+function sameMappingState(current, next) {
+  if (!current || !next) return false;
+  return String(current.eventId || '') === String(next.eventId || '')
+    && String(current.googleEtag || '') === String(next.googleEtag || '')
+    && String(current.googleUpdated || '') === String(next.googleUpdated || '')
+    && String(current.canonicalRevision || '') === String(next.canonicalRevision || '')
+    && String(current.employeeId || '') === String(next.employeeId || '')
+    && String(current.date || '') === String(next.date || '')
+    && String(current.source || '') === String(next.source || '')
+    && (current.tombstone === true) === (next.tombstone === true);
 }
 
 export class CalendarSyncEngine {
@@ -117,18 +151,38 @@ export class CalendarSyncEngine {
   }
 
   createOutboxGuard(item) {
-    return { id: item.id, claim: item };
+    return { kind: 'outbox', id: item.id, claim: item };
   }
 
   async renewOutboxGuard(guard) {
     if (!guard) return null;
-    const renewed = await this.store.renewOutboxLease(guard.id, guard.claim, {
-      nowMs: this.clock(),
-      leaseMs: Number.isFinite(this.config.outboxLeaseMs) ? this.config.outboxLeaseMs : 300000
-    });
+    const renewed = guard.kind === 'pull'
+      ? await this.store.renewPullLease(guard.claim, {
+        nowMs: this.clock(),
+        leaseMs: Number.isFinite(this.config.pullLeaseMs) ? this.config.pullLeaseMs : 600000
+      })
+      : await this.store.renewOutboxLease(guard.id, guard.claim, {
+        nowMs: this.clock(),
+        leaseMs: Number.isFinite(this.config.outboxLeaseMs) ? this.config.outboxLeaseMs : 600000
+      });
     if (!renewed) throw new StaleFenceError();
     guard.claim = renewed;
     return renewed;
+  }
+
+  async claimGlobalPullGuard() {
+    const claim = await this.store.claimPullLease({
+      nowMs: this.clock(),
+      leaseMs: Number.isFinite(this.config.pullLeaseMs) ? this.config.pullLeaseMs : 600000,
+      ownerId: this.workerId
+    });
+    if (!claim) throw new PullLeaseBusyError();
+    return { kind: 'pull', id: 'global', claim };
+  }
+
+  async releaseGlobalPullGuard(guard) {
+    if (!guard) return null;
+    return await this.store.releasePullLease(guard.claim, { nowMs: this.clock() });
   }
 
   async discoverMapping(entity, guard = null) {
@@ -142,18 +196,19 @@ export class CalendarSyncEngine {
     }
     if (!matches.length) return null;
     const event = matches[0];
+    const privateProps = event && event.extendedProperties && event.extendedProperties.private || {};
     await this.renewOutboxGuard(guard);
-    return await this.store.setMapping(entity.canonicalKey, {
+    return await this.store.casSetMapping(entity.canonicalKey, {
       mappingId: mappingIdForCanonicalKey(entity.canonicalKey),
       eventId: event.id,
       googleEtag: event.etag || '',
       googleUpdated: event.updated || '',
-      canonicalRevision: String(entity.revision),
+      canonicalRevision: String(privateProps.wsRevision || ''),
       employeeId: entity.employeeId,
       date: entity.date,
       source: entity.source,
       discoveredAtMs: this.clock()
-    });
+    }, { expectedEtag: 'null_etag', guard, nowMs: this.clock() });
   }
 
   async getEventIfPresent(eventId) {
@@ -211,11 +266,11 @@ export class CalendarSyncEngine {
         });
       }
       await this.renewOutboxGuard(guard);
-      await this.store.setMapping(entity.canonicalKey, Object.assign({}, mapping, {
+      await this.store.casSetMapping(entity.canonicalKey, Object.assign({}, mapping, {
         tombstone: true,
         canonicalRevision: String(entity.revision || ''),
         deletedAtMs: this.clock()
-      }));
+      }), { expectedEtag: mappingCasEtag(mapping), guard, nowMs: this.clock() });
       await this.audit('google_event_deleted', { canonical_key: entity.canonicalKey, event_id: mapping.eventId, reason });
       return { status: 'deleted', eventId: mapping.eventId };
     }
@@ -231,7 +286,7 @@ export class CalendarSyncEngine {
         : entity.canonicalKey;
       const created = await this.insertCanonicalEvent(entity, projected, 'insert_event', identity, guard);
       await this.renewOutboxGuard(guard);
-      await this.store.setMapping(entity.canonicalKey, {
+      await this.store.casSetMapping(entity.canonicalKey, {
         mappingId: entity.mappingId || mappingIdForCanonicalKey(entity.canonicalKey),
         eventId: created.id,
         googleEtag: created.etag || '',
@@ -242,7 +297,7 @@ export class CalendarSyncEngine {
         source: entity.source,
         tombstone: false,
         syncedAtMs: this.clock()
-      });
+      }, { expectedEtag: mappingCasEtag(mapping), guard, nowMs: this.clock() });
       await this.audit('google_event_inserted', { canonical_key: entity.canonicalKey, event_id: created.id, canonical_revision: entity.revision, reason });
       return { status: 'inserted', eventId: created.id };
     }
@@ -257,14 +312,14 @@ export class CalendarSyncEngine {
         guard
       );
       await this.renewOutboxGuard(guard);
-      await this.store.setMapping(entity.canonicalKey, Object.assign({}, mapping, {
+      await this.store.casSetMapping(entity.canonicalKey, Object.assign({}, mapping, {
         eventId: created.id,
         googleEtag: created.etag || '',
         googleUpdated: created.updated || '',
         canonicalRevision: String(entity.revision),
         tombstone: false,
         syncedAtMs: this.clock()
-      }));
+      }), { expectedEtag: mappingCasEtag(mapping), guard, nowMs: this.clock() });
       await this.audit('google_event_reinserted', { canonical_key: entity.canonicalKey, event_id: created.id, reason });
       return { status: 'reinserted', eventId: created.id };
     }
@@ -294,7 +349,7 @@ export class CalendarSyncEngine {
       return await this.provider.updateEvent(mapping.eventId, projected, remote.etag || mapping.googleEtag);
     });
     await this.renewOutboxGuard(guard);
-    await this.store.setMapping(entity.canonicalKey, Object.assign({}, mapping, {
+    await this.store.casSetMapping(entity.canonicalKey, Object.assign({}, mapping, {
       googleEtag: updated.etag || '',
       googleUpdated: updated.updated || '',
       canonicalRevision: String(entity.revision),
@@ -303,7 +358,7 @@ export class CalendarSyncEngine {
       source: entity.source,
       tombstone: false,
       syncedAtMs: this.clock()
-    }));
+    }), { expectedEtag: mappingCasEtag(mapping), guard, nowMs: this.clock() });
     await this.audit('google_event_updated', { canonical_key: entity.canonicalKey, event_id: mapping.eventId, canonical_revision: entity.revision, reason });
     return { status: 'updated', eventId: mapping.eventId };
   }
@@ -401,13 +456,43 @@ export class CalendarSyncEngine {
     return { processed, results };
   }
 
-  async applyGoogleEvent(event, snapshot) {
-    await this.store.putMirror(event.id, event);
+  async applyGoogleEvent(event, snapshot, guard) {
+    await this.renewOutboxGuard(guard);
     const privateProps = event && event.extendedProperties && event.extendedProperties.private || {};
     const key = String(privateProps.wsCanonicalKey || '');
     let mapping = key ? await this.store.getMapping(key) : null;
     if (!mapping) mapping = await this.store.getMappingByEventId(event.id);
-    if (mapping && mapping.googleEtag && mapping.googleEtag === event.etag) return { status: 'already_applied' };
+    if (mapping && mapping.googleUpdated) {
+      const order = compareGoogleUpdated(event && event.updated, mapping.googleUpdated);
+      if (order < 0) {
+        await this.audit('stale_google_event_ignored', {
+          event_id: event.id || '', event_updated: event.updated || '', mapped_updated: mapping.googleUpdated
+        });
+        return { status: 'stale_ignored' };
+      }
+      if (order === 0 && String(mapping.googleEtag || '') !== String(event && event.etag || '')) {
+        await this.conflict('equal_google_updated_ambiguity', {
+          event_id: event.id || '', event_updated: event.updated || '', remote_etag: event.etag || '', mapped_etag: mapping.googleEtag
+        });
+        return { status: 'conflict', reason: 'equal_google_updated_ambiguity' };
+      }
+    }
+    await this.renewOutboxGuard(guard);
+    try {
+      await this.store.putMirror(event.id, event, { guard, nowMs: this.clock() });
+    } catch (error) {
+      if (error instanceof StaleGoogleEventError || error && error.code === 'stale_google_event') {
+        return { status: 'stale_ignored' };
+      }
+      if (error && error.code === 'equal_google_updated_ambiguity') {
+        await this.conflict('equal_google_updated_ambiguity', {
+          event_id: event.id || '', event_updated: event.updated || '', remote_etag: event.etag || '',
+          mapped_etag: mapping && mapping.googleEtag || '', reason: 'mirror_payload_mismatch'
+        });
+        return { status: 'conflict', reason: 'equal_google_updated_ambiguity' };
+      }
+      throw error;
+    }
     const change = googleEventToCanonical(event, {
       employees: snapshot.employees || {},
       mapping,
@@ -448,6 +533,13 @@ export class CalendarSyncEngine {
       });
       return { status: 'conflict' };
     }
+    if (mapping && canonicalChanged && !googleChanged && !moveAlreadyApplied) {
+      await this.audit('pull_deferred_to_canonical_push', {
+        canonical_key: priorKey, event_id: event.id, canonical_revision: currentRevision,
+        mapped_revision: mapping.canonicalRevision
+      });
+      return { status: 'canonical_change_pending_push' };
+    }
     if (change.action === 'move') {
       const destinationEventId = String(destinationExpectation.googleEventId || '');
       if (destinationExpectation.exists && destinationEventId !== String(event.id || '')) {
@@ -462,19 +554,18 @@ export class CalendarSyncEngine {
     }
     let written;
     try {
-      written = change.action === 'move'
-        ? await this.store.writeImportedMoveAtomic(change, {
-          nowMs: this.clock(),
-          sourceExpectedRevision: currentRevision,
-          sourceExpectation,
-          destinationExpectation
-        })
-        : await this.store.writeImportedChange(change, {
-          nowMs: this.clock(), expectedRevision: currentRevision, destinationExpectation: null
-        });
+      await this.renewOutboxGuard(guard);
+      written = await this.store.writeImportedAtomic(change, {
+        nowMs: this.clock(),
+        expectedCanonicalRevision: currentRevision,
+        sourceExpectation,
+        destinationExpectation,
+        guard
+      });
     } catch (error) {
-      if (change.action !== 'move' || !(error instanceof EtagConflictError)) throw error;
-      const reason = error.code || 'atomic_move_conflict';
+      if (!(error instanceof EtagConflictError)) throw error;
+      if (['atomic_import_unavailable', 'mapping_guard_required'].includes(String(error.code || ''))) throw error;
+      const reason = error.code || 'atomic_import_conflict';
       await this.conflict(reason, {
         event_id: event.id,
         prior_canonical_key: priorKey,
@@ -484,8 +575,7 @@ export class CalendarSyncEngine {
       return { status: 'conflict', reason };
     }
     const newKey = change.canonicalKey;
-    if (mapping && priorKey !== newKey) await this.store.deleteMapping(priorKey);
-    await this.store.setMapping(newKey, {
+    const nextMapping = {
       mappingId: privateProps.wsMappingId || mapping && mapping.mappingId || mappingIdForCanonicalKey(newKey),
       eventId: event.id,
       googleEtag: event.etag || '',
@@ -496,18 +586,48 @@ export class CalendarSyncEngine {
       source: 'google_calendar',
       tombstone: change.action === 'clear',
       syncedAtMs: this.clock()
-    });
+    };
+    await this.renewOutboxGuard(guard);
+    if (mapping && priorKey !== newKey) {
+      const destinationMapping = await this.store.getMapping(newKey);
+      await this.store.casMoveMapping(priorKey, newKey, nextMapping, {
+        expectedFromEtag: mappingCasEtag(mapping),
+        expectedToEtag: mappingCasEtag(destinationMapping),
+        guard,
+        nowMs: this.clock()
+      });
+    } else if (!sameMappingState(mapping, nextMapping)) {
+      await this.store.casSetMapping(newKey, nextMapping, {
+        expectedEtag: mappingCasEtag(mapping), guard, nowMs: this.clock()
+      });
+    }
     await this.audit('google_event_imported', { event_id: event.id, canonical_key: newKey, action: change.action, prior_date: change.priorDate || null });
     return { status: 'imported', action: change.action, canonicalKey: newKey };
   }
 
-  async pullChanges({ reason = 'periodic', recoveredFromGone = false } = {}) {
+  async pullChanges({ reason = 'periodic', recoveredFromGone = false, guard = null } = {}) {
     this.assertRunnable();
+    const ownsGuard = !guard;
+    const pullGuard = guard || await this.claimGlobalPullGuard();
+    try {
+      return await this.pullChangesWithGuard({ reason, recoveredFromGone, guard: pullGuard });
+    } finally {
+      if (ownsGuard) await this.releaseGlobalPullGuard(pullGuard);
+    }
+  }
+
+  async pullChangesWithGuard({ reason, recoveredFromGone, guard }) {
+    await this.renewOutboxGuard(guard);
     let state = await this.store.getSyncState();
     const queryFingerprint = stableJson(this.config.queryParams);
     if (state.query_fingerprint && state.query_fingerprint !== queryFingerprint) {
-      await this.store.clearMirror();
-      await this.store.setSyncState({ sync_token: null, query_fingerprint: queryFingerprint, reset_reason: 'query_params_changed', reset_at_ms: this.clock() });
+      await this.renewOutboxGuard(guard);
+      await this.store.clearMirror({ guard, nowMs: this.clock() });
+      await this.renewOutboxGuard(guard);
+      await this.store.setSyncState(
+        { sync_token: null, query_fingerprint: queryFingerprint, reset_reason: 'query_params_changed', reset_at_ms: this.clock() },
+        { guard, nowMs: this.clock() }
+      );
       state = await this.store.getSyncState();
     }
     const syncToken = state.sync_token || null;
@@ -517,13 +637,17 @@ export class CalendarSyncEngine {
     let itemCount = 0;
     try {
       do {
-        const page = await this.withRetry('list_events', () => this.provider.listEventsPage({
-          queryParams: this.config.queryParams,
-          syncToken,
-          pageToken
-        }));
+        const page = await this.withRetry('list_events', async () => {
+          await this.renewOutboxGuard(guard);
+          return await this.provider.listEventsPage({
+            queryParams: this.config.queryParams,
+            syncToken,
+            pageToken
+          });
+        });
         for (const event of page && page.items || []) {
-          await this.applyGoogleEvent(event, snapshot);
+          await this.renewOutboxGuard(guard);
+          await this.applyGoogleEvent(event, snapshot, guard);
           itemCount += 1;
         }
         pageToken = page && page.nextPageToken || null;
@@ -531,14 +655,20 @@ export class CalendarSyncEngine {
       } while (pageToken);
     } catch (error) {
       if (error && error.code === 'sync_token_gone' && !recoveredFromGone) {
-        await this.store.clearMirror();
-        await this.store.setSyncState({ sync_token: null, query_fingerprint: queryFingerprint, reset_reason: 'google_410', reset_at_ms: this.clock() });
+        await this.renewOutboxGuard(guard);
+        await this.store.clearMirror({ guard, nowMs: this.clock() });
+        await this.renewOutboxGuard(guard);
+        await this.store.setSyncState(
+          { sync_token: null, query_fingerprint: queryFingerprint, reset_reason: 'google_410', reset_at_ms: this.clock() },
+          { guard, nowMs: this.clock() }
+        );
         await this.audit('sync_token_410_full_resync', { reason });
-        return await this.pullChanges({ reason: '410_full_resync', recoveredFromGone: true });
+        return await this.pullChangesWithGuard({ reason: '410_full_resync', recoveredFromGone: true, guard });
       }
       throw error;
     }
     if (!nextSyncToken) throw new Error('Google Calendar did not return nextSyncToken on the final page');
+    await this.renewOutboxGuard(guard);
     await this.store.setSyncState({
       sync_token: nextSyncToken,
       query_fingerprint: queryFingerprint,
@@ -546,7 +676,7 @@ export class CalendarSyncEngine {
       last_pull_at_ms: this.clock(),
       last_pull_reason: reason,
       last_pull_count: itemCount
-    });
+    }, { guard, nowMs: this.clock() });
     await this.audit('google_incremental_pull_complete', { reason, mode: syncToken ? 'incremental' : 'full', item_count: itemCount, recovered_from_410: recoveredFromGone });
     return { mode: syncToken ? 'incremental' : 'full', itemCount, nextSyncToken, recoveredFromGone };
   }
@@ -579,31 +709,45 @@ export class CalendarSyncEngine {
   async processPullSignals({ limit = 50 } = {}) {
     this.assertRunnable();
     if (!this.config.pullSignalConsumerEnabled) return { status: 'disabled', processed: 0, results: [] };
-    const signals = await this.store.claimPullSignals({
-      nowMs: this.clock(),
-      limit,
-      leaseMs: Number.isFinite(this.config.pullSignalLeaseMs) ? this.config.pullSignalLeaseMs : 60000,
-      ownerId: this.workerId
-    });
-    if (!signals.length) return { status: 'idle', processed: 0, results: [] };
-    try {
-      const pull = await this.pullChanges({ reason: 'google_push_signal' });
-      const results = [];
-      for (const signal of signals) {
-        const finished = await this.store.finishPullSignal(signal.id, signal, {
+    const signalLeaseMs = Number.isFinite(this.config.pullSignalLeaseMs) ? this.config.pullSignalLeaseMs : 600000;
+    const results = [];
+    let processed = 0;
+    let lastPull = null;
+    while (processed < limit) {
+      const signals = await this.store.claimPullSignals({
+        nowMs: this.clock(),
+        limit: 1,
+        leaseMs: signalLeaseMs,
+        ownerId: this.workerId
+      });
+      if (!signals.length) break;
+      const signal = signals[0];
+      let signalClaim = signal;
+      processed += 1;
+      try {
+        signalClaim = await this.store.renewPullSignal(signal.id, signalClaim, {
+          nowMs: this.clock(), leaseMs: signalLeaseMs
+        });
+        if (!signalClaim) throw new StaleFenceError();
+        const pull = await this.pullChanges({ reason: 'google_push_signal' });
+        lastPull = pull;
+        signalClaim = await this.store.renewPullSignal(signal.id, signalClaim, {
+          nowMs: this.clock(), leaseMs: signalLeaseMs
+        });
+        if (!signalClaim) throw new StaleFenceError();
+        const finished = await this.store.finishPullSignal(signal.id, signalClaim, {
           status: 'done', completed_at_ms: this.clock(), pull_sync_token: pull.nextSyncToken
         });
         results.push({ id: signal.id, ok: !!finished, staleFence: !finished });
-      }
-      await this.audit('google_push_signals_consumed', { signal_count: signals.length, item_count: pull.itemCount });
-      return { status: 'pulled', processed: signals.length, pull, results };
-    } catch (error) {
-      const results = [];
-      for (const signal of signals) {
+        await this.audit('google_push_signal_consumed', { signal_id: signal.id, item_count: pull.itemCount });
+      } catch (error) {
         const attempts = Number(signal.attempt_count || 0) + 1;
         const retry = error && error.retryable === true && attempts < this.config.maxAttempts;
         const backoff = this.config.retryBackoffMs[Math.min(attempts - 1, this.config.retryBackoffMs.length - 1)] || 60000;
-        const finished = await this.store.finishPullSignal(signal.id, signal, {
+        const renewed = await this.store.renewPullSignal(signal.id, signalClaim || signal, {
+          nowMs: this.clock(), leaseMs: signalLeaseMs
+        });
+        const finished = renewed && await this.store.finishPullSignal(signal.id, renewed, {
           status: retry ? 'retry' : 'failed',
           attempt_count: attempts,
           next_attempt_at_ms: retry ? this.clock() + backoff : null,
@@ -611,8 +755,10 @@ export class CalendarSyncEngine {
         });
         results.push({ id: signal.id, ok: false, retry, staleFence: !finished });
       }
-      return { status: 'failed', processed: signals.length, error: error && (error.code || error.message), results };
     }
+    if (!processed) return { status: 'idle', processed: 0, results };
+    const failed = results.some(result => !result.ok);
+    return { status: failed ? 'failed' : 'pulled', processed, pull: lastPull, results };
   }
 
   async ensurePushChannel() {

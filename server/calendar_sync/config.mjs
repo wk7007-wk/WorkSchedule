@@ -81,7 +81,14 @@ export function loadCalendarSyncConfig(env = process.env) {
     providerAttemptTimeoutMs,
     outboxOperationWindowMs,
     outboxLeaseMs,
-    pullSignalLeaseMs: number(env.WORKSCHEDULE_CALENDAR_PULL_SIGNAL_LEASE_MS, 60 * 1000, 5 * 1000, 30 * 60 * 1000),
+    pullLeaseMs: Math.max(
+      number(env.WORKSCHEDULE_CALENDAR_PULL_LEASE_MS, 10 * 60 * 1000, 5 * 1000, 30 * 60 * 1000),
+      outboxOperationWindowMs + 5000
+    ),
+    pullSignalLeaseMs: Math.max(
+      number(env.WORKSCHEDULE_CALENDAR_PULL_SIGNAL_LEASE_MS, 10 * 60 * 1000, 5 * 1000, 30 * 60 * 1000),
+      outboxOperationWindowMs + 5000
+    ),
     pullSignalConsumerEnabled: bool(env.WORKSCHEDULE_CALENDAR_PULL_SIGNAL_CONSUMER_ENABLED, true),
     webhookUrl,
     webhookReady: /^https:\/\//i.test(webhookUrl),

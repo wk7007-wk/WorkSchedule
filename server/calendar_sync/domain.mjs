@@ -201,7 +201,9 @@ export function googleEventToCanonical(event, context = {}) {
   const privateProps = event && event.extendedProperties && event.extendedProperties.private || {};
   const employeeId = employeeFromEvent(event, employees, mapping);
   if (!employeeId) return { ignored: true, reason: 'unmapped_google_event' };
-  const priorKey = String(privateProps.wsCanonicalKey || mapping && mapping.canonicalKey || '');
+  // Once an event has moved, the guarded mapping is newer than the immutable
+  // wsCanonicalKey originally projected into Google.
+  const priorKey = String(mapping && mapping.canonicalKey || privateProps.wsCanonicalKey || '');
   const prior = parseCanonicalKey(priorKey);
   const timeZone = context.timeZone || 'Asia/Seoul';
   const cancelled = event && (event.status === 'cancelled' || event.deleted === true);

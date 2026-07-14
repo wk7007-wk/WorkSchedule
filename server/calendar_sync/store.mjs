@@ -1,9 +1,12 @@
 import crypto from 'node:crypto';
 import {
-  AtomicMoveUnavailableError,
+  AtomicImportUnavailableError,
   DestinationCollisionError,
   EtagConflictError,
-  SourceRevisionConflictError
+  MappingGuardRequiredError,
+  SourceRevisionConflictError,
+  StaleFenceError,
+  StaleGoogleEventError
 } from './errors.mjs';
 import { addWriteMetadata, canonicalKey, revisionOf, resolveCanonicalDay } from './domain.mjs';
 import { createRequire } from 'node:module';
@@ -13,6 +16,14 @@ const core = require('../../docs/calendar_core_logic.js');
 
 function clone(value) {
   return value == null ? value : structuredClone(value);
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return '[' + value.map(stableJson).join(',') + ']';
+  if (value && typeof value === 'object') {
+    return '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + stableJson(value[key])).join(',') + '}';
+  }
+  return JSON.stringify(value);
 }
 
 function auditKey(nowMs) {
@@ -106,75 +117,241 @@ function moveRows(change, nowMs) {
 
 function sameAppliedMove(change, source, destination) {
   const eventId = String(change.row && change.row.google_event_id || '');
+  const eventEtag = String(change.row && change.row.google_etag || '');
   return !!eventId
     && String(destination && destination.google_event_id || '') === eventId
     && String(source && source.google_event_id || '') === eventId
+    && String(destination && destination.google_etag || '') === eventEtag
+    && String(source && source.google_etag || '') === eventEtag
     && (source && (source.clear === true || String(source.state || source.status || source.type || '').toLowerCase() === 'clear'));
 }
 
-function validateMoveSource(source, sourceExpectedRevision, sourceExpectation) {
-  if (sourceExpectation) {
-    if (sourceExpectation.exists !== (source != null)) throw new SourceRevisionConflictError();
-    if (source && sourceExpectation.revision != null && revisionOf(source) !== String(sourceExpectation.revision)) {
-      throw new SourceRevisionConflictError();
+function googleMetadata(root) {
+  return root && root.meta && root.meta.calendar_core && root.meta.calendar_core.google || {};
+}
+
+function guardRow(metadata, guard) {
+  if (!guard || !guard.claim) return null;
+  if (guard.kind === 'pull') return metadata.pull_lease || null;
+  if (guard.kind === 'outbox') return metadata.outbox && metadata.outbox[core.safeKey(guard.id)] || null;
+  return null;
+}
+
+function assertGuard(metadata, guard, nowMs) {
+  if (!guard || !guard.claim) throw new MappingGuardRequiredError();
+  const current = guardRow(metadata || {}, guard);
+  if (!fenced(current, guard.claim) || Number(current.lease_expires_at_ms || 0) <= nowMs) throw new StaleFenceError();
+  return current;
+}
+
+function ensureDateMap(container, date) {
+  if (!container[date] || typeof container[date] !== 'object' || Array.isArray(container[date])) container[date] = {};
+  return container[date];
+}
+
+function statusMatchesEvent(status, change) {
+  return String(status && status.google_event_id || '') === String(change.row && change.row.google_event_id || '')
+    && String(status && status.google_etag || '') === String(change.row && change.row.google_etag || '');
+}
+
+function applyAtomicImport(rootValue, {
+  change,
+  nowMs,
+  expectedCanonicalRevision,
+  sourceExpectation,
+  destinationExpectation,
+  guard
+}) {
+  const current = rootValue && typeof rootValue === 'object' ? rootValue : {};
+  assertGuard(googleMetadata(current), guard, nowMs);
+  const sourceDate = change.priorDate || change.date;
+  const resolved = resolveCanonicalDay(current, sourceDate, change.employeeId);
+  const currentRevision = revisionOf(resolved.row);
+  const source = current.overrides && current.overrides[sourceDate] && current.overrides[sourceDate][change.employeeId];
+  const destination = current.overrides && current.overrides[change.date] && current.overrides[change.date][change.employeeId];
+  const currentStatus = current.status && current.status[change.date] && current.status[change.date][change.employeeId];
+  const currentSourceStatus = current.status && current.status[sourceDate] && current.status[sourceDate][change.employeeId];
+  const sameEventAtDestination = String(destination && destination.google_event_id || '') === String(change.row && change.row.google_event_id || '')
+    && String(destination && destination.google_etag || '') === String(change.row && change.row.google_etag || '');
+  const idempotentMove = change.action === 'move' && sameAppliedMove(change, source, destination);
+  const idempotentSameDate = change.action !== 'move' && sameEventAtDestination;
+
+  if (!idempotentMove && !idempotentSameDate && String(currentRevision) !== String(expectedCanonicalRevision)) {
+    throw new SourceRevisionConflictError();
+  }
+  if (change.action === 'move' && !idempotentMove) {
+    if (sourceExpectation) {
+      if (sourceExpectation.exists !== (source != null)) throw new SourceRevisionConflictError();
+      if (source && sourceExpectation.revision != null && revisionOf(source) !== String(sourceExpectation.revision)) {
+        throw new SourceRevisionConflictError();
+      }
+    }
+    validateMoveDestination(change, destination, destinationExpectation);
+  }
+
+  const next = clone(current);
+  if (!next.overrides || typeof next.overrides !== 'object' || Array.isArray(next.overrides)) next.overrides = {};
+  if (!next.status || typeof next.status !== 'object' || Array.isArray(next.status)) next.status = {};
+  let rows;
+  if (idempotentMove) {
+    rows = { row: clone(destination), clear: clone(source), idempotent: true };
+  } else if (change.action === 'move') {
+    rows = moveRows(change, nowMs);
+    ensureDateMap(next.overrides, change.date)[change.employeeId] = rows.row;
+    ensureDateMap(next.overrides, sourceDate)[change.employeeId] = rows.clear;
+  } else {
+    const row = idempotentSameDate ? clone(destination) : addWriteMetadata(change.row, { nowMs, source: 'google_calendar' });
+    rows = { row, clear: null, idempotent: idempotentSameDate };
+    ensureDateMap(next.overrides, change.date)[change.employeeId] = row;
+  }
+  if (!statusMatchesEvent(currentStatus, change) || !rows.idempotent) {
+    ensureDateMap(next.status, change.date)[change.employeeId] = statusForChange(change, nowMs);
+  }
+  if (change.action === 'move') {
+    const sourceStatusChange = { action: 'clear', row: rows.clear };
+    if (!rows.idempotent || !statusMatchesEvent(currentSourceStatus, sourceStatusChange)
+      || String(currentSourceStatus && currentSourceStatus.moved_to || '') !== String(change.date)) {
+      ensureDateMap(next.status, sourceDate)[change.employeeId] = Object.assign(
+        statusForChange(sourceStatusChange, nowMs),
+        { moved_to: change.date }
+      );
     }
   }
-  // A fixed-schedule source has no explicit override inside this transaction;
-  // its missing expectation is fenced here while the resolved revision was
-  // already checked by the engine.
-  if (source && sourceExpectedRevision != null && revisionOf(source) !== String(sourceExpectedRevision)) {
-    throw new SourceRevisionConflictError();
+  return { next, rows };
+}
+
+function compareGoogleUpdated(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  if (a === b) return 0;
+  if (!a) return -1;
+  if (!b) return 1;
+  const aMs = Date.parse(a);
+  const bMs = Date.parse(b);
+  if (Number.isFinite(aMs) && Number.isFinite(bMs)) return aMs < bMs ? -1 : 1;
+  return a < b ? -1 : 1;
+}
+
+function mappingFingerprint(mapping) {
+  const source = mapping || {};
+  return JSON.stringify({
+    eventId: source.eventId || '', googleEtag: source.googleEtag || '', googleUpdated: source.googleUpdated || '',
+    canonicalRevision: source.canonicalRevision || '', employeeId: source.employeeId || '', date: source.date || '',
+    source: source.source || '', tombstone: source.tombstone === true
+  });
+}
+
+function mappingEtag(mapping) {
+  return String(mapping && mapping.cas_etag || 'null_etag');
+}
+
+function validateMappingSet(current, next, guard) {
+  if (!current) return;
+  const order = compareGoogleUpdated(next && next.googleUpdated, current.googleUpdated);
+  if (order < 0) throw new StaleGoogleEventError();
+  if (order === 0 && mappingFingerprint(current) !== mappingFingerprint(next) && guard && guard.kind === 'pull') {
+    const error = new EtagConflictError('Equal Google updated timestamps have different mapping payloads');
+    error.code = 'equal_google_updated_ambiguity';
+    throw error;
   }
 }
 
-export function createFirebaseAdminAtomicMoveWriter(database) {
-  if (!database || typeof database.ref !== 'function') throw new AtomicMoveUnavailableError('Firebase Admin database.ref is required');
-  return async function writeAtomicMove({ change, nowMs = Date.now(), sourceExpectedRevision = null, sourceExpectation = null, destinationExpectation = null }) {
-    if (!change || change.action !== 'move' || !change.priorDate || change.priorDate === change.date) {
-      throw new AtomicMoveUnavailableError('Atomic move writer requires two distinct dates');
-    }
-    const ref = database.ref('/workschedule_v2/overrides');
+function applyMappingOperation(metadataValue, operation, nowMs) {
+  const metadata = metadataValue && typeof metadataValue === 'object' ? metadataValue : {};
+  assertGuard(metadata, operation.guard, nowMs);
+  const mappings = metadata.mappings && typeof metadata.mappings === 'object' ? metadata.mappings : {};
+  const nextMetadata = clone(metadata);
+  if (!nextMetadata.mappings || typeof nextMetadata.mappings !== 'object') nextMetadata.mappings = {};
+  const key = core.safeKey(operation.key || operation.toKey || '');
+  const current = mappings[key] || null;
+  if (operation.type === 'move') {
+    const fromKey = core.safeKey(operation.fromKey);
+    const source = mappings[fromKey] || null;
+    if (mappingEtag(source) !== String(operation.expectedFromEtag || 'null_etag')) throw new EtagConflictError('Mapping source CAS mismatch');
+    if (mappingEtag(current) !== String(operation.expectedToEtag || 'null_etag')) throw new EtagConflictError('Mapping destination CAS mismatch');
+    validateMappingSet(source, operation.value, operation.guard);
+    validateMappingSet(current, operation.value, operation.guard);
+    delete nextMetadata.mappings[fromKey];
+  } else if (mappingEtag(current) !== String(operation.expectedEtag || 'null_etag')) {
+    throw new EtagConflictError('Mapping CAS mismatch');
+  }
+  if (operation.type === 'delete') {
+    delete nextMetadata.mappings[key];
+    return { nextMetadata, value: null };
+  }
+  validateMappingSet(current, operation.value, operation.guard);
+  const value = Object.assign({}, clone(operation.value), {
+    canonicalKey: operation.key || operation.toKey,
+    cas_etag: operation.nextEtag,
+    mapping_guard_kind: operation.guard.kind,
+    mapping_guard_owner: operation.guard.claim.lease_owner,
+    mapping_guard_epoch: operation.guard.claim.lease_epoch,
+    mapping_written_at_ms: nowMs
+  });
+  nextMetadata.mappings[key] = value;
+  return { nextMetadata, value };
+}
+
+export function createFirebaseAdminAtomicImportWriter(database) {
+  if (!database || typeof database.ref !== 'function') throw new AtomicImportUnavailableError('Firebase Admin database.ref is required');
+  return async function writeAtomicImport(options) {
+    const input = Object.assign({}, options, {
+      nowMs: Number.isFinite(options && options.nowMs) ? options.nowMs : Date.now()
+    });
+    const ref = database.ref('/workschedule_v2');
     let blocked = null;
     let committedRows = null;
-    const result = await ref.transaction(currentValue => {
-      const current = currentValue && typeof currentValue === 'object' ? currentValue : {};
-      const source = current[change.priorDate] && current[change.priorDate][change.employeeId];
-      const destination = current[change.date] && current[change.date][change.employeeId];
-      if (sameAppliedMove(change, source, destination)) {
-        committedRows = { row: clone(destination), clear: clone(source), idempotent: true };
-        return current;
-      }
+    const result = await ref.transaction(current => {
       try {
-        validateMoveSource(source, sourceExpectedRevision, sourceExpectation);
-        validateMoveDestination(change, destination, destinationExpectation);
+        const applied = applyAtomicImport(current, input);
+        committedRows = applied.rows;
+        return applied.next;
       } catch (error) {
         blocked = error;
         return undefined;
       }
-      const next = clone(current);
-      if (!next[change.date] || typeof next[change.date] !== 'object') next[change.date] = {};
-      if (!next[change.priorDate] || typeof next[change.priorDate] !== 'object') next[change.priorDate] = {};
-      committedRows = moveRows(change, nowMs);
-      next[change.date][change.employeeId] = committedRows.row;
-      next[change.priorDate][change.employeeId] = committedRows.clear;
-      return next;
     }, undefined, false);
-    if (!result || result.committed !== true) throw blocked || new SourceRevisionConflictError('Atomic move transaction aborted');
+    if (!result || result.committed !== true) throw blocked || new AtomicImportUnavailableError('Atomic import transaction aborted');
     return clone(committedRows);
+  };
+}
+
+export function createFirebaseAdminAtomicMoveWriter(database) {
+  return createFirebaseAdminAtomicImportWriter(database);
+}
+
+export function createFirebaseAdminMappingCasWriter(database) {
+  if (!database || typeof database.ref !== 'function') throw new MappingGuardRequiredError('Firebase Admin database.ref is required');
+  return async function writeMappingCas(operation) {
+    const nowMs = Number.isFinite(operation && operation.nowMs) ? operation.nowMs : Date.now();
+    const ref = database.ref('/workschedule_v2/meta/calendar_core/google');
+    const nextEtag = operation.nextEtag || crypto.randomUUID();
+    let blocked = null;
+    let committedValue = null;
+    const result = await ref.transaction(current => {
+      try {
+        const applied = applyMappingOperation(current, Object.assign({}, operation, { nextEtag, nowMs }), nowMs);
+        committedValue = applied.value;
+        return applied.nextMetadata;
+      } catch (error) {
+        blocked = error;
+        return undefined;
+      }
+    }, undefined, false);
+    if (!result || result.committed !== true) throw blocked || new EtagConflictError('Mapping transaction aborted');
+    return clone(committedValue);
   };
 }
 
 export class MemorySyncStore {
   constructor(snapshot = {}) {
-    this.snapshot = {
-      employees: clone(snapshot.employees || {}),
-      fixed_schedules: clone(snapshot.fixed_schedules || {}),
-      overrides: clone(snapshot.overrides || {}),
-      status: clone(snapshot.status || {}),
-      attendance: clone(snapshot.attendance || {})
-    };
+    this.snapshot = clone(snapshot || {});
+    for (const key of ['employees', 'fixed_schedules', 'overrides', 'status', 'attendance']) {
+      if (this.snapshot[key] == null) this.snapshot[key] = {};
+    }
     this.meta = {
-      outbox: {}, mappings: {}, mirror: {}, sync_state: {}, audits: {}, conflicts: {}, pull_signals: {}, channel: null, overlay: {}
+      outbox: {}, mappings: {}, mirror: {}, sync_state: {}, audits: {}, conflicts: {}, pull_signals: {},
+      pull_lease: null, channel: null, overlay: {}
     };
   }
 
@@ -230,6 +407,33 @@ export class MemorySyncStore {
     return clone(this.meta.outbox[id]);
   }
 
+  async claimPullLease({ nowMs = Date.now(), leaseMs = 60000, ownerId = 'worker' } = {}) {
+    const current = this.meta.pull_lease;
+    if (current && current.status === 'running' && Number(current.lease_expires_at_ms || 0) > nowMs) return null;
+    const claimed = claimedRow(Object.assign({ status: 'pending', lease_epoch: 0 }, current || {}), { nowMs, leaseMs, ownerId });
+    this.meta.pull_lease = claimed;
+    return clone(claimed);
+  }
+
+  async assertPullLease(claim, { nowMs = Date.now() } = {}) {
+    const current = this.meta.pull_lease;
+    return fenced(current, claim) && Number(current.lease_expires_at_ms || 0) > nowMs ? clone(current) : null;
+  }
+
+  async renewPullLease(claim, { nowMs = Date.now(), leaseMs = 60000 } = {}) {
+    const current = this.meta.pull_lease;
+    if (!fenced(current, claim) || Number(current.lease_expires_at_ms || 0) <= nowMs) return null;
+    this.meta.pull_lease = Object.assign({}, current, { lease_expires_at_ms: nowMs + leaseMs, lease_renewed_at_ms: nowMs });
+    return clone(this.meta.pull_lease);
+  }
+
+  async releasePullLease(claim, { nowMs = Date.now() } = {}) {
+    const current = this.meta.pull_lease;
+    if (!fenced(current, claim)) return null;
+    this.meta.pull_lease = completedRow(current, { status: 'idle', released_at_ms: nowMs });
+    return clone(this.meta.pull_lease);
+  }
+
   async markOutbox(id, patch, claim) {
     return await this.finishOutbox(id, claim || {}, patch);
   }
@@ -270,70 +474,60 @@ export class MemorySyncStore {
     return explicitState(row);
   }
 
-  async writeImportedChange(change, { nowMs = Date.now(), expectedRevision = null, destinationExpectation = null } = {}) {
-    if (change.action === 'move') {
-      return await this.writeImportedMoveAtomic(change, {
-        nowMs,
-        sourceExpectedRevision: expectedRevision,
-        destinationExpectation
-      });
+  async writeImportedAtomic(change, options = {}) {
+    const root = clone(this.snapshot);
+    if (!root.meta || typeof root.meta !== 'object' || Array.isArray(root.meta)) root.meta = {};
+    if (!root.meta.calendar_core || typeof root.meta.calendar_core !== 'object' || Array.isArray(root.meta.calendar_core)) {
+      root.meta.calendar_core = {};
     }
-    const current = this.snapshot.overrides[change.date] && this.snapshot.overrides[change.date][change.employeeId];
-    if (expectedRevision != null && current && revisionOf(current) !== String(expectedRevision)) throw new EtagConflictError('Canonical override changed during Google import');
-    validateMoveDestination(change, current, destinationExpectation);
-    if (!this.snapshot.overrides[change.date]) this.snapshot.overrides[change.date] = {};
-    if (!this.snapshot.status[change.date]) this.snapshot.status[change.date] = {};
-    const row = addWriteMetadata(change.row, { nowMs, source: 'google_calendar' });
-    this.snapshot.overrides[change.date][change.employeeId] = row;
-    this.snapshot.status[change.date][change.employeeId] = statusForChange(change, nowMs);
-    return clone(row);
+    root.meta.calendar_core.google = clone(this.meta);
+    const applied = applyAtomicImport(root, Object.assign({}, options, { change }));
+    const nextSnapshot = clone(applied.next);
+    delete nextSnapshot.meta.calendar_core.google;
+    if (!Object.keys(nextSnapshot.meta.calendar_core).length) delete nextSnapshot.meta.calendar_core;
+    if (!Object.keys(nextSnapshot.meta).length) delete nextSnapshot.meta;
+    this.snapshot = nextSnapshot;
+    return clone(applied.rows.row);
   }
 
-  async writeImportedMoveAtomic(change, {
-    nowMs = Date.now(), sourceExpectedRevision = null, sourceExpectation = null, destinationExpectation = null
-  } = {}) {
-    const source = this.snapshot.overrides[change.priorDate] && this.snapshot.overrides[change.priorDate][change.employeeId];
-    const destination = this.snapshot.overrides[change.date] && this.snapshot.overrides[change.date][change.employeeId];
-    if (sameAppliedMove(change, source, destination)) {
-      return clone(destination);
-    }
-    validateMoveSource(source, sourceExpectedRevision, sourceExpectation);
-    validateMoveDestination(change, destination, destinationExpectation);
-    const rows = moveRows(change, nowMs);
-    const nextOverrides = clone(this.snapshot.overrides);
-    const nextStatus = clone(this.snapshot.status);
-    if (!nextOverrides[change.date]) nextOverrides[change.date] = {};
-    if (!nextOverrides[change.priorDate]) nextOverrides[change.priorDate] = {};
-    if (!nextStatus[change.date]) nextStatus[change.date] = {};
-    if (!nextStatus[change.priorDate]) nextStatus[change.priorDate] = {};
-    nextOverrides[change.date][change.employeeId] = rows.row;
-    nextOverrides[change.priorDate][change.employeeId] = rows.clear;
-    nextStatus[change.date][change.employeeId] = statusForChange(change, nowMs);
-    nextStatus[change.priorDate][change.employeeId] = Object.assign(
-      statusForChange({ action: 'clear', row: rows.clear }, nowMs),
-      { moved_to: change.date }
-    );
-    this.snapshot.overrides = nextOverrides;
-    this.snapshot.status = nextStatus;
-    return clone(rows.row);
-  }
+  async writeImportedChange(change, options = {}) { return await this.writeImportedAtomic(change, options); }
+  async writeImportedMoveAtomic(change, options = {}) { return await this.writeImportedAtomic(change, options); }
 
   async getMapping(key) {
-    return clone(this.meta.mappings[key] || null);
+    return clone(this.meta.mappings[core.safeKey(key)] || null);
   }
 
   async getMappingByEventId(eventId) {
     return clone(Object.values(this.meta.mappings).find(mapping => mapping.eventId === eventId) || null);
   }
 
-  async setMapping(key, mapping) {
-    this.meta.mappings[key] = Object.assign({}, clone(mapping), { canonicalKey: key });
-    return clone(this.meta.mappings[key]);
+  async casSetMapping(key, mapping, { expectedEtag = 'null_etag', guard, nowMs = Date.now() } = {}) {
+    const operation = { type: 'set', key, value: mapping, expectedEtag, guard, nowMs, nextEtag: crypto.randomUUID() };
+    const applied = applyMappingOperation(this.meta, operation, nowMs);
+    this.meta = Object.assign(this.meta, applied.nextMetadata);
+    return clone(applied.value);
   }
 
-  async deleteMapping(key) {
-    delete this.meta.mappings[key];
+  async casDeleteMapping(key, { expectedEtag = 'null_etag', guard, nowMs = Date.now() } = {}) {
+    const applied = applyMappingOperation(this.meta, { type: 'delete', key, expectedEtag, guard, nowMs }, nowMs);
+    this.meta = Object.assign(this.meta, applied.nextMetadata);
+    return null;
   }
+
+  async casMoveMapping(fromKey, toKey, mapping, {
+    expectedFromEtag = 'null_etag', expectedToEtag = 'null_etag', guard, nowMs = Date.now()
+  } = {}) {
+    const operation = {
+      type: 'move', fromKey, toKey, value: mapping, expectedFromEtag, expectedToEtag,
+      guard, nowMs, nextEtag: crypto.randomUUID()
+    };
+    const applied = applyMappingOperation(this.meta, operation, nowMs);
+    this.meta = Object.assign(this.meta, applied.nextMetadata);
+    return clone(applied.value);
+  }
+
+  async setMapping() { throw new MappingGuardRequiredError(); }
+  async deleteMapping() { throw new MappingGuardRequiredError(); }
 
   async listMappings() {
     return Object.values(this.meta.mappings).map(clone);
@@ -343,16 +537,29 @@ export class MemorySyncStore {
     return clone(this.meta.sync_state);
   }
 
-  async setSyncState(patch) {
+  async setSyncState(patch, { guard, nowMs = Date.now() } = {}) {
+    assertGuard(this.meta, guard, nowMs);
     Object.assign(this.meta.sync_state, clone(patch));
     return clone(this.meta.sync_state);
   }
 
-  async putMirror(eventId, event) {
+  async getMirror(eventId) { return clone(this.meta.mirror[eventId] || null); }
+
+  async putMirror(eventId, event, { guard, nowMs = Date.now() } = {}) {
+    assertGuard(this.meta, guard, nowMs);
+    const current = this.meta.mirror[eventId];
+    const order = compareGoogleUpdated(event && event.updated, current && current.updated);
+    if (current && order < 0) throw new StaleGoogleEventError('Mirror update is stale');
+    if (current && order === 0 && stableJson(current) !== stableJson(event)) {
+      const error = new EtagConflictError('Equal Google updated timestamps have different mirror payloads or ETags');
+      error.code = 'equal_google_updated_ambiguity';
+      throw error;
+    }
     this.meta.mirror[eventId] = clone(event);
   }
 
-  async clearMirror() {
+  async clearMirror({ guard, nowMs = Date.now() } = {}) {
+    assertGuard(this.meta, guard, nowMs);
     this.meta.mirror = {};
   }
 
@@ -384,6 +591,13 @@ export class MemorySyncStore {
       this.meta.pull_signals[item.id] = claimed;
       return clone(claimed);
     });
+  }
+
+  async renewPullSignal(id, claim, { nowMs = Date.now(), leaseMs = 60000 } = {}) {
+    const current = this.meta.pull_signals[id];
+    if (!fenced(current, claim) || Number(current.lease_expires_at_ms || 0) <= nowMs) return null;
+    this.meta.pull_signals[id] = Object.assign({}, current, { lease_expires_at_ms: nowMs + leaseMs, lease_renewed_at_ms: nowMs });
+    return clone(this.meta.pull_signals[id]);
   }
 
   async finishPullSignal(id, claim, patch) {
@@ -419,7 +633,10 @@ export class FirebaseScheduleStore {
     fetchImpl = fetch,
     metadataRoot = '/workschedule_v2/meta/calendar_core/google',
     overlayRoot = '/workschedule_v2/meta/calendar_overlay',
-    atomicMoveWriter = null
+    atomicImportWriter = null,
+    atomicMoveWriter = null,
+    mappingCasWriter = null,
+    requestTimeoutMs = 15000
   }) {
     if (!databaseUrl) throw new Error('FIREBASE_DATABASE_URL is required');
     this.databaseUrl = databaseUrl.replace(/\/$/, '');
@@ -427,7 +644,11 @@ export class FirebaseScheduleStore {
     this.fetch = fetchImpl;
     this.metadataRoot = metadataRoot;
     this.overlayRoot = overlayRoot;
-    this.atomicMoveWriter = typeof atomicMoveWriter === 'function' ? atomicMoveWriter : null;
+    this.atomicImportWriter = typeof atomicImportWriter === 'function'
+      ? atomicImportWriter
+      : typeof atomicMoveWriter === 'function' ? atomicMoveWriter : null;
+    this.mappingCasWriter = typeof mappingCasWriter === 'function' ? mappingCasWriter : null;
+    this.requestTimeoutMs = Math.max(1000, Number(requestTimeoutMs) || 15000);
   }
 
   url(path) {
@@ -439,8 +660,26 @@ export class FirebaseScheduleStore {
   }
 
   async request(path, options = {}) {
-    const response = await this.fetch(this.url(path), Object.assign({}, options, { headers: this.headers(options.headers) }));
-    const text = await response.text();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    let response;
+    let text;
+    try {
+      response = await this.fetch(this.url(path), Object.assign({}, options, {
+        headers: this.headers(options.headers), signal: controller.signal
+      }));
+      text = await response.text();
+    } catch (error) {
+      if (controller.signal.aborted || error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+        const timeout = new Error('Firebase REST request timed out for ' + path);
+        timeout.code = 'firebase_timeout';
+        timeout.retryable = true;
+        throw timeout;
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     let body = null;
     try { body = text ? JSON.parse(text) : null; } catch (_) { body = text; }
     if (response.status === 412) throw new EtagConflictError('Firebase ETag precondition failed');
@@ -472,6 +711,20 @@ export class FirebaseScheduleStore {
 
   mappingKey(value) {
     return core.safeKey(value);
+  }
+
+  guardPath(guard) {
+    if (guard && guard.kind === 'pull') return this.metaPath('pull_lease');
+    if (guard && guard.kind === 'outbox') return this.metaPath('outbox/' + this.mappingKey(guard.id));
+    return '';
+  }
+
+  async assertGuardCurrent(guard, nowMs = Date.now()) {
+    const path = this.guardPath(guard);
+    if (!path) throw new MappingGuardRequiredError();
+    const current = await this.get(path);
+    if (!fenced(current, guard.claim) || Number(current.lease_expires_at_ms || 0) <= nowMs) throw new StaleFenceError();
+    return current;
   }
 
   async getSnapshot() {
@@ -565,6 +818,53 @@ export class FirebaseScheduleStore {
     return await this.finishRow('outbox', id, claim, patch);
   }
 
+  async claimPullLease({ nowMs = Date.now(), leaseMs = 60000, ownerId = 'worker' } = {}) {
+    const path = this.metaPath('pull_lease');
+    const current = await this.getWithEtag(path);
+    if (current.body && current.body.status === 'running' && Number(current.body.lease_expires_at_ms || 0) > nowMs) return null;
+    const claimed = claimedRow(Object.assign({ status: 'pending', lease_epoch: 0 }, current.body || {}), { nowMs, leaseMs, ownerId });
+    try {
+      await this.put(path, claimed, current.etag || 'null_etag');
+      return claimed;
+    } catch (error) {
+      if (error instanceof EtagConflictError) return null;
+      throw error;
+    }
+  }
+
+  async assertPullLease(claim, { nowMs = Date.now() } = {}) {
+    const current = await this.get(this.metaPath('pull_lease'));
+    return fenced(current, claim) && Number(current.lease_expires_at_ms || 0) > nowMs ? current : null;
+  }
+
+  async renewPullLease(claim, { nowMs = Date.now(), leaseMs = 60000 } = {}) {
+    const path = this.metaPath('pull_lease');
+    const current = await this.getWithEtag(path);
+    if (!fenced(current.body, claim) || Number(current.body.lease_expires_at_ms || 0) <= nowMs) return null;
+    const renewed = Object.assign({}, current.body, { lease_expires_at_ms: nowMs + leaseMs, lease_renewed_at_ms: nowMs });
+    try {
+      await this.put(path, renewed, current.etag || 'null_etag');
+      return renewed;
+    } catch (error) {
+      if (error instanceof EtagConflictError) return null;
+      throw error;
+    }
+  }
+
+  async releasePullLease(claim, { nowMs = Date.now() } = {}) {
+    const path = this.metaPath('pull_lease');
+    const current = await this.getWithEtag(path);
+    if (!fenced(current.body, claim)) return null;
+    const released = completedRow(current.body, { status: 'idle', released_at_ms: nowMs });
+    try {
+      await this.put(path, released, current.etag || 'null_etag');
+      return released;
+    } catch (error) {
+      if (error instanceof EtagConflictError) return null;
+      throw error;
+    }
+  }
+
   async markOutbox(id, patch, claim) {
     return await this.finishOutbox(id, claim || {}, patch);
   }
@@ -609,53 +909,15 @@ export class FirebaseScheduleStore {
     return explicitState(await this.get('/workschedule_v2/overrides/' + date + '/' + employeeId));
   }
 
-  async writeImportedChange(change, { nowMs = Date.now(), expectedRevision = null, destinationExpectation = null } = {}) {
-    if (change.action === 'move') {
-      return await this.writeImportedMoveAtomic(change, {
-        nowMs,
-        sourceExpectedRevision: expectedRevision,
-        destinationExpectation
-      });
-    }
-    const path = '/workschedule_v2/overrides/' + change.date + '/' + change.employeeId;
-    const current = await this.getWithEtag(path);
-    if (expectedRevision != null && current.body && revisionOf(current.body) !== String(expectedRevision)) throw new EtagConflictError('Canonical override changed during Google import');
-    validateMoveDestination(change, current.body, destinationExpectation);
-    const row = addWriteMetadata(change.row, { nowMs, source: 'google_calendar' });
-    await this.put(path, row, current.etag || 'null_etag');
-    await this.put('/workschedule_v2/status/' + change.date + '/' + change.employeeId, statusForChange(change, nowMs));
-    return row;
-  }
-
-  async writeImportedMoveAtomic(change, {
-    nowMs = Date.now(), sourceExpectedRevision = null, sourceExpectation = null, destinationExpectation = null
-  } = {}) {
-    if (!this.atomicMoveWriter) throw new AtomicMoveUnavailableError();
-    const rows = await this.atomicMoveWriter({
-      change: clone(change), nowMs, sourceExpectedRevision, sourceExpectation: clone(sourceExpectation),
-      destinationExpectation: clone(destinationExpectation)
-    });
-    if (!rows || !rows.row || !rows.clear) throw new AtomicMoveUnavailableError('Atomic move writer returned no committed rows');
-    try {
-      await this.put('/workschedule_v2/status/' + change.date + '/' + change.employeeId, statusForChange(change, nowMs));
-      await this.put(
-        '/workschedule_v2/status/' + change.priorDate + '/' + change.employeeId,
-        Object.assign(statusForChange({ action: 'clear', row: rows.clear }, nowMs), { moved_to: change.date })
-      );
-    } catch (error) {
-      await this.appendAudit({
-        schema_version: 'workschedule.calendar_sync.audit.v1',
-        action: 'atomic_move_status_retry_needed',
-        event_id: change.row.google_event_id || '',
-        prior_date: change.priorDate,
-        date: change.date,
-        at_ms: nowMs,
-        error: String(error && (error.code || error.message) || 'status_write_failed').slice(0, 200)
-      });
-      throw error;
-    }
+  async writeImportedAtomic(change, options = {}) {
+    if (!this.atomicImportWriter) throw new AtomicImportUnavailableError();
+    const rows = await this.atomicImportWriter(Object.assign({}, clone(options), { change: clone(change) }));
+    if (!rows || !rows.row) throw new AtomicImportUnavailableError('Atomic import writer returned no committed row');
     return clone(rows.row);
   }
+
+  async writeImportedChange(change, options = {}) { return await this.writeImportedAtomic(change, options); }
+  async writeImportedMoveAtomic(change, options = {}) { return await this.writeImportedAtomic(change, options); }
 
   async getMapping(key) {
     return await this.get(this.metaPath('mappings/' + this.mappingKey(key)));
@@ -666,22 +928,62 @@ export class FirebaseScheduleStore {
     return Object.values(mappings).find(mapping => mapping && mapping.eventId === eventId) || null;
   }
 
-  async setMapping(key, mapping) {
-    return await this.put(this.metaPath('mappings/' + this.mappingKey(key)), Object.assign({}, mapping, { canonicalKey: key }));
+  async casSetMapping(key, mapping, { expectedEtag = 'null_etag', guard, nowMs = Date.now() } = {}) {
+    if (!this.mappingCasWriter) throw new MappingGuardRequiredError('Firebase Admin mapping CAS writer is not configured');
+    return await this.mappingCasWriter({ type: 'set', key, value: clone(mapping), expectedEtag, guard: clone(guard), nowMs });
   }
 
-  async deleteMapping(key) {
-    return await this.put(this.metaPath('mappings/' + this.mappingKey(key)), null);
+  async casDeleteMapping(key, { expectedEtag = 'null_etag', guard, nowMs = Date.now() } = {}) {
+    if (!this.mappingCasWriter) throw new MappingGuardRequiredError('Firebase Admin mapping CAS writer is not configured');
+    return await this.mappingCasWriter({ type: 'delete', key, expectedEtag, guard: clone(guard), nowMs });
   }
+
+  async casMoveMapping(fromKey, toKey, mapping, {
+    expectedFromEtag = 'null_etag', expectedToEtag = 'null_etag', guard, nowMs = Date.now()
+  } = {}) {
+    if (!this.mappingCasWriter) throw new MappingGuardRequiredError('Firebase Admin mapping CAS writer is not configured');
+    return await this.mappingCasWriter({
+      type: 'move', fromKey, toKey, value: clone(mapping), expectedFromEtag, expectedToEtag,
+      guard: clone(guard), nowMs
+    });
+  }
+
+  async setMapping() { throw new MappingGuardRequiredError(); }
+  async deleteMapping() { throw new MappingGuardRequiredError(); }
 
   async listMappings() {
     return Object.values(await this.get(this.metaPath('mappings')) || {}).filter(Boolean);
   }
 
   async getSyncState() { return await this.get(this.metaPath('sync_state')) || {}; }
-  async setSyncState(patch) { await this.patch(this.metaPath('sync_state'), patch); return patch; }
-  async putMirror(eventId, event) { return await this.put(this.metaPath('mirror/' + this.mappingKey(eventId)), event); }
-  async clearMirror() { return await this.put(this.metaPath('mirror'), null); }
+  async setSyncState(patch, { guard, nowMs = Date.now() } = {}) {
+    await this.assertGuardCurrent(guard, nowMs);
+    const path = this.metaPath('sync_state');
+    const current = await this.getWithEtag(path);
+    const next = Object.assign({}, current.body || {}, clone(patch));
+    await this.put(path, next, current.etag || 'null_etag');
+    return next;
+  }
+  async getMirror(eventId) { return await this.get(this.metaPath('mirror/' + this.mappingKey(eventId))); }
+  async putMirror(eventId, event, { guard, nowMs = Date.now() } = {}) {
+    await this.assertGuardCurrent(guard, nowMs);
+    const path = this.metaPath('mirror/' + this.mappingKey(eventId));
+    const current = await this.getWithEtag(path);
+    const order = compareGoogleUpdated(event && event.updated, current.body && current.body.updated);
+    if (current.body && order < 0) throw new StaleGoogleEventError('Mirror update is stale');
+    if (current.body && order === 0 && stableJson(current.body) !== stableJson(event)) {
+      const error = new EtagConflictError('Equal Google updated timestamps have different mirror payloads or ETags');
+      error.code = 'equal_google_updated_ambiguity';
+      throw error;
+    }
+    return await this.put(path, event, current.etag || 'null_etag');
+  }
+  async clearMirror({ guard, nowMs = Date.now() } = {}) {
+    await this.assertGuardCurrent(guard, nowMs);
+    const path = this.metaPath('mirror');
+    const current = await this.getWithEtag(path);
+    return await this.put(path, null, current.etag || 'null_etag');
+  }
   async appendAudit(row) { const key = auditKey(row.at_ms || Date.now()); await this.put(this.metaPath('audit/' + key), row); return key; }
   async appendConflict(row) { const key = auditKey(row.at_ms || Date.now()); await this.put(this.metaPath('conflicts/' + key), row); return key; }
   async enqueuePullSignal(row) {
@@ -698,6 +1000,19 @@ export class FirebaseScheduleStore {
   }
   async claimPullSignals({ nowMs = Date.now(), limit = 50, leaseMs = 60000, ownerId = 'worker' } = {}) {
     return await this.claimRows('pull_signals', { nowMs, limit, leaseMs, ownerId, orderField: 'at_ms' });
+  }
+  async renewPullSignal(id, claim, { nowMs = Date.now(), leaseMs = 60000 } = {}) {
+    const path = this.metaPath('pull_signals/' + this.mappingKey(id));
+    const current = await this.getWithEtag(path);
+    if (!fenced(current.body, claim) || Number(current.body.lease_expires_at_ms || 0) <= nowMs) return null;
+    const renewed = Object.assign({}, current.body, { lease_expires_at_ms: nowMs + leaseMs, lease_renewed_at_ms: nowMs });
+    try {
+      await this.put(path, renewed, current.etag || 'null_etag');
+      return renewed;
+    } catch (error) {
+      if (error instanceof EtagConflictError) return null;
+      throw error;
+    }
   }
   async finishPullSignal(id, claim, patch) {
     return await this.finishRow('pull_signals', id, claim, patch);

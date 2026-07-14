@@ -17,7 +17,7 @@
 - resolver: `overrides state=shift|off|clear` -> `fixed_schedules` -> missing
 - attendance: `/workschedule_v2/attendance`이며 계획 근무 입력/Google import 대상이 아니다.
 - Google adapter metadata: `/workschedule_v2/meta/calendar_core/google`
-  - `outbox`, `mappings`, `mirror`, `sync_state`, `audit`, `conflicts`, `pull_signals`, `channel`, `public_config`
+  - `outbox`, `pull_lease`, `mappings`, `mirror`, `sync_state`, `audit`, `conflicts`, `pull_signals`, `channel`, `public_config`
 - metadata/event projection/Google mirror는 canonical schedule source가 아니다.
 
 ### 2. Calendar Overlay
@@ -57,7 +57,7 @@
   - `processPullSignals()`
   - `ensurePushChannel()`
   - `runCycle({reason})`
-- store: `MemorySyncStore` for local tests, `FirebaseScheduleStore` for server worker. Cross-date Google move를 켜는 Firebase worker는 Admin RTDB 인스턴스로 `createFirebaseAdminAtomicMoveWriter(database)`를 만들고 `atomicMoveWriter`로 주입해야 한다. REST-only store는 move를 canonical write 전에 fail-closed한다.
+- store: `MemorySyncStore` for local tests, `FirebaseScheduleStore` for server worker. Firebase worker는 Admin RTDB 인스턴스로 `createFirebaseAdminAtomicImportWriter(database)`와 `createFirebaseAdminMappingCasWriter(database)`를 만들고 각각 `atomicImportWriter`, `mappingCasWriter`로 주입한다. 모든 Google canonical/status import는 `/workschedule_v2` 공통 루트 transaction, 모든 mapping mutation은 metadata transaction을 사용한다. REST-only store는 canonical/status/mapping write 전에 fail-closed한다. `createFirebaseAdminAtomicMoveWriter`/`atomicMoveWriter`는 이전 호출부용 alias다.
 - provider: `MockCalendarProvider`, `GoogleCalendarProvider`.
 - OAuth/token: `GoogleOAuthServerFlow` + AES-256-GCM `EncryptedFileTokenStore`. Client ID/secret, refresh token, encryption key는 browser/source tree에 두지 않는다.
 
@@ -66,8 +66,8 @@
 - event identity: private extended properties `wsSchema`, `wsCanonicalKey`, `wsMappingId`, `wsDate`, `wsEmployeeId`, `wsRevision`, `wsState`, `wsRole` + server mapping row.
 - idempotency: stable outbox id + canonical key mapping + Google base32hex 범위의 deterministic event ID. insert 응답 유실/409은 `events.get`으로 canonical key를 확인해 중복 생성 없이 회수한다. duplicate remote projection은 conflict로 격리한다.
 - outbox fencing: 한 번에 한 row만 pending/retry 또는 만료된 running에서 원자 claim한다. 각 Google insert/update/delete와 mapping write 직전에 `lease_owner`/`lease_epoch`/`fence_token`/만료시각을 조건부 갱신하며, 현재 fence만 done/retry/conflict를 기록한다. 기본 lease는 provider timeout과 bounded retry/backoff 전체 예산보다 길다.
-- move safety: source resolved revision과 source/destination explicit expectation을 모두 확인한다. 날짜 이동 대상의 explicit override가 없거나 같은 `google_event_id`일 때만 쓴다. fixed schedule만 있는 날짜는 허용한다. Firebase canonical source clear + destination row는 Admin transaction 한 번으로 `/workschedule_v2/overrides` 아래에서 함께 commit하며 unrelated row, `[]`, `0`을 보존한다. `status`는 canonical commit 뒤 idempotent metadata write이고 실패 시 audit 후 같은 event retry로 복구한다.
-- push: HTTPS webhook의 `X-Goog-*` channel/resource/token을 검증하고 body를 schedule data로 사용하지 않는다. `(channel, resource, message number)`로 dedupe한 signal을 lease/fence claim해 incremental pull 후 완료한다. periodic pull은 계속 authoritative recovery다.
+- import/move safety: source resolved revision과 source/destination explicit expectation을 모두 확인한다. 날짜 이동 대상의 explicit override가 없거나 같은 Google event version일 때만 쓴다. fixed schedule만 있는 날짜는 허용한다. 모든 Google import는 Admin transaction 한 번으로 `/workschedule_v2` 공통 루트의 override와 status를 함께 commit하며 employees, fixed schedule, attendance/meta, unrelated row, `[]`, `0`을 보존한다. 같은 event retry는 누락된 status만 복구하고 완료 후에는 idempotent다.
+- push/pull fencing: HTTPS webhook의 `X-Goog-*` channel/resource/token을 검증하고 body를 schedule data로 사용하지 않는다. `(channel, resource, message number)`로 dedupe한 signal을 한 row씩 claim한다. signal pull과 periodic pull은 같은 metadata `pull_lease` owner/epoch/fence/expiry를 CAS claim·renew하고, page/canonical/mirror/mapping/sync-state write 전 current fence를 확인한다. older `event.updated`는 mirror/canonical/mapping 모두 stale-ignore하며, 같은 timestamp의 payload/ETag 불일치는 conflict로 fail-closed한다. periodic pull은 계속 authoritative recovery다.
 - public status: `credentials_configured`, runtime `token_connected`, `live_auth_ready`를 분리한다. `push_ready`는 HTTPS URL, webhook token, signal consumer, live auth가 모두 준비되어야 true다.
 - pull: initial full -> final-page `nextSyncToken` 저장 -> same base query params incremental pagination. HTTP 410은 mirror/token clear 후 full resync한다.
 - conflict: Google ETag와 canonical revision이 둘 다 변하면 어느 쪽도 덮지 않고 `conflicts`에 남긴다.

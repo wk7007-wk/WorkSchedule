@@ -23,7 +23,10 @@ export class MockCalendarProvider {
 
   recordChange(event) {
     this.version += 1;
-    const next = Object.assign({}, clone(event), { etag: '"mock-' + this.version + '"', updated: new Date(this.clock()).toISOString() });
+    const next = Object.assign({}, clone(event), {
+      etag: '"mock-' + this.version + '"',
+      updated: new Date(this.clock() + this.version).toISOString()
+    });
     this.events.set(next.id, next);
     this.changes.push({ version: this.version, event: clone(next) });
     return clone(next);
