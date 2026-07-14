@@ -25,6 +25,13 @@ export function mappingIdForCanonicalKey(canonicalKey) {
   return crypto.createHash('sha256').update(String(canonicalKey)).digest('hex').slice(0, 32);
 }
 
+// Google accepts caller supplied IDs containing only base32hex characters
+// (0-9, a-v). A SHA-256 hex digest is a valid subset and is stable across
+// retries, which lets an ambiguous insert be recovered with events.get.
+export function deterministicGoogleEventId(canonicalKey) {
+  return 'c' + crypto.createHash('sha256').update(String(canonicalKey)).digest('hex');
+}
+
 export function canonicalKey(date, employeeId) {
   return 'daily|' + core.dateKey(date) + '|' + String(employeeId || '');
 }
@@ -146,7 +153,10 @@ export function projectCanonicalToGoogleEvent(entity, options = {}) {
       extendedProperties: { private: privateProps }
     };
   }
-  const span = core.shiftSpan(entity.shift);
+  const operationalDayStartMin = Number.isFinite(options.operationalDayStartMin)
+    ? options.operationalDayStartMin
+    : core.DAY_START_MIN;
+  const span = core.shiftSpan(entity.shift, operationalDayStartMin);
   if (!span) throw new Error('Cannot project a shift without valid start/end');
   const startDate = span.startMin >= 24 * 60 ? plusDays(entity.date, 1) : entity.date;
   const endDate = span.endMin >= 24 * 60 ? plusDays(entity.date, 1) : entity.date;
@@ -228,6 +238,13 @@ export function googleEventToCanonical(event, context = {}) {
   const start = datePartsInTimeZone(event && event.start && event.start.dateTime, timeZone);
   const end = datePartsInTimeZone(event && event.end && event.end.dateTime, timeZone);
   if (!start || !end) return { ignored: true, reason: 'invalid_google_event_time' };
+  const operationalDayStartMin = Number.isFinite(context.operationalDayStartMin)
+    ? context.operationalDayStartMin
+    : core.DAY_START_MIN;
+  const startMinute = core.parseClock(start.time);
+  const operationalDate = startMinute != null && startMinute < operationalDayStartMin
+    ? plusDays(start.date, -1)
+    : start.date;
   const role = Object.prototype.hasOwnProperty.call(privateProps, 'wsRole') ? String(privateProps.wsRole) : '';
   const row = {
     state: 'shift', type: 'manual_shift',
@@ -238,11 +255,11 @@ export function googleEventToCanonical(event, context = {}) {
   };
   return {
     ignored: false,
-    action: prior && prior.date !== start.date ? 'move' : 'upsert_shift',
-    date: start.date,
+    action: prior && prior.date !== operationalDate ? 'move' : 'upsert_shift',
+    date: operationalDate,
     employeeId,
-    priorDate: prior && prior.date || start.date,
-    canonicalKey: canonicalKey(start.date, employeeId),
+    priorDate: prior && prior.date || operationalDate,
+    canonicalKey: canonicalKey(operationalDate, employeeId),
     row
   };
 }

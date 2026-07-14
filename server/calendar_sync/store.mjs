@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { EtagConflictError } from './errors.mjs';
+import { DestinationCollisionError, EtagConflictError } from './errors.mjs';
 import { addWriteMetadata, canonicalKey, revisionOf, resolveCanonicalDay } from './domain.mjs';
 import { createRequire } from 'node:module';
 
@@ -26,6 +26,67 @@ function statusForChange(change, nowMs) {
     updated_at_ms: nowMs,
     updated_at: new Date(nowMs).toISOString()
   };
+}
+
+function claimable(row, nowMs) {
+  if (!row) return false;
+  if (['pending', 'retry'].includes(row.status)) return Number(row.next_attempt_at_ms || 0) <= nowMs;
+  return row.status === 'running' && Number(row.lease_expires_at_ms || 0) <= nowMs;
+}
+
+function claimedRow(row, { nowMs, leaseMs, ownerId }) {
+  const leaseEpoch = Number(row.lease_epoch || 0) + 1;
+  return Object.assign({}, clone(row), {
+    status: 'running',
+    lease_owner: String(ownerId),
+    lease_epoch: leaseEpoch,
+    fence_token: leaseEpoch + ':' + crypto.randomUUID(),
+    lease_claimed_at_ms: nowMs,
+    lease_expires_at_ms: nowMs + leaseMs
+  });
+}
+
+function fenced(row, claim) {
+  return !!row && row.status === 'running'
+    && String(row.lease_owner || '') === String(claim.lease_owner || '')
+    && Number(row.lease_epoch || 0) === Number(claim.lease_epoch || 0)
+    && String(row.fence_token || '') === String(claim.fence_token || '');
+}
+
+function completedRow(row, patch) {
+  return Object.assign({}, clone(row), clone(patch), {
+    lease_owner: null,
+    fence_token: null,
+    lease_claimed_at_ms: null,
+    lease_expires_at_ms: null
+  });
+}
+
+function pullSignalId(row) {
+  const identity = [row.channel_id || '', row.resource_id || '', row.message_number || ''].join('|');
+  return 'signal_' + crypto.createHash('sha256').update(identity).digest('hex').slice(0, 32);
+}
+
+function explicitState(row) {
+  return {
+    exists: row != null,
+    revision: row == null ? '' : revisionOf(row),
+    googleEventId: String(row && row.google_event_id || ''),
+    row: clone(row)
+  };
+}
+
+function validateMoveDestination(change, current, expectation) {
+  if (change.action !== 'move') return;
+  const incomingEventId = String(change.row && change.row.google_event_id || '');
+  const currentEventId = String(current && current.google_event_id || '');
+  const sameEvent = !!current && !!incomingEventId && currentEventId === incomingEventId;
+  if (current && !sameEvent) throw new DestinationCollisionError();
+  if (!expectation) return;
+  if (expectation.exists !== (current != null)) throw new DestinationCollisionError('Move destination changed after collision check');
+  if (current && expectation.revision != null && revisionOf(current) !== String(expectation.revision)) {
+    throw new DestinationCollisionError('Move destination revision changed after collision check');
+  }
 }
 
 export class MemorySyncStore {
@@ -59,10 +120,27 @@ export class MemorySyncStore {
       .map(clone);
   }
 
-  async markOutbox(id, patch) {
-    if (!this.meta.outbox[id]) return null;
-    Object.assign(this.meta.outbox[id], clone(patch));
+  async claimOutbox({ nowMs = Date.now(), limit = 50, leaseMs = 60000, ownerId = 'worker' } = {}) {
+    const candidates = Object.values(this.meta.outbox)
+      .filter(item => claimable(item, nowMs))
+      .sort((left, right) => Number(left.created_at_ms || 0) - Number(right.created_at_ms || 0))
+      .slice(0, limit);
+    return candidates.map(item => {
+      const claimed = claimedRow(item, { nowMs, leaseMs, ownerId });
+      this.meta.outbox[item.id] = claimed;
+      return clone(claimed);
+    });
+  }
+
+  async finishOutbox(id, claim, patch) {
+    const current = this.meta.outbox[id];
+    if (!fenced(current, claim)) return null;
+    this.meta.outbox[id] = completedRow(current, patch);
     return clone(this.meta.outbox[id]);
+  }
+
+  async markOutbox(id, patch, claim) {
+    return await this.finishOutbox(id, claim || {}, patch);
   }
 
   async getCanonicalForOutbox(item) {
@@ -96,9 +174,15 @@ export class MemorySyncStore {
     return revisionOf(resolved.row);
   }
 
-  async writeImportedChange(change, { nowMs = Date.now(), expectedRevision = null } = {}) {
+  async getExplicitOverrideState(date, employeeId) {
+    const row = this.snapshot.overrides[date] && this.snapshot.overrides[date][employeeId];
+    return explicitState(row);
+  }
+
+  async writeImportedChange(change, { nowMs = Date.now(), expectedRevision = null, destinationExpectation = null } = {}) {
     const current = this.snapshot.overrides[change.date] && this.snapshot.overrides[change.date][change.employeeId];
     if (expectedRevision != null && current && revisionOf(current) !== String(expectedRevision)) throw new EtagConflictError('Canonical override changed during Google import');
+    validateMoveDestination(change, current, destinationExpectation);
     if (!this.snapshot.overrides[change.date]) this.snapshot.overrides[change.date] = {};
     if (!this.snapshot.status[change.date]) this.snapshot.status[change.date] = {};
     const row = addWriteMetadata(change.row, { nowMs, source: 'google_calendar' });
@@ -168,9 +252,28 @@ export class MemorySyncStore {
   }
 
   async enqueuePullSignal(row) {
-    const key = auditKey(row.at_ms || Date.now());
-    this.meta.pull_signals[key] = clone(row);
+    const key = pullSignalId(row);
+    if (!this.meta.pull_signals[key]) this.meta.pull_signals[key] = Object.assign({ id: key }, clone(row));
     return key;
+  }
+
+  async claimPullSignals({ nowMs = Date.now(), limit = 50, leaseMs = 60000, ownerId = 'worker' } = {}) {
+    const candidates = Object.values(this.meta.pull_signals)
+      .filter(item => claimable(item, nowMs))
+      .sort((left, right) => Number(left.at_ms || 0) - Number(right.at_ms || 0))
+      .slice(0, limit);
+    return candidates.map(item => {
+      const claimed = claimedRow(item, { nowMs, leaseMs, ownerId });
+      this.meta.pull_signals[item.id] = claimed;
+      return clone(claimed);
+    });
+  }
+
+  async finishPullSignal(id, claim, patch) {
+    const current = this.meta.pull_signals[id];
+    if (!fenced(current, claim)) return null;
+    this.meta.pull_signals[id] = completedRow(current, patch);
+    return clone(this.meta.pull_signals[id]);
   }
 
   async getChannel() {
@@ -263,6 +366,42 @@ export class FirebaseScheduleStore {
     return await this.put(path, item);
   }
 
+  async claimRows(collection, { nowMs, limit, leaseMs, ownerId, orderField }) {
+    const rows = await this.get(this.metaPath(collection)) || {};
+    const candidates = Object.entries(rows)
+      .filter(([, item]) => claimable(item, nowMs))
+      .sort(([, left], [, right]) => Number(left[orderField] || 0) - Number(right[orderField] || 0));
+    const claimed = [];
+    for (const [storedKey] of candidates) {
+      if (claimed.length >= limit) break;
+      const path = this.metaPath(collection + '/' + storedKey);
+      const current = await this.getWithEtag(path);
+      if (!claimable(current.body, nowMs)) continue;
+      const next = claimedRow(Object.assign({}, current.body, { id: current.body.id || storedKey }), { nowMs, leaseMs, ownerId });
+      try {
+        await this.put(path, next, current.etag || 'null_etag');
+        claimed.push(next);
+      } catch (error) {
+        if (!(error instanceof EtagConflictError)) throw error;
+      }
+    }
+    return claimed;
+  }
+
+  async finishRow(collection, id, claim, patch) {
+    const path = this.metaPath(collection + '/' + this.mappingKey(id));
+    const current = await this.getWithEtag(path);
+    if (!fenced(current.body, claim)) return null;
+    const next = completedRow(current.body, patch);
+    try {
+      await this.put(path, next, current.etag || 'null_etag');
+      return next;
+    } catch (error) {
+      if (error instanceof EtagConflictError) return null;
+      throw error;
+    }
+  }
+
   async listPendingOutbox({ nowMs = Date.now(), limit = 50 } = {}) {
     const rows = await this.get(this.metaPath('outbox')) || {};
     return Object.values(rows)
@@ -271,9 +410,16 @@ export class FirebaseScheduleStore {
       .slice(0, limit);
   }
 
-  async markOutbox(id, patch) {
-    await this.patch(this.metaPath('outbox/' + this.mappingKey(id)), patch);
-    return patch;
+  async claimOutbox({ nowMs = Date.now(), limit = 50, leaseMs = 60000, ownerId = 'worker' } = {}) {
+    return await this.claimRows('outbox', { nowMs, limit, leaseMs, ownerId, orderField: 'created_at_ms' });
+  }
+
+  async finishOutbox(id, claim, patch) {
+    return await this.finishRow('outbox', id, claim, patch);
+  }
+
+  async markOutbox(id, patch, claim) {
+    return await this.finishOutbox(id, claim || {}, patch);
   }
 
   async getCanonicalForOutbox(item) {
@@ -312,10 +458,15 @@ export class FirebaseScheduleStore {
     return revisionOf(resolved.row);
   }
 
-  async writeImportedChange(change, { nowMs = Date.now(), expectedRevision = null } = {}) {
+  async getExplicitOverrideState(date, employeeId) {
+    return explicitState(await this.get('/workschedule_v2/overrides/' + date + '/' + employeeId));
+  }
+
+  async writeImportedChange(change, { nowMs = Date.now(), expectedRevision = null, destinationExpectation = null } = {}) {
     const path = '/workschedule_v2/overrides/' + change.date + '/' + change.employeeId;
     const current = await this.getWithEtag(path);
     if (expectedRevision != null && current.body && revisionOf(current.body) !== String(expectedRevision)) throw new EtagConflictError('Canonical override changed during Google import');
+    validateMoveDestination(change, current.body, destinationExpectation);
     const row = addWriteMetadata(change.row, { nowMs, source: 'google_calendar' });
     await this.put(path, row, current.etag || 'null_etag');
     await this.put('/workschedule_v2/status/' + change.date + '/' + change.employeeId, statusForChange(change, nowMs));
@@ -359,7 +510,24 @@ export class FirebaseScheduleStore {
   async clearMirror() { return await this.put(this.metaPath('mirror'), null); }
   async appendAudit(row) { const key = auditKey(row.at_ms || Date.now()); await this.put(this.metaPath('audit/' + key), row); return key; }
   async appendConflict(row) { const key = auditKey(row.at_ms || Date.now()); await this.put(this.metaPath('conflicts/' + key), row); return key; }
-  async enqueuePullSignal(row) { const key = auditKey(row.at_ms || Date.now()); await this.put(this.metaPath('pull_signals/' + key), row); return key; }
+  async enqueuePullSignal(row) {
+    const key = pullSignalId(row);
+    const path = this.metaPath('pull_signals/' + key);
+    const current = await this.getWithEtag(path);
+    if (current.body) return key;
+    try {
+      await this.put(path, Object.assign({ id: key }, row), current.etag || 'null_etag');
+    } catch (error) {
+      if (!(error instanceof EtagConflictError)) throw error;
+    }
+    return key;
+  }
+  async claimPullSignals({ nowMs = Date.now(), limit = 50, leaseMs = 60000, ownerId = 'worker' } = {}) {
+    return await this.claimRows('pull_signals', { nowMs, limit, leaseMs, ownerId, orderField: 'at_ms' });
+  }
+  async finishPullSignal(id, claim, patch) {
+    return await this.finishRow('pull_signals', id, claim, patch);
+  }
   async getChannel() { return await this.get(this.metaPath('channel')); }
   async setChannel(row) { return await this.put(this.metaPath('channel'), row); }
   async getOverlay(date) { return await this.get(this.overlayRoot + '/' + date); }

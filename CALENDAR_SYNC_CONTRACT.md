@@ -48,11 +48,13 @@
 
 - barrel: `server/calendar_sync/index.mjs`
 - config: `loadCalendarSyncConfig(env)`; 기본 `featureEnabled=false`, `killSwitch=true`, provider `mock`.
+- 운영일 경계: `WORKSCHEDULE_OPERATIONAL_DAY_START_MIN`, 기본 `360`(06:00). canonical `7/14 02:00`은 Google `7/15 02:00`으로 내보내고 timed pull은 다시 `7/14`로 역변환한다. all-day 휴무 날짜는 이동하지 않는다.
 - engine:
   - `processOutbox()`
   - `pullChanges({reason})`
   - `reconcileCanonicalWindow({startDate,endDate,reason})`
   - `acceptWebhook(headers)`
+  - `processPullSignals()`
   - `ensurePushChannel()`
   - `runCycle({reason})`
 - store: `MemorySyncStore` for local tests, `FirebaseScheduleStore` for server worker.
@@ -62,8 +64,11 @@
 ## Sync guarantees
 
 - event identity: private extended properties `wsSchema`, `wsCanonicalKey`, `wsMappingId`, `wsDate`, `wsEmployeeId`, `wsRevision`, `wsState`, `wsRole` + server mapping row.
-- idempotency: stable outbox id + canonical key mapping. duplicate remote projection은 conflict로 격리한다.
-- push: HTTPS webhook의 `X-Goog-*` channel/resource/token을 검증하고 body를 schedule data로 사용하지 않는다. signal만 큐에 넣고 incremental pull한다.
+- idempotency: stable outbox id + canonical key mapping + Google base32hex 범위의 deterministic event ID. insert 응답 유실/409은 `events.get`으로 canonical key를 확인해 중복 생성 없이 회수한다. duplicate remote projection은 conflict로 격리한다.
+- outbox fencing: pending/retry 또는 만료된 running row만 원자 claim하고 `lease_owner`/`lease_epoch`/`fence_token`이 일치할 때만 done/retry/conflict를 기록한다.
+- move safety: 날짜 이동 대상의 explicit override가 없거나 같은 `google_event_id`일 때만 쓴다. fixed schedule만 있는 날짜는 허용하며 Firebase destination write는 ETag 조건부 PUT으로 경합을 차단한다.
+- push: HTTPS webhook의 `X-Goog-*` channel/resource/token을 검증하고 body를 schedule data로 사용하지 않는다. `(channel, resource, message number)`로 dedupe한 signal을 lease/fence claim해 incremental pull 후 완료한다. periodic pull은 계속 authoritative recovery다.
+- public status: `credentials_configured`, runtime `token_connected`, `live_auth_ready`를 분리한다. `push_ready`는 HTTPS URL, webhook token, signal consumer, live auth가 모두 준비되어야 true다.
 - pull: initial full -> final-page `nextSyncToken` 저장 -> same base query params incremental pagination. HTTP 410은 mirror/token clear 후 full resync한다.
 - conflict: Google ETag와 canonical revision이 둘 다 변하면 어느 쪽도 덮지 않고 `conflicts`에 남긴다.
 - tombstone: Google cancelled/deleted event는 mapped 날짜 override `state=clear`; 계획 근무를 attendance에 쓰지 않는다.
@@ -75,6 +80,7 @@
 node scripts/test_calendar_core_logic.mjs
 node scripts/test_calendar_sync_engine.mjs
 node scripts/test_calendar_oauth.mjs
+node scripts/test_calendar_firebase_store.mjs
 ```
 
 공식 계약 참고:
@@ -82,6 +88,7 @@ node scripts/test_calendar_oauth.mjs
 - Google Calendar incremental sync: https://developers.google.com/workspace/calendar/api/guides/sync
 - Google Calendar push: https://developers.google.com/workspace/calendar/api/guides/push
 - Google Events resource: https://developers.google.com/workspace/calendar/api/v3/reference/events
+- Google Events insert / caller-supplied ID constraints: https://developers.google.com/workspace/calendar/api/v3/reference/events/insert
 - Google OAuth web-server flow: https://developers.google.com/identity/protocols/oauth2/web-server
 - KMA short-term forecast candidate: https://www.data.go.kr/data/15084084/openapi.do
 - KASI holidays candidate: https://www.data.go.kr/data/15012690/openapi.do

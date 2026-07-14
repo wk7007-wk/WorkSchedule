@@ -53,11 +53,15 @@ export function loadCalendarSyncConfig(env = process.env) {
     latitude: number(env.WORKSCHEDULE_LOCATION_LAT, 37.2816, -90, 90),
     longitude: number(env.WORKSCHEDULE_LOCATION_LNG, 127.4892, -180, 180),
     timeZone: String(env.WORKSCHEDULE_TIME_ZONE || 'Asia/Seoul'),
+    operationalDayStartMin: number(env.WORKSCHEDULE_OPERATIONAL_DAY_START_MIN, 6 * 60, 0, 23 * 60 + 59),
     queryParams: Object.freeze({ singleEvents: 'true', showDeleted: 'true', maxResults: '2500' }),
     reconcileIntervalMs: number(env.WORKSCHEDULE_CALENDAR_RECONCILE_MS, 15 * 60 * 1000, 60 * 1000, 24 * 60 * 60 * 1000),
     reconcileHorizonDays: number(env.WORKSCHEDULE_CALENDAR_HORIZON_DAYS, 120, 7, 730),
     maxAttempts: number(env.WORKSCHEDULE_CALENDAR_MAX_ATTEMPTS, 4, 1, 10),
     retryBackoffMs: [1000, 5000, 30000, 120000],
+    outboxLeaseMs: number(env.WORKSCHEDULE_CALENDAR_OUTBOX_LEASE_MS, 60 * 1000, 5 * 1000, 30 * 60 * 1000),
+    pullSignalLeaseMs: number(env.WORKSCHEDULE_CALENDAR_PULL_SIGNAL_LEASE_MS, 60 * 1000, 5 * 1000, 30 * 60 * 1000),
+    pullSignalConsumerEnabled: bool(env.WORKSCHEDULE_CALENDAR_PULL_SIGNAL_CONSUMER_ENABLED, true),
     webhookUrl,
     webhookReady: /^https:\/\//i.test(webhookUrl),
     channelRenewBeforeMs: number(env.WORKSCHEDULE_CALENDAR_CHANNEL_RENEW_BEFORE_MS, 24 * 60 * 60 * 1000, 60 * 1000, 7 * 24 * 60 * 60 * 1000),
@@ -70,20 +74,32 @@ export function loadCalendarSyncConfig(env = process.env) {
   };
 }
 
-export function publicCalendarSyncStatus(config) {
+export function publicCalendarSyncStatus(config, runtime = {}) {
+  const credentialsConfigured = config.provider !== 'google' || config.googleCredentialsReady === true;
+  const tokenConnected = config.provider !== 'google'
+    ? true
+    : runtime.tokenConnected === true || runtime.connected === true;
+  const liveAuthReady = credentialsConfigured && tokenConnected;
+  const webhookTokenReady = !!String(config.webhookTokenSecret || '').trim();
+  const pushReady = !!(config.webhookReady && webhookTokenReady && config.pullSignalConsumerEnabled && liveAuthReady);
   const blockedReasons = [];
   if (!config.featureEnabled) blockedReasons.push('feature_disabled');
   if (config.killSwitch) blockedReasons.push('kill_switch');
-  if (config.liveAuthBlocked) blockedReasons.push('live_auth_missing');
+  if (!credentialsConfigured) blockedReasons.push('google_credentials_missing');
+  else if (!tokenConnected) blockedReasons.push('google_token_not_connected');
   if (config.pushEnabled && !config.webhookReady) blockedReasons.push('https_webhook_missing');
+  if (config.pushEnabled && !webhookTokenReady) blockedReasons.push('webhook_token_missing');
+  if (config.pushEnabled && !config.pullSignalConsumerEnabled) blockedReasons.push('pull_signal_consumer_disabled');
   return {
     schema_version: 'workschedule.calendar_sync.public_status.v1',
     provider: config.provider,
     feature_enabled: config.featureEnabled,
     kill_switch: config.killSwitch,
-    live_auth_ready: !config.liveAuthBlocked,
+    credentials_configured: credentialsConfigured,
+    token_connected: tokenConnected,
+    live_auth_ready: liveAuthReady,
     push_enabled: config.pushEnabled,
-    push_ready: config.webhookReady,
+    push_ready: pushReady,
     periodic_reconciliation: config.periodicPullEnabled,
     overlay_provider: config.overlayProvider,
     overlay_live_ready: config.overlayLiveReady,

@@ -330,8 +330,21 @@
   }
 
   async function saveCoreThenQueue(writeCore, queueOutbox, item, onOutboxError) {
-    const coreResult = await writeCore();
-    if (!coreResult) return { coreSaved: false, outboxScheduled: false, coreResult, outboxPromise: null };
+    var coreResult;
+    try {
+      coreResult = await writeCore();
+    } catch (error) {
+      return {
+        coreSaved: false,
+        outboxScheduled: false,
+        coreResult: undefined,
+        coreError: String(error && (error.code || error.message) || 'core_write_error'),
+        outboxPromise: null
+      };
+    }
+    // Firebase set/update resolves void on success. Only an explicit false means
+    // the adapter rejected the canonical write.
+    if (coreResult === false) return { coreSaved: false, outboxScheduled: false, coreResult, outboxPromise: null };
     const outboxPromise = Promise.resolve()
       .then(function () { return queueOutbox(item); })
       .then(function (result) { return { ok: result !== false, result }; })

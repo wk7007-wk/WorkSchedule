@@ -21,6 +21,19 @@ export class EtagConflictError extends CalendarSyncError {
   }
 }
 
+export class DestinationCollisionError extends EtagConflictError {
+  constructor(message = 'Move destination already has an unrelated explicit override') {
+    super(message);
+    this.code = 'move_destination_occupied';
+  }
+}
+
+export class StaleFenceError extends CalendarSyncError {
+  constructor(message = 'Worker lease fence is no longer current') {
+    super(message, { code: 'stale_fence', status: 409, retryable: false });
+  }
+}
+
 export class RetryableProviderError extends CalendarSyncError {
   constructor(message, options = {}) {
     super(message, {

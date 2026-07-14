@@ -75,7 +75,12 @@ export class MockCalendarProvider {
 
   async insertEvent(event) {
     this.calls.push({ method: 'insertEvent', event: clone(event) });
-    const id = 'mock-event-' + this.nextId++;
+    const id = event.id || 'mock-event-' + this.nextId++;
+    if (this.events.has(id)) {
+      const error = new Error('mock event id already exists');
+      error.status = 409;
+      throw error;
+    }
     return this.recordChange(Object.assign({}, clone(event), { id, status: event.status || 'confirmed' }));
   }
 

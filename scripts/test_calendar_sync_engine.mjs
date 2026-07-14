@@ -5,6 +5,12 @@ import { CalendarSyncEngine } from '../server/calendar_sync/engine.mjs';
 import { MockCalendarProvider } from '../server/calendar_sync/mock_provider.mjs';
 import { MemorySyncStore } from '../server/calendar_sync/store.mjs';
 import { RetryableProviderError } from '../server/calendar_sync/errors.mjs';
+import {
+  canonicalKey,
+  googleEventToCanonical,
+  projectCanonicalToGoogleEvent,
+  revisionOf
+} from '../server/calendar_sync/domain.mjs';
 
 const require = createRequire(import.meta.url);
 const core = require('../docs/calendar_core_logic.js');
@@ -49,10 +55,29 @@ assert.equal(pushed.processed, 1);
 assert.equal(pushed.results[0].ok, true);
 assert.equal(provider.events.size, 1);
 const created = Array.from(provider.events.values())[0];
+assert.match(created.id, /^[0-9a-v]{5,1024}$/, 'caller-supplied event ID must meet Google base32hex constraints');
 assert.equal(created.extendedProperties.private.wsCanonicalKey, 'daily|2026-07-14|emp1');
 assert.equal(created.extendedProperties.private.wsEmployeeId, 'emp1');
 assert.equal(created.start.dateTime, '2026-07-14T10:00:00+09:00');
 assert.equal((await engine.processOutbox()).processed, 0, 'idempotent outbox must not duplicate events');
+
+const overnightEntity = {
+  canonicalKey: canonicalKey('2026-07-14', 'emp1'), mappingId: 'mapping-night', date: '2026-07-14',
+  employeeId: 'emp1', employee: baseSnapshot.employees.emp1, state: 'shift',
+  shift: { start: '02:00', end: '05:00', role: '야간' }, revision: 'night-1'
+};
+const overnightProjection = projectCanonicalToGoogleEvent(overnightEntity, { operationalDayStartMin: 360, timeZone: 'Asia/Seoul' });
+assert.equal(overnightProjection.start.dateTime, '2026-07-15T02:00:00+09:00');
+const overnightRoundTrip = googleEventToCanonical(Object.assign({ id: 'night-event', etag: 'night-etag' }, overnightProjection), {
+  employees: baseSnapshot.employees, operationalDayStartMin: 360, timeZone: 'Asia/Seoul'
+});
+assert.equal(overnightRoundTrip.date, '2026-07-14', '02:00 belongs to the prior operational day');
+assert.equal(overnightRoundTrip.row.end, '05:00');
+const allDayOff = googleEventToCanonical({
+  id: 'off-event', summary: '휴무 · 이원규', start: { date: '2026-07-15' }, end: { date: '2026-07-16' },
+  extendedProperties: { private: { wsEmployeeId: 'emp1', wsState: 'off' } }
+}, { employees: baseSnapshot.employees, operationalDayStartMin: 360 });
+assert.equal(allDayOff.date, '2026-07-15', 'all-day off keeps its literal date');
 
 await provider.simulateExternalEdit(created.id, {
   start: { dateTime: '2026-07-14T11:00:00+09:00', timeZone: 'Asia/Seoul' },
@@ -112,6 +137,84 @@ assert.equal((await retryEngine.processOutbox()).results[0].ok, true);
 assert.equal(retryProvider.events.size, 1);
 assert.ok(Object.values(retryStore.meta.audits).some(row => row.action === 'provider_retry'));
 
+const sharedStore = new MemorySyncStore(baseSnapshot);
+const sharedProvider = new MockCalendarProvider({ clock });
+await sharedStore.enqueueOutbox(item);
+const engineA = new CalendarSyncEngine({ config: config(), store: sharedStore, provider: sharedProvider, clock, sleep: async () => {}, workerId: 'worker-a' });
+const engineB = new CalendarSyncEngine({ config: config(), store: sharedStore, provider: sharedProvider, clock, sleep: async () => {}, workerId: 'worker-b' });
+const concurrent = await Promise.all([engineA.processOutbox(), engineB.processOutbox()]);
+assert.equal(concurrent.reduce((sum, result) => sum + result.processed, 0), 1, 'only one worker may claim one outbox row');
+assert.equal(sharedProvider.events.size, 1, 'concurrent workers must create exactly one Google event');
+
+class LostInsertResponseProvider extends MockCalendarProvider {
+  constructor(options) { super(options); this.loseResponse = true; }
+  async insertEvent(event) {
+    const created = await super.insertEvent(event);
+    if (this.loseResponse) {
+      this.loseResponse = false;
+      throw new RetryableProviderError('response lost after remote commit', { status: 503 });
+    }
+    return created;
+  }
+}
+const lostStore = new MemorySyncStore(baseSnapshot);
+const lostProvider = new LostInsertResponseProvider({ clock });
+await lostStore.enqueueOutbox(item);
+const lostEngine = new CalendarSyncEngine({ config: config(), store: lostStore, provider: lostProvider, clock, sleep: async () => {}, workerId: 'lost-worker' });
+assert.equal((await lostEngine.processOutbox()).results[0].ok, true);
+assert.equal(lostProvider.events.size, 1, 'retry after an ambiguous insert must recover the deterministic event');
+assert.equal(lostProvider.calls.filter(call => call.method === 'insertEvent').length, 1);
+
+const leaseStore = new MemorySyncStore(baseSnapshot);
+await leaseStore.enqueueOutbox(item);
+const firstLease = (await leaseStore.claimOutbox({ nowMs, leaseMs: 100, ownerId: 'old-worker' }))[0];
+assert.equal((await leaseStore.claimOutbox({ nowMs: nowMs + 99, leaseMs: 100, ownerId: 'new-worker' })).length, 0);
+const recoveredLease = (await leaseStore.claimOutbox({ nowMs: nowMs + 100, leaseMs: 100, ownerId: 'new-worker' }))[0];
+assert.equal(recoveredLease.lease_epoch, firstLease.lease_epoch + 1, 'expired lease increments the fence epoch');
+assert.equal(await leaseStore.finishOutbox(item.id, firstLease, { status: 'done' }), null, 'stale worker cannot complete a reclaimed row');
+assert.ok(await leaseStore.finishOutbox(item.id, recoveredLease, { status: 'done' }));
+
+function moveEvent(etag = '"move-new"') {
+  return {
+    id: 'move-event', etag, status: 'confirmed', summary: '이원규 · 주방',
+    start: { dateTime: '2026-07-15T10:00:00+09:00', timeZone: 'Asia/Seoul' },
+    end: { dateTime: '2026-07-15T18:00:00+09:00', timeZone: 'Asia/Seoul' },
+    extendedProperties: { private: {
+      wsCanonicalKey: 'daily|2026-07-14|emp1', wsEmployeeId: 'emp1', wsMappingId: 'move-map', wsRole: '주방'
+    } }
+  };
+}
+
+const occupiedSnapshot = structuredClone(baseSnapshot);
+occupiedSnapshot.overrides['2026-07-15'] = {
+  emp1: { state: 'shift', start: '08:00', end: '16:00', shift: { start: '08:00', end: '16:00', role: '홀' }, updated_at_ms: 777 }
+};
+const occupiedStore = new MemorySyncStore(occupiedSnapshot);
+await occupiedStore.setMapping('daily|2026-07-14|emp1', {
+  mappingId: 'move-map', eventId: 'move-event', googleEtag: '"move-old"',
+  canonicalRevision: revisionOf(occupiedSnapshot.overrides['2026-07-14'].emp1), employeeId: 'emp1', date: '2026-07-14'
+});
+const occupiedEngine = new CalendarSyncEngine({ config: config(), store: occupiedStore, provider: new MockCalendarProvider({ clock }), clock, workerId: 'move-worker' });
+const occupiedResult = await occupiedEngine.applyGoogleEvent(moveEvent(), await occupiedStore.getSnapshot());
+assert.equal(occupiedResult.reason, 'move_destination_occupied');
+assert.equal(occupiedStore.snapshot.overrides['2026-07-15'].emp1.start, '08:00', 'unrelated destination override is never overwritten');
+assert.equal(occupiedStore.snapshot.overrides['2026-07-14'].emp1.start, '10:00', 'source remains intact on destination conflict');
+
+const fixedDestinationSnapshot = structuredClone(baseSnapshot);
+fixedDestinationSnapshot.fixed_schedules.emp1 = { kind: 'weekly', days: ['wed'], start: '09:00', end: '17:00', role: '고정', updated_at_ms: 50 };
+const fixedDestinationStore = new MemorySyncStore(fixedDestinationSnapshot);
+await fixedDestinationStore.setMapping('daily|2026-07-14|emp1', {
+  mappingId: 'move-map', eventId: 'move-event', googleEtag: '"move-old"',
+  canonicalRevision: revisionOf(fixedDestinationSnapshot.overrides['2026-07-14'].emp1), employeeId: 'emp1', date: '2026-07-14'
+});
+const fixedDestinationEngine = new CalendarSyncEngine({ config: config(), store: fixedDestinationStore, provider: new MockCalendarProvider({ clock }), clock, workerId: 'fixed-move-worker' });
+assert.equal((await fixedDestinationEngine.applyGoogleEvent(moveEvent(), await fixedDestinationStore.getSnapshot())).status, 'imported');
+assert.equal(fixedDestinationStore.snapshot.overrides['2026-07-15'].emp1.google_event_id, 'move-event', 'fixed schedule alone does not block a move');
+assert.equal(fixedDestinationStore.snapshot.overrides['2026-07-14'].emp1.state, 'clear');
+const repeatedMove = moveEvent('"move-newer"');
+assert.equal((await fixedDestinationEngine.applyGoogleEvent(repeatedMove, await fixedDestinationStore.getSnapshot())).status, 'imported');
+assert.equal(fixedDestinationStore.snapshot.overrides['2026-07-15'].emp1.google_event_id, 'move-event', 'same event can be applied idempotently');
+
 const killedStore = new MemorySyncStore(baseSnapshot);
 await killedStore.enqueueOutbox(item);
 const killed = new CalendarSyncEngine({ config: config({ killSwitch: true }), store: killedStore, provider: new MockCalendarProvider({ clock }), clock, sleep: async () => {} });
@@ -127,7 +230,20 @@ assert.equal((await engine.acceptWebhook({
   'x-goog-resource-state': 'exists',
   'x-goog-message-number': '10'
 })).accepted, true);
-assert.equal(Object.keys(store.meta.pull_signals).length, 1, 'webhook only queues an incremental pull signal');
+assert.equal((await engine.acceptWebhook({
+  'x-goog-channel-id': channel.id,
+  'x-goog-resource-id': channel.resourceId,
+  'x-goog-channel-token': channel.token,
+  'x-goog-resource-state': 'exists',
+  'x-goog-message-number': '10'
+})).accepted, true);
+assert.equal(Object.keys(store.meta.pull_signals).length, 1, 'duplicate message number is deduplicated');
+const listCountBeforeSignal = provider.calls.filter(call => call.method === 'listEventsPage').length;
+const signalPull = await engine.processPullSignals();
+assert.equal(signalPull.processed, 1);
+assert.equal(signalPull.status, 'pulled');
+assert.equal(provider.calls.filter(call => call.method === 'listEventsPage').length, listCountBeforeSignal + 1, 'one deduped signal causes one incremental pull');
+assert.equal((await engine.processPullSignals()).processed, 0);
 assert.equal((await engine.acceptWebhook({
   'x-goog-channel-id': channel.id,
   'x-goog-resource-id': channel.resourceId,

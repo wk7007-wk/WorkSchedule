@@ -21,6 +21,11 @@ assert.equal(config.liveAuthBlocked, false);
 const publicStatus = publicCalendarSyncStatus(config);
 assert.equal('clientSecret' in publicStatus, false);
 assert.equal('tokenEncryptionKey' in publicStatus, false);
+assert.equal(publicStatus.credentials_configured, true);
+assert.equal(publicStatus.token_connected, false);
+assert.equal(publicStatus.live_auth_ready, false, 'configured credentials alone are not a live connection');
+assert.ok(publicStatus.blocked_reasons.includes('google_token_not_connected'));
+assert.equal(publicCalendarSyncStatus(config, { connected: true }).live_auth_ready, true);
 
 const calls = [];
 const responses = [
@@ -61,7 +66,21 @@ assert.deepEqual(await encrypted.load(), { refresh_token: 'never-plaintext', acc
 await fs.rm(temp, { recursive: true, force: true });
 
 const blocked = publicCalendarSyncStatus(loadCalendarSyncConfig({ WORKSCHEDULE_CALENDAR_PROVIDER: 'google' }));
-assert.ok(blocked.blocked_reasons.includes('live_auth_missing'));
+assert.ok(blocked.blocked_reasons.includes('google_credentials_missing'));
 assert.ok(blocked.blocked_reasons.includes('kill_switch'));
+
+const pushWithoutToken = loadCalendarSyncConfig({
+  WORKSCHEDULE_CALENDAR_PROVIDER: 'google',
+  WORKSCHEDULE_CALENDAR_PUSH_ENABLED: 'true',
+  GOOGLE_CALENDAR_WEBHOOK_URL: 'https://sync.example.test/webhook',
+  GOOGLE_OAUTH_CLIENT_ID: 'id', GOOGLE_OAUTH_CLIENT_SECRET: 'secret',
+  GOOGLE_OAUTH_REDIRECT_URI: 'https://sync.example.test/callback', GOOGLE_CALENDAR_ID: 'calendar',
+  WORKSCHEDULE_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 3).toString('base64')
+});
+const incompletePush = publicCalendarSyncStatus(pushWithoutToken, { connected: true });
+assert.equal(incompletePush.push_ready, false);
+assert.ok(incompletePush.blocked_reasons.includes('webhook_token_missing'));
+const pushReady = publicCalendarSyncStatus(Object.assign({}, pushWithoutToken, { webhookTokenSecret: 'verify-me' }), { connected: true });
+assert.equal(pushReady.push_ready, true);
 
 console.log('calendar oauth ok');

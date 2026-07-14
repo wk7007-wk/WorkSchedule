@@ -1,8 +1,9 @@
 import crypto from 'node:crypto';
-import { FeatureDisabledError, EtagConflictError } from './errors.mjs';
+import { DestinationCollisionError, FeatureDisabledError, EtagConflictError } from './errors.mjs';
 import {
   calendarCoreLogic,
   canonicalKey,
+  deterministicGoogleEventId,
   googleEventToCanonical,
   listResolvedCanonicalEvents,
   mappingIdForCanonicalKey,
@@ -45,12 +46,13 @@ function todayInZone(nowMs, timeZone) {
 }
 
 export class CalendarSyncEngine {
-  constructor({ config, store, provider, clock = () => Date.now(), sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+  constructor({ config, store, provider, clock = () => Date.now(), sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), workerId = crypto.randomUUID() }) {
     this.config = config;
     this.store = store;
     this.provider = provider;
     this.clock = clock;
     this.sleep = sleep;
+    this.workerId = String(workerId);
   }
 
   assertRunnable() {
@@ -132,6 +134,41 @@ export class CalendarSyncEngine {
     });
   }
 
+  async getEventIfPresent(eventId) {
+    try {
+      return await this.provider.getEvent(eventId);
+    } catch (error) {
+      if (error && error.status === 404) return null;
+      throw error;
+    }
+  }
+
+  verifyRecoveredInsert(event, canonicalKeyValue) {
+    const privateProps = event && event.extendedProperties && event.extendedProperties.private || {};
+    if (!event || event.status === 'cancelled' || String(privateProps.wsCanonicalKey || '') !== String(canonicalKeyValue)) {
+      throw new EtagConflictError('Deterministic Google event ID belongs to another or cancelled event');
+    }
+    return event;
+  }
+
+  async insertCanonicalEvent(entity, projected, label, identity = entity.canonicalKey) {
+    const eventId = deterministicGoogleEventId(identity);
+    const body = Object.assign({}, projected, { id: eventId });
+    return await this.withRetry(label, async () => {
+      const existing = await this.getEventIfPresent(eventId);
+      if (existing && existing.status !== 'cancelled') return this.verifyRecoveredInsert(existing, entity.canonicalKey);
+      try {
+        return await this.provider.insertEvent(body);
+      } catch (error) {
+        if (error && error.status === 409) {
+          const recovered = await this.getEventIfPresent(eventId);
+          if (recovered) return this.verifyRecoveredInsert(recovered, entity.canonicalKey);
+        }
+        throw error;
+      }
+    });
+  }
+
   async pushCanonicalEntity(entity, reason = 'outbox') {
     const mapping = await this.discoverMapping(entity);
     if (entity.state === 'clear' || entity.state === 'missing' || entity.missing) {
@@ -156,9 +193,16 @@ export class CalendarSyncEngine {
       return { status: 'deleted', eventId: mapping.eventId };
     }
 
-    const projected = projectCanonicalToGoogleEvent(entity, { locationName: this.config.locationName, timeZone: this.config.timeZone });
+    const projected = projectCanonicalToGoogleEvent(entity, {
+      locationName: this.config.locationName,
+      timeZone: this.config.timeZone,
+      operationalDayStartMin: this.config.operationalDayStartMin
+    });
     if (!mapping || !mapping.eventId || mapping.tombstone) {
-      const created = await this.withRetry('insert_event', () => this.provider.insertEvent(projected));
+      const identity = mapping && mapping.tombstone
+        ? entity.canonicalKey + '|reinsert|' + String(entity.revision)
+        : entity.canonicalKey;
+      const created = await this.insertCanonicalEvent(entity, projected, 'insert_event', identity);
       await this.store.setMapping(entity.canonicalKey, {
         mappingId: entity.mappingId || mappingIdForCanonicalKey(entity.canonicalKey),
         eventId: created.id,
@@ -175,9 +219,14 @@ export class CalendarSyncEngine {
       return { status: 'inserted', eventId: created.id };
     }
 
-    const remote = await this.provider.getEvent(mapping.eventId);
+    const remote = await this.getEventIfPresent(mapping.eventId);
     if (!remote || remote.status === 'cancelled') {
-      const created = await this.withRetry('reinsert_event', () => this.provider.insertEvent(projected));
+      const created = await this.insertCanonicalEvent(
+        entity,
+        projected,
+        'reinsert_event',
+        entity.canonicalKey + '|reinsert|' + String(entity.revision)
+      );
       await this.store.setMapping(entity.canonicalKey, Object.assign({}, mapping, {
         eventId: created.id,
         googleEtag: created.etag || '',
@@ -256,7 +305,12 @@ export class CalendarSyncEngine {
 
   async processOutbox({ limit = 50 } = {}) {
     this.assertRunnable();
-    const items = await this.store.listPendingOutbox({ nowMs: this.clock(), limit });
+    const items = await this.store.claimOutbox({
+      nowMs: this.clock(),
+      limit,
+      leaseMs: Number.isFinite(this.config.outboxLeaseMs) ? this.config.outboxLeaseMs : 60000,
+      ownerId: this.workerId
+    });
     const results = [];
     let fixedReconciled = false;
     for (const item of items) {
@@ -269,21 +323,25 @@ export class CalendarSyncEngine {
           const entity = await this.store.getCanonicalForOutbox(item);
           result = await this.pushCanonicalEntity(entity, 'outbox');
         }
-        await this.store.markOutbox(item.id, { status: 'done', completed_at_ms: this.clock(), result: result.status || 'reconciled' });
-        results.push({ id: item.id, ok: true, result });
+        const finished = await this.store.finishOutbox(item.id, item, {
+          status: 'done', completed_at_ms: this.clock(), result: result.status || 'reconciled'
+        });
+        results.push(finished
+          ? { id: item.id, ok: true, result }
+          : { id: item.id, ok: false, staleFence: true, result });
       } catch (error) {
         const attempts = Number(item.attempt_count || 0) + 1;
         const conflict = error instanceof EtagConflictError || error && error.code === 'etag_conflict';
         const retry = !conflict && error && error.retryable === true && attempts < this.config.maxAttempts;
         const backoff = this.config.retryBackoffMs[Math.min(attempts - 1, this.config.retryBackoffMs.length - 1)] || 60000;
-        await this.store.markOutbox(item.id, {
+        const finished = await this.store.finishOutbox(item.id, item, {
           status: conflict ? 'conflict' : retry ? 'retry' : 'failed',
           attempt_count: attempts,
           last_error: String(error && (error.code || error.message) || 'unknown_error').slice(0, 240),
           next_attempt_at_ms: retry ? this.clock() + backoff : null,
           failed_at_ms: retry ? null : this.clock()
         });
-        results.push({ id: item.id, ok: false, conflict, retry });
+        results.push({ id: item.id, ok: false, conflict, retry, staleFence: !finished });
       }
     }
     return { processed: items.length, results };
@@ -296,7 +354,12 @@ export class CalendarSyncEngine {
     let mapping = key ? await this.store.getMapping(key) : null;
     if (!mapping) mapping = await this.store.getMappingByEventId(event.id);
     if (mapping && mapping.googleEtag && mapping.googleEtag === event.etag) return { status: 'already_applied' };
-    const change = googleEventToCanonical(event, { employees: snapshot.employees || {}, mapping, timeZone: this.config.timeZone });
+    const change = googleEventToCanonical(event, {
+      employees: snapshot.employees || {},
+      mapping,
+      timeZone: this.config.timeZone,
+      operationalDayStartMin: this.config.operationalDayStartMin
+    });
     if (change.ignored || change.action === 'unsupported_all_day') {
       await this.audit('google_event_ignored', { event_id: event.id || '', reason: change.reason || change.action || 'unsupported' });
       return { status: 'ignored', reason: change.reason || change.action };
@@ -316,7 +379,37 @@ export class CalendarSyncEngine {
       });
       return { status: 'conflict' };
     }
-    const written = await this.store.writeImportedChange(change, { nowMs: this.clock() });
+    let destinationExpectation = null;
+    if (change.action === 'move') {
+      destinationExpectation = await this.store.getExplicitOverrideState(change.date, change.employeeId);
+      const destinationEventId = String(destinationExpectation.googleEventId || '');
+      if (destinationExpectation.exists && destinationEventId !== String(event.id || '')) {
+        await this.conflict('move_destination_occupied', {
+          event_id: event.id,
+          prior_canonical_key: priorKey,
+          destination_canonical_key: change.canonicalKey,
+          destination_revision: destinationExpectation.revision
+        });
+        return { status: 'conflict', reason: 'move_destination_occupied' };
+      }
+    }
+    let written;
+    try {
+      written = await this.store.writeImportedChange(change, {
+        nowMs: this.clock(),
+        expectedRevision: change.action === 'move' ? null : currentRevision,
+        destinationExpectation
+      });
+    } catch (error) {
+      if (!(error instanceof DestinationCollisionError) && (!error || error.code !== 'move_destination_occupied')) throw error;
+      await this.conflict('move_destination_occupied', {
+        event_id: event.id,
+        prior_canonical_key: priorKey,
+        destination_canonical_key: change.canonicalKey,
+        reason: 'destination_changed_during_write'
+      });
+      return { status: 'conflict', reason: 'move_destination_occupied' };
+    }
     const newKey = change.canonicalKey;
     if (mapping && priorKey !== newKey) await this.store.deleteMapping(priorKey);
     await this.store.setMapping(newKey, {
@@ -410,6 +503,45 @@ export class CalendarSyncEngine {
     return { accepted: true, status: 204 };
   }
 
+  async processPullSignals({ limit = 50 } = {}) {
+    this.assertRunnable();
+    if (!this.config.pullSignalConsumerEnabled) return { status: 'disabled', processed: 0, results: [] };
+    const signals = await this.store.claimPullSignals({
+      nowMs: this.clock(),
+      limit,
+      leaseMs: Number.isFinite(this.config.pullSignalLeaseMs) ? this.config.pullSignalLeaseMs : 60000,
+      ownerId: this.workerId
+    });
+    if (!signals.length) return { status: 'idle', processed: 0, results: [] };
+    try {
+      const pull = await this.pullChanges({ reason: 'google_push_signal' });
+      const results = [];
+      for (const signal of signals) {
+        const finished = await this.store.finishPullSignal(signal.id, signal, {
+          status: 'done', completed_at_ms: this.clock(), pull_sync_token: pull.nextSyncToken
+        });
+        results.push({ id: signal.id, ok: !!finished, staleFence: !finished });
+      }
+      await this.audit('google_push_signals_consumed', { signal_count: signals.length, item_count: pull.itemCount });
+      return { status: 'pulled', processed: signals.length, pull, results };
+    } catch (error) {
+      const results = [];
+      for (const signal of signals) {
+        const attempts = Number(signal.attempt_count || 0) + 1;
+        const retry = error && error.retryable === true && attempts < this.config.maxAttempts;
+        const backoff = this.config.retryBackoffMs[Math.min(attempts - 1, this.config.retryBackoffMs.length - 1)] || 60000;
+        const finished = await this.store.finishPullSignal(signal.id, signal, {
+          status: retry ? 'retry' : 'failed',
+          attempt_count: attempts,
+          next_attempt_at_ms: retry ? this.clock() + backoff : null,
+          last_error: String(error && (error.code || error.message) || 'pull_signal_error').slice(0, 240)
+        });
+        results.push({ id: signal.id, ok: false, retry, staleFence: !finished });
+      }
+      return { status: 'failed', processed: signals.length, error: error && (error.code || error.message), results };
+    }
+  }
+
   async ensurePushChannel() {
     this.assertRunnable();
     if (!this.config.pushEnabled) return { status: 'disabled' };
@@ -443,9 +575,12 @@ export class CalendarSyncEngine {
 
   async runCycle({ reason = 'periodic' } = {}) {
     this.assertRunnable();
-    const pull = await this.pullChanges({ reason });
+    const pullSignals = await this.processPullSignals();
+    const pull = pullSignals.status === 'pulled'
+      ? pullSignals.pull
+      : await this.pullChanges({ reason });
     const outbox = await this.processOutbox();
     const channel = await this.ensurePushChannel();
-    return { pull, outbox, channel };
+    return { pull, pullSignals, outbox, channel };
   }
 }

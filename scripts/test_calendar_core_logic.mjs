@@ -88,6 +88,19 @@ assert.equal(settled, false, 'outbox must not block the canonical save result');
 releaseOutbox();
 assert.equal((await saveResult.outboxPromise).ok, true);
 
+const firebaseVoidResult = await core.saveCoreThenQueue(
+  async () => undefined,
+  async () => undefined,
+  outbox
+);
+assert.equal(firebaseVoidResult.coreSaved, true, 'Firebase void canonical write is success');
+assert.equal((await firebaseVoidResult.outboxPromise).ok, true, 'Firebase void outbox write is success');
+assert.equal((await core.saveCoreThenQueue(async () => false, async () => true, outbox)).coreSaved, false);
+const thrownCore = await core.saveCoreThenQueue(async () => { throw new Error('write rejected'); }, async () => true, outbox);
+assert.equal(thrownCore.coreSaved, false);
+assert.equal(thrownCore.outboxScheduled, false);
+assert.match(thrownCore.coreError, /write rejected/);
+
 const model = view.buildCalendarModel({
   anchor: '2026-07-14', view: 'week', nowMs: 1500,
   employees: { emp1: { name: 'A' }, emp2: { name: 'B' }, emp3: { name: 'C' } },
