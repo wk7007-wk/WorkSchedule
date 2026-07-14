@@ -62,6 +62,8 @@
 
 ## 데이터/경계 기준
 - 주요 경로는 `/workschedule_v2/employees`, `fixed_schedules`, `overrides`, `status`, `attendance`다.
+- Calendar 기능은 Core와 Overlay 두 논리층으로 분리한다. Core 입력 원본은 위 `/workschedule_v2` resolver이고 Google은 `/workschedule_v2/meta/calendar_core/google` 아래 mapping/outbox/sync metadata를 쓰는 양방향 adapter다. Overlay는 `/workschedule_v2/meta/calendar_overlay/{date}`의 날씨/공휴일/일출·일몰/겹침 인원 read-model이며 실패·stale·0·empty가 Core 저장이나 기존 row를 막거나 덮지 않는다.
+- 사용자 1차 calendar UI 대상은 별도 consumer인 `/root/my-first-project/AttendanceBoard/docs/hynix`다. 이 repo의 pure interface는 `CALENDAR_SYNC_CONTRACT.md`를 따르며 Hynix 화면/live 배포 전에는 사용자-facing 완료로 보지 않는다.
 - 카톡 이미지 preview 확인 경로는 `/packhelper/storebot_termux/work_schedule_image_preview_queue/{event_id}` read + review metadata patch, `/packhelper/storebot_termux/confirmed_schedule_write_requests/{request_id}` enqueue다.
 - MCP/브라우저 검증의 DB 증거는 `/workschedule_v2`, `/packhelper/ops_manual` 등 필요한 Firebase read source를 읽기 전용으로 확인한다.
 - 스키마 계약과 read-only 점검은 `/root/my-first-project/rules/workschedule_schema_contract.txt`와 `scripts/workschedule_schema_audit.py`를 기준으로 한다.
