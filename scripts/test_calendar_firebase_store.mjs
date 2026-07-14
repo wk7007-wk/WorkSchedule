@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
-import { FirebaseScheduleStore } from '../server/calendar_sync/store.mjs';
+import { createFirebaseAdminAtomicMoveWriter, FirebaseScheduleStore } from '../server/calendar_sync/store.mjs';
+import { revisionOf } from '../server/calendar_sync/domain.mjs';
 
 const require = createRequire(import.meta.url);
 const core = require('../docs/calendar_core_logic.js');
@@ -14,6 +15,7 @@ class FakeFirebase {
     this.data = {};
     this.versions = new Map();
     this.beforeConditionalPut = null;
+    this.requests = [];
   }
 
   pathFromUrl(url) {
@@ -65,6 +67,7 @@ class FakeFirebase {
   async fetch(url, options = {}) {
     const path = this.pathFromUrl(url);
     const method = String(options.method || 'GET').toUpperCase();
+    this.requests.push({ path, method });
     if (method === 'GET') {
       return new Response(JSON.stringify(this.get(path)), { status: 200, headers: { etag: this.etag(path) } });
     }
@@ -88,6 +91,36 @@ class FakeFirebase {
   }
 }
 
+class FakeAdminDatabase {
+  constructor(overrides) {
+    this.overrides = clone(overrides || {});
+    this.failBeforeCommit = false;
+    this.retryMutation = null;
+    this.transactionCalls = 0;
+  }
+
+  ref(path) {
+    assert.equal(path, '/workschedule_v2/overrides');
+    return {
+      transaction: async update => {
+        this.transactionCalls += 1;
+        let proposed = update(clone(this.overrides));
+        if (proposed === undefined) return { committed: false, snapshot: { val: () => clone(this.overrides) } };
+        if (this.failBeforeCommit) throw new Error('injected transaction failure');
+        if (this.retryMutation) {
+          const mutate = this.retryMutation;
+          this.retryMutation = null;
+          mutate(this.overrides);
+          proposed = update(clone(this.overrides));
+          if (proposed === undefined) return { committed: false, snapshot: { val: () => clone(this.overrides) } };
+        }
+        this.overrides = clone(proposed);
+        return { committed: true, snapshot: { val: () => clone(this.overrides) } };
+      }
+    };
+  }
+}
+
 const fake = new FakeFirebase();
 const store = new FirebaseScheduleStore({ databaseUrl: 'https://firebase.test', fetchImpl: fake.fetch.bind(fake) });
 const item = core.buildOutboxItem({
@@ -101,10 +134,14 @@ const [claimsA, claimsB] = await Promise.all([
 ]);
 assert.equal(claimsA.length + claimsB.length, 1, 'Firebase if-match allows only one claim');
 const firstClaim = claimsA[0] || claimsB[0];
-assert.equal((await store.claimOutbox({ nowMs: 1099, leaseMs: 100, ownerId: 'early' })).length, 0);
-const recovered = (await store.claimOutbox({ nowMs: 1100, leaseMs: 100, ownerId: 'recovery' }))[0];
+assert.ok(await store.assertOutboxClaim(item.id, firstClaim, { nowMs: 1050 }));
+const renewedClaim = await store.renewOutboxLease(item.id, firstClaim, { nowMs: 1050, leaseMs: 100 });
+assert.equal(renewedClaim.lease_expires_at_ms, 1150);
+assert.equal((await store.claimOutbox({ nowMs: 1149, leaseMs: 100, ownerId: 'early' })).length, 0);
+const recovered = (await store.claimOutbox({ nowMs: 1150, leaseMs: 100, ownerId: 'recovery' }))[0];
 assert.equal(recovered.lease_epoch, firstClaim.lease_epoch + 1);
 assert.equal(await store.finishOutbox(item.id, firstClaim, { status: 'done' }), null, 'stale Firebase fence cannot mark done');
+assert.equal(await store.renewOutboxLease(item.id, renewedClaim, { nowMs: 1150, leaseMs: 100 }), null);
 assert.ok(await store.finishOutbox(item.id, recovered, { status: 'done' }));
 
 const signal = {
@@ -122,8 +159,6 @@ assert.equal(signalClaimsA.length + signalClaimsB.length, 1);
 const signalClaim = signalClaimsA[0] || signalClaimsB[0];
 assert.ok(await store.finishPullSignal(signalClaim.id, signalClaim, { status: 'done' }));
 
-const destinationPath = 'workschedule_v2/overrides/2026-07-15/emp1';
-const priorPath = 'workschedule_v2/overrides/2026-07-14/emp1';
 const moveChange = {
   action: 'move', date: '2026-07-15', priorDate: '2026-07-14', employeeId: 'emp1',
   row: {
@@ -131,29 +166,87 @@ const moveChange = {
     shift: { start: '10:00', end: '18:00', role: '주방' }, google_event_id: 'move-event', google_etag: '"g1"'
   }
 };
-const missingExpectation = await store.getExplicitOverrideState('2026-07-15', 'emp1');
-fake.set(destinationPath, { state: 'shift', start: '08:00', end: '16:00', updated_at_ms: 7 });
+const restWritesBeforeMove = fake.requests.filter(request => ['PUT', 'PATCH'].includes(request.method)).length;
 await assert.rejects(
-  () => store.writeImportedChange(moveChange, { nowMs: 2000, destinationExpectation: missingExpectation }),
-  error => error && error.code === 'move_destination_occupied'
+  () => store.writeImportedMoveAtomic(moveChange, { nowMs: 2000, sourceExpectedRevision: '3' }),
+  error => error && error.code === 'atomic_move_unavailable'
 );
-assert.equal(fake.get(destinationPath).start, '08:00');
+assert.equal(
+  fake.requests.filter(request => ['PUT', 'PATCH'].includes(request.method)).length,
+  restWritesBeforeMove,
+  'REST-only store fails closed before any canonical/status write'
+);
 
-fake.set(destinationPath, null);
-const raceExpectation = await store.getExplicitOverrideState('2026-07-15', 'emp1');
-fake.beforeConditionalPut = (path, database) => {
-  if (path === destinationPath) database.set(path, { state: 'off', updated_at_ms: 8 });
+const sourceRow = {
+  state: 'shift', start: '10:00', end: '18:00', shift: { start: '10:00', end: '18:00', role: '주방' },
+  google_event_id: 'move-event', updated_at_ms: 3
 };
-await assert.rejects(
-  () => store.writeImportedChange(moveChange, { nowMs: 2100, destinationExpectation: raceExpectation }),
-  error => error && error.code === 'etag_conflict'
-);
-assert.equal(fake.get(destinationPath).state, 'off', 'racing explicit override wins over stale importer ETag');
+const sourceExpectation = { exists: true, revision: revisionOf(sourceRow), googleEventId: 'move-event', row: clone(sourceRow) };
+const missingDestination = { exists: false, revision: '', googleEventId: '', row: null };
 
-fake.set(destinationPath, { state: 'shift', google_event_id: 'move-event', updated_at_ms: 9 });
-fake.set(priorPath, { state: 'shift', google_event_id: 'move-event', updated_at_ms: 3 });
-const sameEventExpectation = await store.getExplicitOverrideState('2026-07-15', 'emp1');
-await store.writeImportedChange(moveChange, { nowMs: 2200, destinationExpectation: sameEventExpectation });
-assert.equal(fake.get(destinationPath).google_event_id, 'move-event', 'same event ID is idempotently writable');
+const racedAdmin = new FakeAdminDatabase({ '2026-07-14': { emp1: sourceRow } });
+racedAdmin.overrides['2026-07-14'].emp1 = Object.assign({}, sourceRow, { start: '11:00', updated_at_ms: 4 });
+await assert.rejects(
+  () => createFirebaseAdminAtomicMoveWriter(racedAdmin)({
+    change: moveChange, nowMs: 2100, sourceExpectedRevision: sourceExpectation.revision,
+    sourceExpectation, destinationExpectation: missingDestination
+  }),
+  error => error && error.code === 'move_source_changed'
+);
+assert.equal(racedAdmin.overrides['2026-07-14'].emp1.start, '11:00');
+assert.equal(racedAdmin.overrides['2026-07-15'], undefined, 'source race leaves destination untouched');
+
+const failedAdmin = new FakeAdminDatabase({ '2026-07-14': { emp1: sourceRow } });
+failedAdmin.failBeforeCommit = true;
+await assert.rejects(
+  () => createFirebaseAdminAtomicMoveWriter(failedAdmin)({
+    change: moveChange, nowMs: 2200, sourceExpectedRevision: sourceExpectation.revision,
+    sourceExpectation, destinationExpectation: missingDestination
+  }),
+  /injected transaction failure/
+);
+assert.deepEqual(failedAdmin.overrides, { '2026-07-14': { emp1: sourceRow } }, 'mid-transaction failure commits neither side');
+
+const retryAdmin = new FakeAdminDatabase({
+  '2026-07-14': { emp1: sourceRow },
+  '2026-07-16': { emp2: { empty: [], zero: 0, note: '' } }
+});
+retryAdmin.retryMutation = overrides => {
+  overrides['2026-07-17'] = { emp3: { empty: [], zero: 0 } };
+};
+const atomicWriter = createFirebaseAdminAtomicMoveWriter(retryAdmin);
+const firstMove = await atomicWriter({
+  change: moveChange, nowMs: 2300, sourceExpectedRevision: sourceExpectation.revision,
+  sourceExpectation, destinationExpectation: missingDestination
+});
+assert.equal(firstMove.row.google_event_id, 'move-event');
+assert.equal(retryAdmin.overrides['2026-07-14'].emp1.state, 'clear');
+assert.equal(retryAdmin.overrides['2026-07-15'].emp1.google_event_id, 'move-event');
+assert.deepEqual(retryAdmin.overrides['2026-07-16'].emp2, { empty: [], zero: 0, note: '' });
+assert.deepEqual(retryAdmin.overrides['2026-07-17'].emp3, { empty: [], zero: 0 }, 'transaction retry preserves concurrent unrelated rows');
+
+const retrySnapshot = clone(retryAdmin.overrides);
+const repeated = await atomicWriter({
+  change: moveChange, nowMs: 2400, sourceExpectedRevision: sourceExpectation.revision,
+  sourceExpectation, destinationExpectation: missingDestination
+});
+assert.equal(repeated.idempotent, true);
+assert.deepEqual(retryAdmin.overrides, retrySnapshot, 'same-event retry is idempotent');
+
+const statusFirebase = new FakeFirebase();
+const atomicStore = new FirebaseScheduleStore({
+  databaseUrl: 'https://firebase.test', fetchImpl: statusFirebase.fetch.bind(statusFirebase), atomicMoveWriter: atomicWriter
+});
+await atomicStore.writeImportedMoveAtomic(moveChange, {
+  nowMs: 2500, sourceExpectedRevision: sourceExpectation.revision,
+  sourceExpectation, destinationExpectation: missingDestination
+});
+assert.equal(statusFirebase.get('workschedule_v2/status/2026-07-15/emp1').state, 'confirmed');
+assert.equal(statusFirebase.get('workschedule_v2/status/2026-07-14/emp1').state, 'clear');
+assert.equal(
+  statusFirebase.requests.some(request => request.method === 'PUT' && request.path.startsWith('workschedule_v2/overrides')),
+  false,
+  'atomic move never rewrites canonical overrides through REST PUT'
+);
 
 console.log('calendar firebase store ok');

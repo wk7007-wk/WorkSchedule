@@ -17,11 +17,12 @@ async function responseBody(response) {
 }
 
 export class GoogleCalendarProvider {
-  constructor({ calendarId, oauth, fetchImpl = fetch, apiBase = 'https://www.googleapis.com/calendar/v3' }) {
+  constructor({ calendarId, oauth, fetchImpl = fetch, apiBase = 'https://www.googleapis.com/calendar/v3', requestTimeoutMs = 15000 }) {
     this.calendarId = calendarId;
     this.oauth = oauth;
     this.fetch = fetchImpl;
     this.apiBase = apiBase.replace(/\/$/, '');
+    this.requestTimeoutMs = Math.max(1000, Number(requestTimeoutMs) || 15000);
   }
 
   calendarPath(suffix = '') {
@@ -31,8 +32,23 @@ export class GoogleCalendarProvider {
   async request(url, options = {}) {
     const accessToken = await this.oauth.getAccessToken();
     const headers = Object.assign({}, options.headers || {}, { Authorization: 'Bearer ' + accessToken });
-    const response = await this.fetch(url, Object.assign({}, options, { headers }));
-    const body = await responseBody(response);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+    let response;
+    let body;
+    try {
+      response = await this.fetch(url, Object.assign({}, options, { headers, signal: controller.signal }));
+      body = await responseBody(response);
+    } catch (error) {
+      if (controller.signal.aborted || error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+        throw new RetryableProviderError('Google Calendar request timed out', {
+          code: 'provider_timeout', status: 504, details: { timeout_ms: this.requestTimeoutMs }
+        });
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     if (response.ok) return body;
     const message = String(body && body.error && body.error.message || body && body.error_description || 'Google Calendar request failed');
     if (response.status === 410) throw new GoneSyncTokenError(message);

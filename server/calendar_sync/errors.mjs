@@ -28,6 +28,21 @@ export class DestinationCollisionError extends EtagConflictError {
   }
 }
 
+export class SourceRevisionConflictError extends EtagConflictError {
+  constructor(message = 'Move source changed after Google import precheck') {
+    super(message);
+    this.code = 'move_source_changed';
+  }
+}
+
+export class AtomicMoveUnavailableError extends EtagConflictError {
+  constructor(message = 'Atomic cross-date move writer is not configured') {
+    super(message);
+    this.code = 'atomic_move_unavailable';
+    this.status = 503;
+  }
+}
+
 export class StaleFenceError extends CalendarSyncError {
   constructor(message = 'Worker lease fence is no longer current') {
     super(message, { code: 'stale_fence', status: 409, retryable: false });

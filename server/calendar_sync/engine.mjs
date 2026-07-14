@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { DestinationCollisionError, FeatureDisabledError, EtagConflictError } from './errors.mjs';
+import { FeatureDisabledError, EtagConflictError, StaleFenceError } from './errors.mjs';
 import {
   calendarCoreLogic,
   canonicalKey,
@@ -53,6 +53,9 @@ export class CalendarSyncEngine {
     this.clock = clock;
     this.sleep = sleep;
     this.workerId = String(workerId);
+    if (provider && Object.prototype.hasOwnProperty.call(provider, 'requestTimeoutMs') && Number.isFinite(config.providerAttemptTimeoutMs)) {
+      provider.requestTimeoutMs = config.providerAttemptTimeoutMs;
+    }
   }
 
   assertRunnable() {
@@ -102,7 +105,10 @@ export class CalendarSyncEngine {
         attempt += 1;
         if (!error || error.retryable !== true || attempt >= this.config.maxAttempts) throw error;
         const configured = this.config.retryBackoffMs[Math.min(attempt - 1, this.config.retryBackoffMs.length - 1)] || 1000;
-        const delayMs = Number.isFinite(error.retryAfterMs) ? Math.max(configured, error.retryAfterMs) : configured;
+        const boundedRetryAfter = Number.isFinite(error.retryAfterMs)
+          ? Math.min(error.retryAfterMs, Number(this.config.maxRetryAfterMs || 120000))
+          : configured;
+        const delayMs = Math.max(configured, boundedRetryAfter);
         await this.audit('provider_retry', { label, attempt, delay_ms: delayMs, error_code: error.code || 'retryable_error' });
         await this.sleep(delayMs);
       }
@@ -110,7 +116,22 @@ export class CalendarSyncEngine {
     throw new Error(label + ' exhausted retries');
   }
 
-  async discoverMapping(entity) {
+  createOutboxGuard(item) {
+    return { id: item.id, claim: item };
+  }
+
+  async renewOutboxGuard(guard) {
+    if (!guard) return null;
+    const renewed = await this.store.renewOutboxLease(guard.id, guard.claim, {
+      nowMs: this.clock(),
+      leaseMs: Number.isFinite(this.config.outboxLeaseMs) ? this.config.outboxLeaseMs : 300000
+    });
+    if (!renewed) throw new StaleFenceError();
+    guard.claim = renewed;
+    return renewed;
+  }
+
+  async discoverMapping(entity, guard = null) {
     const known = await this.store.getMapping(entity.canonicalKey);
     if (known) return known;
     const matches = (await this.provider.listByPrivateProperty('wsCanonicalKey', entity.canonicalKey))
@@ -121,6 +142,7 @@ export class CalendarSyncEngine {
     }
     if (!matches.length) return null;
     const event = matches[0];
+    await this.renewOutboxGuard(guard);
     return await this.store.setMapping(entity.canonicalKey, {
       mappingId: mappingIdForCanonicalKey(entity.canonicalKey),
       eventId: event.id,
@@ -151,16 +173,17 @@ export class CalendarSyncEngine {
     return event;
   }
 
-  async insertCanonicalEvent(entity, projected, label, identity = entity.canonicalKey) {
+  async insertCanonicalEvent(entity, projected, label, identity = entity.canonicalKey, guard = null) {
     const eventId = deterministicGoogleEventId(identity);
     const body = Object.assign({}, projected, { id: eventId });
     return await this.withRetry(label, async () => {
       const existing = await this.getEventIfPresent(eventId);
       if (existing && existing.status !== 'cancelled') return this.verifyRecoveredInsert(existing, entity.canonicalKey);
       try {
+        await this.renewOutboxGuard(guard);
         return await this.provider.insertEvent(body);
       } catch (error) {
-        if (error && error.status === 409) {
+        if (error && error.status === 409 && error.code !== 'stale_fence') {
           const recovered = await this.getEventIfPresent(eventId);
           if (recovered) return this.verifyRecoveredInsert(recovered, entity.canonicalKey);
         }
@@ -169,8 +192,8 @@ export class CalendarSyncEngine {
     });
   }
 
-  async pushCanonicalEntity(entity, reason = 'outbox') {
-    const mapping = await this.discoverMapping(entity);
+  async pushCanonicalEntity(entity, reason = 'outbox', guard = null) {
+    const mapping = await this.discoverMapping(entity, guard);
     if (entity.state === 'clear' || entity.state === 'missing' || entity.missing) {
       if (!mapping || !mapping.eventId) {
         await this.audit('canonical_tombstone_no_remote', { canonical_key: entity.canonicalKey, reason });
@@ -182,8 +205,12 @@ export class CalendarSyncEngine {
           await this.conflict('concurrent_delete', { canonical_key: entity.canonicalKey, event_id: mapping.eventId, canonical_revision: entity.revision, mapped_revision: mapping.canonicalRevision, remote_etag: remote.etag, mapped_etag: mapping.googleEtag });
           throw new EtagConflictError('Both canonical row and Google event changed before delete');
         }
-        await this.withRetry('delete_event', () => this.provider.deleteEvent(mapping.eventId, remote.etag || mapping.googleEtag));
+        await this.withRetry('delete_event', async () => {
+          await this.renewOutboxGuard(guard);
+          return await this.provider.deleteEvent(mapping.eventId, remote.etag || mapping.googleEtag);
+        });
       }
+      await this.renewOutboxGuard(guard);
       await this.store.setMapping(entity.canonicalKey, Object.assign({}, mapping, {
         tombstone: true,
         canonicalRevision: String(entity.revision || ''),
@@ -202,7 +229,8 @@ export class CalendarSyncEngine {
       const identity = mapping && mapping.tombstone
         ? entity.canonicalKey + '|reinsert|' + String(entity.revision)
         : entity.canonicalKey;
-      const created = await this.insertCanonicalEvent(entity, projected, 'insert_event', identity);
+      const created = await this.insertCanonicalEvent(entity, projected, 'insert_event', identity, guard);
+      await this.renewOutboxGuard(guard);
       await this.store.setMapping(entity.canonicalKey, {
         mappingId: entity.mappingId || mappingIdForCanonicalKey(entity.canonicalKey),
         eventId: created.id,
@@ -225,8 +253,10 @@ export class CalendarSyncEngine {
         entity,
         projected,
         'reinsert_event',
-        entity.canonicalKey + '|reinsert|' + String(entity.revision)
+        entity.canonicalKey + '|reinsert|' + String(entity.revision),
+        guard
       );
+      await this.renewOutboxGuard(guard);
       await this.store.setMapping(entity.canonicalKey, Object.assign({}, mapping, {
         eventId: created.id,
         googleEtag: created.etag || '',
@@ -259,7 +289,11 @@ export class CalendarSyncEngine {
       }
       return { status: 'idempotent', eventId: mapping.eventId };
     }
-    const updated = await this.withRetry('update_event', () => this.provider.updateEvent(mapping.eventId, projected, remote.etag || mapping.googleEtag));
+    const updated = await this.withRetry('update_event', async () => {
+      await this.renewOutboxGuard(guard);
+      return await this.provider.updateEvent(mapping.eventId, projected, remote.etag || mapping.googleEtag);
+    });
+    await this.renewOutboxGuard(guard);
     await this.store.setMapping(entity.canonicalKey, Object.assign({}, mapping, {
       googleEtag: updated.etag || '',
       googleUpdated: updated.updated || '',
@@ -274,7 +308,7 @@ export class CalendarSyncEngine {
     return { status: 'updated', eventId: mapping.eventId };
   }
 
-  async reconcileCanonicalWindow({ reason = 'periodic', startDate = null, endDate = null } = {}) {
+  async reconcileCanonicalWindow({ reason = 'periodic', startDate = null, endDate = null, guard = null } = {}) {
     this.assertRunnable();
     const nowMs = this.clock();
     const start = startDate || todayInZone(nowMs, this.config.timeZone);
@@ -283,7 +317,7 @@ export class CalendarSyncEngine {
     const entities = listResolvedCanonicalEvents(snapshot, start, end);
     const expected = new Set(entities.map(entity => entity.canonicalKey));
     const results = [];
-    for (const entity of entities) results.push(await this.pushCanonicalEntity(entity, reason));
+    for (const entity of entities) results.push(await this.pushCanonicalEntity(entity, reason, guard));
     if (typeof this.store.listMappings === 'function') {
       const mappings = await this.store.listMappings();
       for (const mapping of mappings) {
@@ -296,7 +330,7 @@ export class CalendarSyncEngine {
           state: 'clear',
           source: 'reconciliation_tombstone',
           revision: 'clear-' + nowMs
-        }, reason));
+        }, reason, guard));
       }
     }
     await this.audit('canonical_reconciliation_complete', { reason, start_date: start, end_date: end, projected_count: entities.length });
@@ -305,36 +339,56 @@ export class CalendarSyncEngine {
 
   async processOutbox({ limit = 50 } = {}) {
     this.assertRunnable();
-    const items = await this.store.claimOutbox({
-      nowMs: this.clock(),
-      limit,
-      leaseMs: Number.isFinite(this.config.outboxLeaseMs) ? this.config.outboxLeaseMs : 60000,
-      ownerId: this.workerId
-    });
     const results = [];
     let fixedReconciled = false;
-    for (const item of items) {
+    let processed = 0;
+    while (processed < limit) {
+      const items = await this.store.claimOutbox({
+        nowMs: this.clock(),
+        limit: 1,
+        leaseMs: Number.isFinite(this.config.outboxLeaseMs) ? this.config.outboxLeaseMs : 300000,
+        ownerId: this.workerId
+      });
+      if (!items.length) break;
+      const item = items[0];
+      const guard = this.createOutboxGuard(item);
+      processed += 1;
       try {
         let result;
         if (item.entity === 'fixed_schedule') {
-          result = fixedReconciled ? { status: 'coalesced_fixed_reconcile' } : await this.reconcileCanonicalWindow({ reason: 'fixed_schedule_outbox' });
+          result = fixedReconciled
+            ? { status: 'coalesced_fixed_reconcile' }
+            : await this.reconcileCanonicalWindow({ reason: 'fixed_schedule_outbox', guard });
           fixedReconciled = true;
         } else {
           const entity = await this.store.getCanonicalForOutbox(item);
-          result = await this.pushCanonicalEntity(entity, 'outbox');
+          result = await this.pushCanonicalEntity(entity, 'outbox', guard);
         }
-        const finished = await this.store.finishOutbox(item.id, item, {
+        await this.renewOutboxGuard(guard);
+        const finished = await this.store.finishOutbox(item.id, guard.claim, {
           status: 'done', completed_at_ms: this.clock(), result: result.status || 'reconciled'
         });
         results.push(finished
           ? { id: item.id, ok: true, result }
           : { id: item.id, ok: false, staleFence: true, result });
       } catch (error) {
+        if (error instanceof StaleFenceError || error && error.code === 'stale_fence') {
+          results.push({ id: item.id, ok: false, staleFence: true, conflict: false, retry: false });
+          continue;
+        }
         const attempts = Number(item.attempt_count || 0) + 1;
         const conflict = error instanceof EtagConflictError || error && error.code === 'etag_conflict';
         const retry = !conflict && error && error.retryable === true && attempts < this.config.maxAttempts;
         const backoff = this.config.retryBackoffMs[Math.min(attempts - 1, this.config.retryBackoffMs.length - 1)] || 60000;
-        const finished = await this.store.finishOutbox(item.id, item, {
+        try { await this.renewOutboxGuard(guard); }
+        catch (guardError) {
+          if (guardError instanceof StaleFenceError || guardError && guardError.code === 'stale_fence') {
+            results.push({ id: item.id, ok: false, staleFence: true, conflict, retry: false });
+            continue;
+          }
+          throw guardError;
+        }
+        const finished = await this.store.finishOutbox(item.id, guard.claim, {
           status: conflict ? 'conflict' : retry ? 'retry' : 'failed',
           attempt_count: attempts,
           last_error: String(error && (error.code || error.message) || 'unknown_error').slice(0, 240),
@@ -344,7 +398,7 @@ export class CalendarSyncEngine {
         results.push({ id: item.id, ok: false, conflict, retry, staleFence: !finished });
       }
     }
-    return { processed: items.length, results };
+    return { processed, results };
   }
 
   async applyGoogleEvent(event, snapshot) {
@@ -366,9 +420,24 @@ export class CalendarSyncEngine {
     }
     const priorKey = mapping && mapping.canonicalKey || key || canonicalKey(change.priorDate || change.date, change.employeeId);
     const currentRevision = await this.store.getCanonicalRevision(priorKey);
+    let sourceExpectation = null;
+    let destinationExpectation = null;
+    let moveAlreadyApplied = false;
+    if (change.action === 'move') {
+      [sourceExpectation, destinationExpectation] = await Promise.all([
+        this.store.getExplicitOverrideState(change.priorDate, change.employeeId),
+        this.store.getExplicitOverrideState(change.date, change.employeeId)
+      ]);
+      const eventId = String(event.id || '');
+      const sourceRow = sourceExpectation.row;
+      moveAlreadyApplied = !!eventId
+        && String(destinationExpectation.googleEventId || '') === eventId
+        && String(sourceExpectation.googleEventId || '') === eventId
+        && !!sourceRow && (sourceRow.clear === true || String(sourceRow.state || sourceRow.status || sourceRow.type || '').toLowerCase() === 'clear');
+    }
     const canonicalChanged = !!mapping && String(currentRevision) !== String(mapping.canonicalRevision);
     const googleChanged = !mapping || !mapping.googleEtag || mapping.googleEtag !== event.etag;
-    if (mapping && canonicalChanged && googleChanged) {
+    if (mapping && canonicalChanged && googleChanged && !moveAlreadyApplied) {
       await this.conflict('pull_revision_conflict', {
         canonical_key: priorKey,
         event_id: event.id,
@@ -379,9 +448,7 @@ export class CalendarSyncEngine {
       });
       return { status: 'conflict' };
     }
-    let destinationExpectation = null;
     if (change.action === 'move') {
-      destinationExpectation = await this.store.getExplicitOverrideState(change.date, change.employeeId);
       const destinationEventId = String(destinationExpectation.googleEventId || '');
       if (destinationExpectation.exists && destinationEventId !== String(event.id || '')) {
         await this.conflict('move_destination_occupied', {
@@ -395,20 +462,26 @@ export class CalendarSyncEngine {
     }
     let written;
     try {
-      written = await this.store.writeImportedChange(change, {
-        nowMs: this.clock(),
-        expectedRevision: change.action === 'move' ? null : currentRevision,
-        destinationExpectation
-      });
+      written = change.action === 'move'
+        ? await this.store.writeImportedMoveAtomic(change, {
+          nowMs: this.clock(),
+          sourceExpectedRevision: currentRevision,
+          sourceExpectation,
+          destinationExpectation
+        })
+        : await this.store.writeImportedChange(change, {
+          nowMs: this.clock(), expectedRevision: currentRevision, destinationExpectation: null
+        });
     } catch (error) {
-      if (!(error instanceof DestinationCollisionError) && (!error || error.code !== 'move_destination_occupied')) throw error;
-      await this.conflict('move_destination_occupied', {
+      if (change.action !== 'move' || !(error instanceof EtagConflictError)) throw error;
+      const reason = error.code || 'atomic_move_conflict';
+      await this.conflict(reason, {
         event_id: event.id,
         prior_canonical_key: priorKey,
         destination_canonical_key: change.canonicalKey,
-        reason: 'destination_changed_during_write'
+        reason
       });
-      return { status: 'conflict', reason: 'move_destination_occupied' };
+      return { status: 'conflict', reason };
     }
     const newKey = change.canonicalKey;
     if (mapping && priorKey !== newKey) await this.store.deleteMapping(priorKey);

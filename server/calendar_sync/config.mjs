@@ -27,6 +27,24 @@ export function loadCalendarSyncConfig(env = process.env) {
   const featureEnabled = bool(env.WORKSCHEDULE_CALENDAR_SYNC_ENABLED, false);
   const killSwitch = bool(env.WORKSCHEDULE_CALENDAR_KILL_SWITCH, true);
   const webhookUrl = String(env.GOOGLE_CALENDAR_WEBHOOK_URL || '').trim();
+  const maxAttempts = number(env.WORKSCHEDULE_CALENDAR_MAX_ATTEMPTS, 4, 1, 10);
+  const retryBackoffMs = [1000, 5000, 30000, 120000];
+  const maxRetryAfterMs = number(env.WORKSCHEDULE_CALENDAR_MAX_RETRY_AFTER_MS, 120000, 1000, 300000);
+  const providerAttemptTimeoutMs = number(env.WORKSCHEDULE_CALENDAR_PROVIDER_TIMEOUT_MS, 15000, 1000, 120000);
+  let outboxOperationWindowMs = maxAttempts * providerAttemptTimeoutMs;
+  for (let attempt = 0; attempt < maxAttempts - 1; attempt += 1) {
+    outboxOperationWindowMs += Math.max(
+      retryBackoffMs[Math.min(attempt, retryBackoffMs.length - 1)],
+      maxRetryAfterMs
+    );
+  }
+  const requestedOutboxLeaseMs = number(
+    env.WORKSCHEDULE_CALENDAR_OUTBOX_LEASE_MS,
+    10 * 60 * 1000,
+    5 * 1000,
+    30 * 60 * 1000
+  );
+  const outboxLeaseMs = Math.max(requestedOutboxLeaseMs, outboxOperationWindowMs + 5000);
 
   return {
     schemaVersion: 'workschedule.calendar_sync.config.v1',
@@ -57,9 +75,12 @@ export function loadCalendarSyncConfig(env = process.env) {
     queryParams: Object.freeze({ singleEvents: 'true', showDeleted: 'true', maxResults: '2500' }),
     reconcileIntervalMs: number(env.WORKSCHEDULE_CALENDAR_RECONCILE_MS, 15 * 60 * 1000, 60 * 1000, 24 * 60 * 60 * 1000),
     reconcileHorizonDays: number(env.WORKSCHEDULE_CALENDAR_HORIZON_DAYS, 120, 7, 730),
-    maxAttempts: number(env.WORKSCHEDULE_CALENDAR_MAX_ATTEMPTS, 4, 1, 10),
-    retryBackoffMs: [1000, 5000, 30000, 120000],
-    outboxLeaseMs: number(env.WORKSCHEDULE_CALENDAR_OUTBOX_LEASE_MS, 60 * 1000, 5 * 1000, 30 * 60 * 1000),
+    maxAttempts,
+    retryBackoffMs,
+    maxRetryAfterMs,
+    providerAttemptTimeoutMs,
+    outboxOperationWindowMs,
+    outboxLeaseMs,
     pullSignalLeaseMs: number(env.WORKSCHEDULE_CALENDAR_PULL_SIGNAL_LEASE_MS, 60 * 1000, 5 * 1000, 30 * 60 * 1000),
     pullSignalConsumerEnabled: bool(env.WORKSCHEDULE_CALENDAR_PULL_SIGNAL_CONSUMER_ENABLED, true),
     webhookUrl,

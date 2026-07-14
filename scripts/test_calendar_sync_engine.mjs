@@ -24,6 +24,10 @@ function config(overrides = {}) {
   }), overrides);
 }
 
+const leaseBudgetConfig = config();
+assert.ok(leaseBudgetConfig.outboxLeaseMs > leaseBudgetConfig.outboxOperationWindowMs);
+assert.ok(leaseBudgetConfig.outboxLeaseMs > leaseBudgetConfig.providerAttemptTimeoutMs + Math.max(...leaseBudgetConfig.retryBackoffMs));
+
 const baseSnapshot = {
   employees: { emp1: { name: '이원규', active: true }, emp2: { name: '권연옥', active: true } },
   fixed_schedules: {},
@@ -214,6 +218,69 @@ assert.equal(fixedDestinationStore.snapshot.overrides['2026-07-14'].emp1.state, 
 const repeatedMove = moveEvent('"move-newer"');
 assert.equal((await fixedDestinationEngine.applyGoogleEvent(repeatedMove, await fixedDestinationStore.getSnapshot())).status, 'imported');
 assert.equal(fixedDestinationStore.snapshot.overrides['2026-07-15'].emp1.google_event_id, 'move-event', 'same event can be applied idempotently');
+
+const sourceRaceStore = new MemorySyncStore(baseSnapshot);
+const sourceRaceRevision = await sourceRaceStore.getCanonicalRevision('daily|2026-07-14|emp1');
+const sourceRaceExpectation = await sourceRaceStore.getExplicitOverrideState('2026-07-14', 'emp1');
+const sourceRaceDestination = await sourceRaceStore.getExplicitOverrideState('2026-07-15', 'emp1');
+sourceRaceStore.snapshot.overrides['2026-07-14'].emp1 = Object.assign(
+  {}, sourceRaceStore.snapshot.overrides['2026-07-14'].emp1, { start: '11:00', updated_at_ms: 101 }
+);
+await assert.rejects(
+  () => sourceRaceStore.writeImportedMoveAtomic({
+    action: 'move', date: '2026-07-15', priorDate: '2026-07-14', employeeId: 'emp1',
+    row: { state: 'shift', start: '10:00', end: '18:00', google_event_id: 'race-event', google_etag: '"race"' }
+  }, {
+    nowMs, sourceExpectedRevision: sourceRaceRevision,
+    sourceExpectation: sourceRaceExpectation, destinationExpectation: sourceRaceDestination
+  }),
+  error => error && error.code === 'move_source_changed'
+);
+assert.equal(sourceRaceStore.snapshot.overrides['2026-07-14'].emp1.start, '11:00');
+assert.equal(sourceRaceStore.snapshot.overrides['2026-07-15'], undefined, 'Memory atomic move mutates neither side after a source race');
+
+let fenceNow = 1000;
+let releaseOldRead;
+let signalOldRead;
+const oldReadReached = new Promise(resolve => { signalOldRead = resolve; });
+const oldReadRelease = new Promise(resolve => { releaseOldRead = resolve; });
+class PausingBeforeInsertProvider extends MockCalendarProvider {
+  constructor(options) { super(options); this.pauseOnce = true; }
+  async getEvent(eventId) {
+    const value = await super.getEvent(eventId);
+    if (this.pauseOnce) {
+      this.pauseOnce = false;
+      signalOldRead();
+      await oldReadRelease;
+    }
+    return value;
+  }
+}
+const fencedStore = new MemorySyncStore(baseSnapshot);
+const fencedProvider = new PausingBeforeInsertProvider({ clock: () => fenceNow });
+const fencedItem = Object.assign({}, item, { created_at_ms: fenceNow, next_attempt_at_ms: fenceNow });
+await fencedStore.enqueueOutbox(fencedItem);
+const shortLeaseConfig = config({ outboxLeaseMs: 100 });
+const staleEngine = new CalendarSyncEngine({
+  config: shortLeaseConfig, store: fencedStore, provider: fencedProvider,
+  clock: () => fenceNow, sleep: async () => {}, workerId: 'stale-rev1'
+});
+const currentEngine = new CalendarSyncEngine({
+  config: shortLeaseConfig, store: fencedStore, provider: fencedProvider,
+  clock: () => fenceNow, sleep: async () => {}, workerId: 'current-rev2'
+});
+const staleRun = staleEngine.processOutbox();
+await oldReadReached;
+fenceNow = 1100;
+const currentRun = await currentEngine.processOutbox();
+assert.equal(currentRun.results[0].ok, true);
+releaseOldRead();
+const staleResult = await staleRun;
+assert.equal(staleResult.results[0].staleFence, true);
+assert.equal(fencedProvider.events.size, 1, 'rev1 resume cannot perform a second remote mutation');
+assert.equal(fencedProvider.calls.filter(call => call.method === 'insertEvent').length, 1);
+const fencedMapping = await fencedStore.getMapping('daily|2026-07-14|emp1');
+assert.equal(fencedMapping.syncedAtMs, 1100, 'rev1 resume cannot overwrite the rev2 mapping');
 
 const killedStore = new MemorySyncStore(baseSnapshot);
 await killedStore.enqueueOutbox(item);

@@ -1,5 +1,10 @@
 import crypto from 'node:crypto';
-import { DestinationCollisionError, EtagConflictError } from './errors.mjs';
+import {
+  AtomicMoveUnavailableError,
+  DestinationCollisionError,
+  EtagConflictError,
+  SourceRevisionConflictError
+} from './errors.mjs';
 import { addWriteMetadata, canonicalKey, revisionOf, resolveCanonicalDay } from './domain.mjs';
 import { createRequire } from 'node:module';
 
@@ -89,6 +94,76 @@ function validateMoveDestination(change, current, expectation) {
   }
 }
 
+function moveRows(change, nowMs) {
+  const row = addWriteMetadata(change.row, { nowMs, source: 'google_calendar' });
+  const clear = addWriteMetadata({
+    state: 'clear', type: 'clear', shift: null, start: '', end: '', role: '', work: false, active: false,
+    off: false, dayoff: false, clear: true, google_event_id: change.row.google_event_id || '',
+    google_etag: change.row.google_etag || '', moved_to: change.date
+  }, { nowMs, source: 'google_calendar' });
+  return { row, clear };
+}
+
+function sameAppliedMove(change, source, destination) {
+  const eventId = String(change.row && change.row.google_event_id || '');
+  return !!eventId
+    && String(destination && destination.google_event_id || '') === eventId
+    && String(source && source.google_event_id || '') === eventId
+    && (source && (source.clear === true || String(source.state || source.status || source.type || '').toLowerCase() === 'clear'));
+}
+
+function validateMoveSource(source, sourceExpectedRevision, sourceExpectation) {
+  if (sourceExpectation) {
+    if (sourceExpectation.exists !== (source != null)) throw new SourceRevisionConflictError();
+    if (source && sourceExpectation.revision != null && revisionOf(source) !== String(sourceExpectation.revision)) {
+      throw new SourceRevisionConflictError();
+    }
+  }
+  // A fixed-schedule source has no explicit override inside this transaction;
+  // its missing expectation is fenced here while the resolved revision was
+  // already checked by the engine.
+  if (source && sourceExpectedRevision != null && revisionOf(source) !== String(sourceExpectedRevision)) {
+    throw new SourceRevisionConflictError();
+  }
+}
+
+export function createFirebaseAdminAtomicMoveWriter(database) {
+  if (!database || typeof database.ref !== 'function') throw new AtomicMoveUnavailableError('Firebase Admin database.ref is required');
+  return async function writeAtomicMove({ change, nowMs = Date.now(), sourceExpectedRevision = null, sourceExpectation = null, destinationExpectation = null }) {
+    if (!change || change.action !== 'move' || !change.priorDate || change.priorDate === change.date) {
+      throw new AtomicMoveUnavailableError('Atomic move writer requires two distinct dates');
+    }
+    const ref = database.ref('/workschedule_v2/overrides');
+    let blocked = null;
+    let committedRows = null;
+    const result = await ref.transaction(currentValue => {
+      const current = currentValue && typeof currentValue === 'object' ? currentValue : {};
+      const source = current[change.priorDate] && current[change.priorDate][change.employeeId];
+      const destination = current[change.date] && current[change.date][change.employeeId];
+      if (sameAppliedMove(change, source, destination)) {
+        committedRows = { row: clone(destination), clear: clone(source), idempotent: true };
+        return current;
+      }
+      try {
+        validateMoveSource(source, sourceExpectedRevision, sourceExpectation);
+        validateMoveDestination(change, destination, destinationExpectation);
+      } catch (error) {
+        blocked = error;
+        return undefined;
+      }
+      const next = clone(current);
+      if (!next[change.date] || typeof next[change.date] !== 'object') next[change.date] = {};
+      if (!next[change.priorDate] || typeof next[change.priorDate] !== 'object') next[change.priorDate] = {};
+      committedRows = moveRows(change, nowMs);
+      next[change.date][change.employeeId] = committedRows.row;
+      next[change.priorDate][change.employeeId] = committedRows.clear;
+      return next;
+    }, undefined, false);
+    if (!result || result.committed !== true) throw blocked || new SourceRevisionConflictError('Atomic move transaction aborted');
+    return clone(committedRows);
+  };
+}
+
 export class MemorySyncStore {
   constructor(snapshot = {}) {
     this.snapshot = {
@@ -130,6 +205,22 @@ export class MemorySyncStore {
       this.meta.outbox[item.id] = claimed;
       return clone(claimed);
     });
+  }
+
+  async assertOutboxClaim(id, claim, { nowMs = Date.now() } = {}) {
+    const current = this.meta.outbox[id];
+    return fenced(current, claim) && Number(current.lease_expires_at_ms || 0) > nowMs ? clone(current) : null;
+  }
+
+  async renewOutboxLease(id, claim, { nowMs = Date.now(), leaseMs = 60000 } = {}) {
+    const current = this.meta.outbox[id];
+    if (!fenced(current, claim) || Number(current.lease_expires_at_ms || 0) <= nowMs) return null;
+    const renewed = Object.assign({}, clone(current), {
+      lease_expires_at_ms: nowMs + leaseMs,
+      lease_renewed_at_ms: nowMs
+    });
+    this.meta.outbox[id] = renewed;
+    return clone(renewed);
   }
 
   async finishOutbox(id, claim, patch) {
@@ -180,6 +271,13 @@ export class MemorySyncStore {
   }
 
   async writeImportedChange(change, { nowMs = Date.now(), expectedRevision = null, destinationExpectation = null } = {}) {
+    if (change.action === 'move') {
+      return await this.writeImportedMoveAtomic(change, {
+        nowMs,
+        sourceExpectedRevision: expectedRevision,
+        destinationExpectation
+      });
+    }
     const current = this.snapshot.overrides[change.date] && this.snapshot.overrides[change.date][change.employeeId];
     if (expectedRevision != null && current && revisionOf(current) !== String(expectedRevision)) throw new EtagConflictError('Canonical override changed during Google import');
     validateMoveDestination(change, current, destinationExpectation);
@@ -188,17 +286,36 @@ export class MemorySyncStore {
     const row = addWriteMetadata(change.row, { nowMs, source: 'google_calendar' });
     this.snapshot.overrides[change.date][change.employeeId] = row;
     this.snapshot.status[change.date][change.employeeId] = statusForChange(change, nowMs);
-    if (change.action === 'move' && change.priorDate && change.priorDate !== change.date) {
-      if (!this.snapshot.overrides[change.priorDate]) this.snapshot.overrides[change.priorDate] = {};
-      if (!this.snapshot.status[change.priorDate]) this.snapshot.status[change.priorDate] = {};
-      const clear = addWriteMetadata({
-        state: 'clear', type: 'clear', shift: null, start: '', end: '', role: '', work: false, active: false,
-        off: false, dayoff: false, clear: true, google_event_id: change.row.google_event_id || '', google_etag: change.row.google_etag || ''
-      }, { nowMs, source: 'google_calendar' });
-      this.snapshot.overrides[change.priorDate][change.employeeId] = clear;
-      this.snapshot.status[change.priorDate][change.employeeId] = Object.assign(statusForChange({ action: 'clear', row: clear }, nowMs), { moved_to: change.date });
-    }
     return clone(row);
+  }
+
+  async writeImportedMoveAtomic(change, {
+    nowMs = Date.now(), sourceExpectedRevision = null, sourceExpectation = null, destinationExpectation = null
+  } = {}) {
+    const source = this.snapshot.overrides[change.priorDate] && this.snapshot.overrides[change.priorDate][change.employeeId];
+    const destination = this.snapshot.overrides[change.date] && this.snapshot.overrides[change.date][change.employeeId];
+    if (sameAppliedMove(change, source, destination)) {
+      return clone(destination);
+    }
+    validateMoveSource(source, sourceExpectedRevision, sourceExpectation);
+    validateMoveDestination(change, destination, destinationExpectation);
+    const rows = moveRows(change, nowMs);
+    const nextOverrides = clone(this.snapshot.overrides);
+    const nextStatus = clone(this.snapshot.status);
+    if (!nextOverrides[change.date]) nextOverrides[change.date] = {};
+    if (!nextOverrides[change.priorDate]) nextOverrides[change.priorDate] = {};
+    if (!nextStatus[change.date]) nextStatus[change.date] = {};
+    if (!nextStatus[change.priorDate]) nextStatus[change.priorDate] = {};
+    nextOverrides[change.date][change.employeeId] = rows.row;
+    nextOverrides[change.priorDate][change.employeeId] = rows.clear;
+    nextStatus[change.date][change.employeeId] = statusForChange(change, nowMs);
+    nextStatus[change.priorDate][change.employeeId] = Object.assign(
+      statusForChange({ action: 'clear', row: rows.clear }, nowMs),
+      { moved_to: change.date }
+    );
+    this.snapshot.overrides = nextOverrides;
+    this.snapshot.status = nextStatus;
+    return clone(rows.row);
   }
 
   async getMapping(key) {
@@ -296,13 +413,21 @@ export class MemorySyncStore {
 }
 
 export class FirebaseScheduleStore {
-  constructor({ databaseUrl, authToken = '', fetchImpl = fetch, metadataRoot = '/workschedule_v2/meta/calendar_core/google', overlayRoot = '/workschedule_v2/meta/calendar_overlay' }) {
+  constructor({
+    databaseUrl,
+    authToken = '',
+    fetchImpl = fetch,
+    metadataRoot = '/workschedule_v2/meta/calendar_core/google',
+    overlayRoot = '/workschedule_v2/meta/calendar_overlay',
+    atomicMoveWriter = null
+  }) {
     if (!databaseUrl) throw new Error('FIREBASE_DATABASE_URL is required');
     this.databaseUrl = databaseUrl.replace(/\/$/, '');
     this.authToken = authToken;
     this.fetch = fetchImpl;
     this.metadataRoot = metadataRoot;
     this.overlayRoot = overlayRoot;
+    this.atomicMoveWriter = typeof atomicMoveWriter === 'function' ? atomicMoveWriter : null;
   }
 
   url(path) {
@@ -414,6 +539,28 @@ export class FirebaseScheduleStore {
     return await this.claimRows('outbox', { nowMs, limit, leaseMs, ownerId, orderField: 'created_at_ms' });
   }
 
+  async assertOutboxClaim(id, claim, { nowMs = Date.now() } = {}) {
+    const current = await this.get(this.metaPath('outbox/' + this.mappingKey(id)));
+    return fenced(current, claim) && Number(current.lease_expires_at_ms || 0) > nowMs ? current : null;
+  }
+
+  async renewOutboxLease(id, claim, { nowMs = Date.now(), leaseMs = 60000 } = {}) {
+    const path = this.metaPath('outbox/' + this.mappingKey(id));
+    const current = await this.getWithEtag(path);
+    if (!fenced(current.body, claim) || Number(current.body.lease_expires_at_ms || 0) <= nowMs) return null;
+    const next = Object.assign({}, current.body, {
+      lease_expires_at_ms: nowMs + leaseMs,
+      lease_renewed_at_ms: nowMs
+    });
+    try {
+      await this.put(path, next, current.etag || 'null_etag');
+      return next;
+    } catch (error) {
+      if (error instanceof EtagConflictError) return null;
+      throw error;
+    }
+  }
+
   async finishOutbox(id, claim, patch) {
     return await this.finishRow('outbox', id, claim, patch);
   }
@@ -463,6 +610,13 @@ export class FirebaseScheduleStore {
   }
 
   async writeImportedChange(change, { nowMs = Date.now(), expectedRevision = null, destinationExpectation = null } = {}) {
+    if (change.action === 'move') {
+      return await this.writeImportedMoveAtomic(change, {
+        nowMs,
+        sourceExpectedRevision: expectedRevision,
+        destinationExpectation
+      });
+    }
     const path = '/workschedule_v2/overrides/' + change.date + '/' + change.employeeId;
     const current = await this.getWithEtag(path);
     if (expectedRevision != null && current.body && revisionOf(current.body) !== String(expectedRevision)) throw new EtagConflictError('Canonical override changed during Google import');
@@ -470,17 +624,37 @@ export class FirebaseScheduleStore {
     const row = addWriteMetadata(change.row, { nowMs, source: 'google_calendar' });
     await this.put(path, row, current.etag || 'null_etag');
     await this.put('/workschedule_v2/status/' + change.date + '/' + change.employeeId, statusForChange(change, nowMs));
-    if (change.action === 'move' && change.priorDate && change.priorDate !== change.date) {
-      const priorPath = '/workschedule_v2/overrides/' + change.priorDate + '/' + change.employeeId;
-      const prior = await this.getWithEtag(priorPath);
-      const clear = addWriteMetadata({
-        state: 'clear', type: 'clear', shift: null, start: '', end: '', role: '', work: false, active: false,
-        off: false, dayoff: false, clear: true, google_event_id: change.row.google_event_id || '', google_etag: change.row.google_etag || ''
-      }, { nowMs, source: 'google_calendar' });
-      await this.put(priorPath, clear, prior.etag || 'null_etag');
-      await this.put('/workschedule_v2/status/' + change.priorDate + '/' + change.employeeId, Object.assign(statusForChange({ action: 'clear', row: clear }, nowMs), { moved_to: change.date }));
-    }
     return row;
+  }
+
+  async writeImportedMoveAtomic(change, {
+    nowMs = Date.now(), sourceExpectedRevision = null, sourceExpectation = null, destinationExpectation = null
+  } = {}) {
+    if (!this.atomicMoveWriter) throw new AtomicMoveUnavailableError();
+    const rows = await this.atomicMoveWriter({
+      change: clone(change), nowMs, sourceExpectedRevision, sourceExpectation: clone(sourceExpectation),
+      destinationExpectation: clone(destinationExpectation)
+    });
+    if (!rows || !rows.row || !rows.clear) throw new AtomicMoveUnavailableError('Atomic move writer returned no committed rows');
+    try {
+      await this.put('/workschedule_v2/status/' + change.date + '/' + change.employeeId, statusForChange(change, nowMs));
+      await this.put(
+        '/workschedule_v2/status/' + change.priorDate + '/' + change.employeeId,
+        Object.assign(statusForChange({ action: 'clear', row: rows.clear }, nowMs), { moved_to: change.date })
+      );
+    } catch (error) {
+      await this.appendAudit({
+        schema_version: 'workschedule.calendar_sync.audit.v1',
+        action: 'atomic_move_status_retry_needed',
+        event_id: change.row.google_event_id || '',
+        prior_date: change.priorDate,
+        date: change.date,
+        at_ms: nowMs,
+        error: String(error && (error.code || error.message) || 'status_write_failed').slice(0, 200)
+      });
+      throw error;
+    }
+    return clone(rows.row);
   }
 
   async getMapping(key) {
