@@ -7,6 +7,7 @@
 
 ## 데이터 저장
 - Firebase `/workschedule_v2`가 단일 근무 데이터 원본이다.
+- 향후 Google 연동은 하이닉스 전용 새 계정과 별도 OAuth client/config/store를 사용한다. BankTotal 개인계정 token/Calendar ID/syncToken을 재사용하지 않으며, 현재는 미구현·미연결이다.
 - `localStorage`는 인증 토큰, UI 상태, 운영메뉴얼 후보, 이미지 출력 due 상태만 보조로 쓴다.
 - Firebase 실패를 로컬 원본처럼 숨기지 않는다.
 - 출근/퇴근/실근태 원본은 `/workschedule_v2/attendance/{date}/{empId}`다.

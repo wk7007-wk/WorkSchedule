@@ -9,6 +9,7 @@
 - 공식 웹 출력은 `docs/` GitHub Pages `https://wk7007-wk.github.io/WorkSchedule/`다.
 - 하이닉스 사이트/HynixOps, StoreBotTermux, 대시보드는 Firebase `/workschedule_v2`를 소비한다.
 - `/packhelper/storebot_summary/schedule`은 표시용 캐시일 뿐 canonical 근무표 근거가 아니다.
+- 하이닉스 근무표의 향후 Google 연동은 BankTotal 개인계정과 다른 새 Google 계정, 별도 OAuth client/project/config, 별도 token/Calendar/syncToken 저장소를 사용한다. 현재는 미구현·미연결 상태이며 `/workschedule_v2`가 계속 canonical이다.
 - 카톡 전달은 최신 근무표 PNG 이미지를 웹 공유 메뉴 또는 다운로드 파일로 출력한다.
 - 카톡 이미지 근무 확인은 preview queue 항목을 사람이 확인한 뒤 backend confirmed request queue로만 넘긴다.
 
