@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadCalendarSyncConfig, publicCalendarSyncStatus } from '../server/calendar_sync/config.mjs';
 import { EncryptedFileTokenStore, GoogleOAuthServerFlow, MemoryOAuthStateStore, MemoryTokenStore } from '../server/calendar_sync/oauth.mjs';
+import { createCalendarOAuthHttpHandlers, safeReturnTo } from '../server/calendar_sync/http.mjs';
 
 let nowMs = 1000;
 const config = loadCalendarSyncConfig({
@@ -29,6 +30,9 @@ assert.equal(publicStatus.oauth_start_path, '/api/workschedule/calendar/oauth/st
 assert.equal(publicStatus.manual_oauth_ready, true);
 assert.ok(publicStatus.blocked_reasons.includes('google_token_not_connected'));
 assert.equal(publicCalendarSyncStatus(config, { connected: true }).live_auth_ready, true);
+assert.equal(safeReturnTo('/hynix/?from=button'), '/hynix/?from=button');
+assert.equal(safeReturnTo('https://evil.example/hynix/'), '/hynix/');
+assert.equal(safeReturnTo('//evil.example/hynix/'), '/hynix/');
 
 const calls = [];
 const responses = [
@@ -54,6 +58,31 @@ const connected = await oauth.handleCallback({ code: 'code', state: parsed.searc
 assert.equal(connected.connected, true);
 assert.equal((await tokenStore.load()).refresh_token, 'refresh-secret');
 assert.match(String(calls[0].options.body), /client_secret=server-client-secret/);
+
+const handlerResponses = [
+  { access_token: 'handler-access', refresh_token: 'handler-refresh', expires_in: 3600, token_type: 'Bearer' }
+];
+const handlerFlow = new GoogleOAuthServerFlow({
+  config,
+  tokenStore: new MemoryTokenStore(),
+  stateStore: new MemoryOAuthStateStore({ clock: () => nowMs }),
+  fetchImpl: async () => new Response(JSON.stringify(handlerResponses.shift()), { status: 200 }),
+  clock: () => nowMs
+});
+const deniedHandlers = createCalendarOAuthHttpHandlers({ oauth: handlerFlow, isOwner: async () => false });
+assert.equal((await deniedHandlers.start({ query: { return_to: '/hynix/' } })).status, 403);
+const handlers = createCalendarOAuthHttpHandlers({ oauth: handlerFlow, isOwner: async () => true });
+const startResponse = await handlers.start({ query: { return_to: '/hynix/?from=button' } });
+assert.equal(startResponse.status, 302);
+const handlerAuthorizationUrl = new URL(startResponse.headers.location);
+assert.equal(handlerAuthorizationUrl.hostname, 'accounts.google.com');
+assert.equal(handlerAuthorizationUrl.searchParams.has('client_secret'), false);
+const callbackResponse = await handlers.callback({ query: {
+  code: 'handler-code', state: handlerAuthorizationUrl.searchParams.get('state')
+} });
+assert.equal(callbackResponse.status, 302);
+assert.equal(callbackResponse.headers.location, '/hynix/?from=button&calendar=connected');
+assert.equal((await handlers.callback({ query: { code: 'bad', state: 'bad' } })).status, 400);
 
 nowMs = 5000;
 assert.equal(await oauth.getAccessToken(), 'access-2');

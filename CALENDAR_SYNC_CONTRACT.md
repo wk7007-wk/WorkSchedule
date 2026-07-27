@@ -64,6 +64,7 @@
 - provider: `MockCalendarProvider`, `GoogleCalendarProvider`.
 - OAuth/token: `GoogleOAuthServerFlow` + AES-256-GCM `EncryptedFileTokenStore`. Client ID/secret, refresh token, encryption key는 browser/source tree에 두지 않는다.
 - 개인폰 Hynix 화면의 수동 연결 버튼은 RTDB `public_config.oauth_start_path`가 고정 same-origin `/api/workschedule/calendar/oauth/start`이고 전용 Google credential 준비가 확인된 경우에만 관리자에게 활성화된다. 브라우저는 secret/token을 받지 않고 server OAuth 시작 endpoint로만 이동한다.
+- framework-neutral endpoint 계약은 `server/calendar_sync/http.mjs`다. start는 outer adapter의 owner 인증을 요구하고, callback은 OAuth state를 소비한 뒤 `/hynix/?calendar=connected`로만 돌아간다. 외부 return URL과 open redirect는 차단한다.
 
 ## Sync guarantees
 
