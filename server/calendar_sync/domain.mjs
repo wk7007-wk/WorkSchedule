@@ -147,7 +147,6 @@ export function projectCanonicalToGoogleEvent(entity, options = {}) {
   if (entity.state === 'off') {
     return {
       summary: '휴무 · ' + employeeName,
-      description: 'WorkSchedule /workschedule_v2에서 동기화된 날짜별 휴무입니다.',
       start: { date: entity.date },
       end: { date: plusDays(entity.date, 1) },
       extendedProperties: { private: privateProps }
@@ -163,8 +162,6 @@ export function projectCanonicalToGoogleEvent(entity, options = {}) {
   const role = String(entity.shift.role || '역할 미지정');
   return {
     summary: employeeName + ' · ' + role,
-    description: 'WorkSchedule /workschedule_v2 일정 projection입니다. Google에서 바꾼 날짜/시간은 날짜별 override로 돌아옵니다.',
-    location: String(options.locationName || ''),
     start: { dateTime: zonedDateTime(startDate, entity.shift.start), timeZone: options.timeZone || 'Asia/Seoul' },
     end: { dateTime: zonedDateTime(endDate, entity.shift.end), timeZone: options.timeZone || 'Asia/Seoul' },
     extendedProperties: { private: privateProps }

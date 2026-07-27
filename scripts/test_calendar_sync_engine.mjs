@@ -84,6 +84,8 @@ const overnightEntity = {
 };
 const overnightProjection = projectCanonicalToGoogleEvent(overnightEntity, { operationalDayStartMin: 360, timeZone: 'Asia/Seoul' });
 assert.equal(overnightProjection.start.dateTime, '2026-07-15T02:00:00+09:00');
+assert.deepEqual(Object.keys(overnightProjection).sort(), ['end', 'extendedProperties', 'start', 'summary'],
+  'outbound projection contains only shared schedule fields plus private sync identity');
 const overnightRoundTrip = googleEventToCanonical(Object.assign({ id: 'night-event', etag: 'night-etag' }, overnightProjection), {
   employees: baseSnapshot.employees, operationalDayStartMin: 360, timeZone: 'Asia/Seoul'
 });
