@@ -9,12 +9,13 @@
 - 공식 웹 출력은 `docs/` GitHub Pages `https://wk7007-wk.github.io/WorkSchedule/`다.
 - 하이닉스 사이트/HynixOps, StoreBotTermux, 대시보드는 Firebase `/workschedule_v2`를 소비한다.
 - `/packhelper/storebot_summary/schedule`은 표시용 캐시일 뿐 canonical 근무표 근거가 아니다.
-- 하이닉스 근무표의 향후 Google 연동은 BankTotal 개인계정과 다른 새 Google 계정, 별도 OAuth client/project/config, 별도 token/Calendar/syncToken 저장소를 사용한다. 현재는 미구현·미연결 상태이며 `/workschedule_v2`가 계속 canonical이다.
+- 하이닉스 근무표의 Google 양방향 동기화 코어는 구현돼 있으나 기본 feature-off/kill-switch-on 상태다. BankTotal 개인계정과 다른 새 Google 계정, 별도 OAuth client/project/config, 별도 token/Calendar/syncToken 저장소를 연결하고 물리 검증하기 전에는 live write를 켜지 않는다. `/workschedule_v2`가 계속 canonical이다.
 - 카톡 전달은 최신 근무표 PNG 이미지를 웹 공유 메뉴 또는 다운로드 파일로 출력한다.
 - 카톡 이미지 근무 확인은 preview queue 항목을 사람이 확인한 뒤 backend confirmed request queue로만 넘긴다.
 
 ## 절대 기준
 - Firebase `/workschedule_v2`가 단일 근무 데이터 원본이다.
+- Google과 양방향으로 맞추는 교집합은 직원 식별, 근무일, 시작/종료, 역할, 휴무, 삭제/clear, 날짜 이동이다. Google 전용 참석자/알림/공개범위/반복/색상/설명/장소와 Hynix 전용 날씨/공휴일/일출·일몰/게이지/색상은 서로의 원본으로 가져오지 않는다.
 - 운영메뉴얼 durable source는 Firebase `/packhelper/ops_manual`이다. WorkSchedule/HynixOps는 원본 항목을 읽기 전용으로 합산하고, 사이트 입력은 `/packhelper/ops_manual/candidates/{id}` 후보 큐에만 등록한다. `localStorage`는 인증 토큰, UI 상태, 실패 시 임시 보관 백업, 이미지 출력 due 상태 같은 브라우저 보조 상태만 맡는다.
 - `/packhelper/ops_manual`가 비어도 직원용 운영메뉴얼 필수 항목(배민/쿠팡/BBQ앱/BBQ쿠폰 안내)은 공개 seed fallback으로 보여야 한다.
 - 메모추가 통합 입력은 텍스트, URL, 이미지(붙여넣기/드래그/업로드), 카카오 대화, CLI, 타이머앱, 사이트 입력을 즉시 envelope로 바꾸고, 분류 후보(운영메뉴얼/레시피/배달정보/할일/할인행사/근무표/뉴스/날씨/규정)를 같이 보여준 뒤 후보 큐에서 리소스/모델/MCP 필요 여부/카테고리/태그/반영 방식을 판단하게 한다.

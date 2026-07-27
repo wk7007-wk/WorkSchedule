@@ -95,6 +95,22 @@ const allDayOff = googleEventToCanonical({
 }, { employees: baseSnapshot.employees, operationalDayStartMin: 360 });
 assert.equal(allDayOff.date, '2026-07-15', 'all-day off keeps its literal date');
 
+const sharedFieldEdit = googleEventToCanonical({
+  id: 'shared-field-event', etag: 'shared-field-etag', summary: '이원규 · 홀',
+  description: 'Google 전용 메모', location: 'Google 전용 장소',
+  attendees: [{ email: 'ignored@example.com' }], reminders: { useDefault: false }, visibility: 'private',
+  start: { dateTime: '2026-07-15T09:30:00+09:00', timeZone: 'Asia/Seoul' },
+  end: { dateTime: '2026-07-15T17:30:00+09:00', timeZone: 'Asia/Seoul' },
+  extendedProperties: { private: { wsEmployeeId: 'emp1', wsRole: '주방' } }
+}, { employees: baseSnapshot.employees, operationalDayStartMin: 360, timeZone: 'Asia/Seoul' });
+assert.equal(sharedFieldEdit.row.role, '홀', 'the shared role field follows the Google title');
+assert.equal(sharedFieldEdit.row.start, '09:30');
+assert.equal(sharedFieldEdit.row.end, '17:30');
+for (const googleOnlyField of ['description', 'location', 'attendees', 'reminders', 'visibility']) {
+  assert.equal(Object.prototype.hasOwnProperty.call(sharedFieldEdit.row, googleOnlyField), false,
+    `Google-only ${googleOnlyField} must not enter the canonical schedule`);
+}
+
 await provider.simulateExternalEdit(created.id, {
   start: { dateTime: '2026-07-14T11:00:00+09:00', timeZone: 'Asia/Seoul' },
   end: { dateTime: '2026-07-14T19:00:00+09:00', timeZone: 'Asia/Seoul' }

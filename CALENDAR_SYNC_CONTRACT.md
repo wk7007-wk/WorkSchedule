@@ -10,6 +10,14 @@
 
 ## 논리 2계층
 
+### 양쪽 공통 기능 교집합
+
+- Hynix와 Google 사이에서 서로 수정되는 필드는 `직원 식별`, `근무일`, `시작`, `종료`, `역할`, `휴무`, `삭제/clear`, `날짜 이동`뿐이다.
+- Google 제목 형식은 `직원명 · 역할`, 휴무는 `휴무 · 직원명`이다. 연결된 이벤트의 직원 식별은 stable mapping으로 보호하고, 제목의 역할 부분은 날짜/시간과 함께 canonical override로 돌아온다.
+- Google 전용 `description`, `location`, `recurrence`, `attendees`, `reminders`, `transparency`, `visibility`, event color는 Hynix 기능으로 가장하지 않고 canonical에 import하지 않는다.
+- Hynix 전용 날씨, 공휴일, 일출/일몰, 겹침 게이지, 그라데이션/색상도 Google 이벤트로 내보내지 않는다.
+- 공통 필드 밖의 Google 속성은 Google에 그대로 남을 수 있지만 동기화 판단과 충돌 판정의 입력으로 사용하지 않는다.
+
 ### 1. Calendar Core
 
 - schedule canonical: `/workschedule_v2`

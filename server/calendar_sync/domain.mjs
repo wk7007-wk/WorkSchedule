@@ -195,6 +195,18 @@ function employeeFromEvent(event, employees, mapping) {
   }) || '';
 }
 
+function roleFromEventSummary(event, employee, privateProps) {
+  const fallback = Object.prototype.hasOwnProperty.call(privateProps, 'wsRole')
+    ? String(privateProps.wsRole)
+    : '';
+  const summary = String(event && event.summary || '').trim();
+  const employeeName = String(employee && employee.name || '').trim();
+  if (!summary || !employeeName || /^휴무\s*[·:-]/.test(summary)) return fallback;
+  const match = summary.match(/^(.*?)\s*[·:-]\s*(.+)$/);
+  if (!match || match[1].trim().toLowerCase() !== employeeName.toLowerCase()) return fallback;
+  return match[2].trim();
+}
+
 export function googleEventToCanonical(event, context = {}) {
   const employees = context.employees || {};
   const mapping = context.mapping || null;
@@ -247,7 +259,7 @@ export function googleEventToCanonical(event, context = {}) {
   const operationalDate = startMinute != null && startMinute < operationalDayStartMin
     ? plusDays(start.date, -1)
     : start.date;
-  const role = Object.prototype.hasOwnProperty.call(privateProps, 'wsRole') ? String(privateProps.wsRole) : '';
+  const role = roleFromEventSummary(event, employees[employeeId], privateProps);
   const row = {
     state: 'shift', type: 'manual_shift',
     shift: { start: start.time, end: end.time, role },
