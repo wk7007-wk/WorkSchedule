@@ -14,6 +14,7 @@ const config = loadCalendarSyncConfig({
   GOOGLE_OAUTH_CLIENT_SECRET: 'server-client-secret',
   GOOGLE_OAUTH_REDIRECT_URI: 'https://sync.example.test/oauth/google/callback',
   GOOGLE_CALENDAR_ID: 'calendar@example.test',
+  WORKSCHEDULE_CALENDAR_OAUTH_START_PATH: '/api/workschedule/calendar/oauth/start',
   WORKSCHEDULE_TOKEN_ENCRYPTION_KEY: Buffer.alloc(32, 7).toString('base64')
 });
 assert.equal(config.googleCredentialsReady, true);
@@ -24,6 +25,8 @@ assert.equal('tokenEncryptionKey' in publicStatus, false);
 assert.equal(publicStatus.credentials_configured, true);
 assert.equal(publicStatus.token_connected, false);
 assert.equal(publicStatus.live_auth_ready, false, 'configured credentials alone are not a live connection');
+assert.equal(publicStatus.oauth_start_path, '/api/workschedule/calendar/oauth/start');
+assert.equal(publicStatus.manual_oauth_ready, true);
 assert.ok(publicStatus.blocked_reasons.includes('google_token_not_connected'));
 assert.equal(publicCalendarSyncStatus(config, { connected: true }).live_auth_ready, true);
 
@@ -83,6 +86,10 @@ await fs.rm(temp, { recursive: true, force: true });
 const blocked = publicCalendarSyncStatus(loadCalendarSyncConfig({ WORKSCHEDULE_CALENDAR_PROVIDER: 'google' }));
 assert.ok(blocked.blocked_reasons.includes('google_credentials_missing'));
 assert.ok(blocked.blocked_reasons.includes('kill_switch'));
+assert.equal(blocked.oauth_start_path, '');
+assert.equal(loadCalendarSyncConfig({
+  WORKSCHEDULE_CALENDAR_OAUTH_START_PATH: 'https://evil.example/oauth'
+}).oauthStartPath, '');
 
 const pushWithoutToken = loadCalendarSyncConfig({
   WORKSCHEDULE_CALENDAR_PROVIDER: 'google',

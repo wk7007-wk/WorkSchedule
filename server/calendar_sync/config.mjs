@@ -16,6 +16,11 @@ function csv(value, fallback) {
   return entries.length ? entries : String(fallback).split(',').map(item => item.trim()).filter(Boolean);
 }
 
+function oauthStartPath(value) {
+  const expected = '/api/workschedule/calendar/oauth/start';
+  return String(value || '').trim() === expected ? expected : '';
+}
+
 export function loadCalendarSyncConfig(env = process.env) {
   const provider = String(env.WORKSCHEDULE_CALENDAR_PROVIDER || 'mock').trim().toLowerCase();
   const clientId = String(env.GOOGLE_OAUTH_CLIENT_ID || '').trim();
@@ -61,6 +66,7 @@ export function loadCalendarSyncConfig(env = process.env) {
     redirectUri,
     calendarId,
     oauthScopes: csv(env.GOOGLE_OAUTH_SCOPES, 'https://www.googleapis.com/auth/calendar.events'),
+    oauthStartPath: oauthStartPath(env.WORKSCHEDULE_CALENDAR_OAUTH_START_PATH),
     tokenEncryptionKey,
     tokenFile: String(env.WORKSCHEDULE_TOKEN_FILE || '/var/lib/workschedule/google-calendar-token.enc'),
     firebaseDatabaseUrl: String(env.FIREBASE_DATABASE_URL || '').replace(/\/$/, ''),
@@ -127,6 +133,8 @@ export function publicCalendarSyncStatus(config, runtime = {}) {
     credentials_configured: credentialsConfigured,
     token_connected: tokenConnected,
     live_auth_ready: liveAuthReady,
+    oauth_start_path: credentialsConfigured ? config.oauthStartPath : '',
+    manual_oauth_ready: credentialsConfigured && !!config.oauthStartPath,
     push_enabled: config.pushEnabled,
     push_ready: pushReady,
     periodic_reconciliation: config.periodicPullEnabled,

@@ -63,6 +63,7 @@
 - store: `MemorySyncStore` for local tests, `FirebaseScheduleStore` for server worker. Firebase worker는 Admin RTDB 인스턴스로 `createFirebaseAdminAtomicImportWriter(database)`와 `createFirebaseAdminMappingCasWriter(database)`를 만들고 각각 `atomicImportWriter`, `mappingCasWriter`로 주입한다. 모든 Google canonical/status import는 `/workschedule_v2` 공통 루트 transaction, 모든 mapping mutation은 metadata transaction을 사용한다. REST-only store는 canonical/status/mapping write 전에 fail-closed한다. `createFirebaseAdminAtomicMoveWriter`/`atomicMoveWriter`는 이전 호출부용 alias다.
 - provider: `MockCalendarProvider`, `GoogleCalendarProvider`.
 - OAuth/token: `GoogleOAuthServerFlow` + AES-256-GCM `EncryptedFileTokenStore`. Client ID/secret, refresh token, encryption key는 browser/source tree에 두지 않는다.
+- 개인폰 Hynix 화면의 수동 연결 버튼은 RTDB `public_config.oauth_start_path`가 고정 same-origin `/api/workschedule/calendar/oauth/start`이고 전용 Google credential 준비가 확인된 경우에만 관리자에게 활성화된다. 브라우저는 secret/token을 받지 않고 server OAuth 시작 endpoint로만 이동한다.
 
 ## Sync guarantees
 
