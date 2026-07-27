@@ -6,7 +6,7 @@
 - 사용자 1차 UI 대상은 WorkSchedule GitHub Pages가 아니라 Hynix 근무표 탭이다.
   - WorkSchedule 관리면: `/root/WorkSchedule/docs` -> `https://wk7007-wk.github.io/WorkSchedule/`
   - Hynix consumer: `/root/my-first-project/AttendanceBoard/docs/hynix` -> `https://poskds-attendance.web.app/hynix/`
-- 이 커밋은 Hynix HTML/CSS/app을 수정하지 않는다. Hynix day/week/month 입력 UI와 실제 브라우저/live deploy 검증은 다음 단일 executor 작업이다.
+- Hynix source adapter는 `/root/my-first-project` commit `5a8fa8b`에 구현됐다. 실제 브라우저/live deploy와 Google OAuth worker 기동은 아직 차단 상태다.
 
 ## 논리 2계층
 
@@ -37,20 +37,13 @@
 
 ## Hynix consumer exact interface
 
-1. `docs/calendar_core_logic.js`를 Hynix deploy tree에 mirror하고 먼저 로드한다.
-   - browser global: `window.WorkScheduleCalendarCoreLogic`
-   - namespace: `CALENDAR_NAMESPACE`
-   - permanent fixed write: `buildPermanentFixedSchedule(existing, patch, {nowMs, source})`
-   - non-blocking save hook: `saveCoreThenQueue(writeCore, queueOutbox, item, onOutboxError)`
-   - stable outbox: `buildOutboxItem({entity,date,employeeId,row,nowMs})`
-   - overlap/sort/light: `computeOverlap`, `sortEmployeeIdsForDate`, `classifyShiftLight`, `buildDayGradient`
-2. `docs/calendar_view_logic.js`를 같은 deploy tree에 mirror하고 Core 다음에 로드한다.
-   - browser global: `window.WorkScheduleCalendarViewLogic`
-   - input: `buildCalendarModel({anchor,view,employees,employeeIds,overlays,resolveShift,resolveOff,resolveStatus})`
-   - output: `renderCalendarMarkup(model)`
-   - delegated UI hooks: `data-calendar-view`, `data-calendar-select-day`, `data-calendar-create-day`, `data-calendar-slot-date`, `data-calendar-slot-minute`, `data-calendar-event`, `data-calendar-date`, `data-calendar-employee`
-3. Hynix save adapter는 `writeCore`로 `/workschedule_v2/overrides|status`를 먼저 성공시킨 뒤 outbox를 예약한다. outbox reject/timeout은 UI에 sync pending으로만 보이고 Core 성공을 rollback하지 않는다.
-4. 날짜별 편집은 `overrides`; 고정 변경은 `fixed_schedules`에 만기 없이 영구 저장한다. `buildPermanentFixedSchedule`은 기존 unknown field, 빈 배열, 0을 보존하고 legacy expiry field를 새 row에 쓰지 않는다.
+1. Hynix deploy tree의 `calendar_sync_logic.js`를 `app.js`보다 먼저 로드한다.
+   - browser global: `window.HynixCalendarSyncLogic`
+   - stable outbox: `buildOutboxItem({entity,dateKey,empId,row,nowMs,canonicalRoot})`
+   - profile: `shared_schedule_intersection_v1`
+2. Hynix save adapter는 `/workschedule_v2/overrides|status|fixed_schedules`를 먼저 성공시킨 뒤 같은 row revision의 outbox를 예약한다. outbox reject/timeout은 Core 성공을 rollback하지 않고 재시도 필요 상태로 표시한다.
+3. 날짜별 편집은 `overrides`; 고정 변경은 `fixed_schedules`다. 고정 변경 outbox는 개별 날짜를 만들지 않고 bounded horizon reconciliation을 요청한다.
+4. `docs/calendar_core_logic.js`와 `docs/calendar_view_logic.js`는 WorkSchedule의 재사용 가능한 Calendar UI/계산 모듈이며, 현재 Hynix 양방향 adapter 동작의 필수 런타임 파일은 아니다.
 
 ## Server exact interface
 

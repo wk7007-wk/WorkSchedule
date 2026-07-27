@@ -34,7 +34,7 @@
 - `SPEC.txt` — 근무표 상세 스펙
 - `CLAUDE.md` — WorkSchedule 전용 작업 규칙
 - `REFACTOR_HANDOFF.md` — 과거 슬림 재작성 기록. 현 기준과 충돌하면 `APP_INTENT.md`/현재 코드 우선
-- `CALENDAR_SYNC_CONTRACT.md` — Calendar Core(`/workschedule_v2` + Google adapter metadata)와 Overlay(weather/sun/holiday/overlap) 2계층, 서버 sync engine, Hynix 다음 consumer interface. 현재 Hynix UI/live deploy 미적용.
+- `CALENDAR_SYNC_CONTRACT.md` — Calendar Core(`/workschedule_v2` + Google adapter metadata)와 Overlay(weather/sun/holiday/overlap) 2계층, 서버 sync engine, Hynix consumer interface. Hynix source adapter는 `/root/my-first-project@5a8fa8b`, live deploy/OAuth worker는 미적용.
 - `docs/calendar_core_logic.js` — day/week/month range, event projection용 overlap/정렬/일출 밝기, permanent fixed merge, non-blocking outbox 순수 계약.
 - `docs/calendar_view_logic.js` — Core+Overlay calendar view model/markup 순수 renderer. WorkSchedule HTML에는 아직 연결하지 않고 Hynix consumer가 deploy tree에 mirror해 사용한다.
 - `server/calendar_sync/` — server-only OAuth/token, Google/mock provider, Firebase/Memory store, incremental sync/410/etag/retry/webhook engine.
