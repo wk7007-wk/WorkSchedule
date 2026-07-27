@@ -53,6 +53,7 @@ export function loadCalendarSyncConfig(env = process.env) {
     killSwitch,
     pushEnabled: bool(env.WORKSCHEDULE_CALENDAR_PUSH_ENABLED, false),
     periodicPullEnabled: bool(env.WORKSCHEDULE_CALENDAR_PERIODIC_PULL_ENABLED, true),
+    pastDateWritesAllowed: bool(env.WORKSCHEDULE_CALENDAR_PAST_DATE_WRITES_ALLOWED, false),
     liveAuthBlocked: provider === 'google' && !googleCredentialsReady,
     googleCredentialsReady,
     clientId,

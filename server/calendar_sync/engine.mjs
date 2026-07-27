@@ -410,7 +410,15 @@ export class CalendarSyncEngine {
       processed += 1;
       try {
         let result;
-        if (item.entity === 'fixed_schedule') {
+        if (!this.config.pastDateWritesAllowed && item.entity !== 'fixed_schedule'
+          && item.date && item.date < todayInZone(this.clock(), this.config.timeZone)) {
+          result = { status: 'skipped_past_date', date: item.date };
+          await this.audit('past_outbox_skipped', {
+            canonical_key: item.canonical_key || '',
+            date: item.date,
+            reason: 'past_date_writes_disabled'
+          });
+        } else if (item.entity === 'fixed_schedule') {
           result = fixedReconciled
             ? { status: 'coalesced_fixed_reconcile' }
             : await this.reconcileCanonicalWindow({ reason: 'fixed_schedule_outbox', guard });
@@ -502,6 +510,15 @@ export class CalendarSyncEngine {
     if (change.ignored || change.action === 'unsupported_all_day') {
       await this.audit('google_event_ignored', { event_id: event.id || '', reason: change.reason || change.action || 'unsupported' });
       return { status: 'ignored', reason: change.reason || change.action };
+    }
+    if (!this.config.pastDateWritesAllowed
+      && change.date < todayInZone(this.clock(), this.config.timeZone)) {
+      await this.audit('google_event_ignored', {
+        event_id: event.id || '',
+        date: change.date,
+        reason: 'past_date_writes_disabled'
+      });
+      return { status: 'ignored', reason: 'past_date_writes_disabled' };
     }
     const priorKey = mapping && mapping.canonicalKey || key || canonicalKey(change.priorDate || change.date, change.employeeId);
     const currentRevision = await this.store.getCanonicalRevision(priorKey);

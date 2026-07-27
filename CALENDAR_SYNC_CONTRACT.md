@@ -13,6 +13,7 @@
 ### 양쪽 공통 기능 교집합
 
 - Hynix와 Google 사이에서 서로 수정되는 필드는 `직원 식별`, `근무일`, `시작`, `종료`, `역할`, `휴무`, `삭제/clear`, `날짜 이동`뿐이다.
+- 양쪽의 사용자 수정 범위와 맞춰 과거 날짜 write/import는 기본 차단한다. 기존 pending 과거 outbox는 activation 시 Google에 쓰지 않고 `skipped_past_date`로 안전 종료한다.
 - Google 제목 형식은 `직원명 · 역할`, 휴무는 `휴무 · 직원명`이다. 연결된 이벤트의 직원 식별은 stable mapping으로 보호하고, 제목의 역할 부분은 날짜/시간과 함께 canonical override로 돌아온다.
 - Google 전용 `description`, `location`, `recurrence`, `attendees`, `reminders`, `transparency`, `visibility`, event color는 Hynix 기능으로 가장하지 않고 canonical에 import하거나 canonical projection으로 새로 쓰지 않는다.
 - Hynix 전용 날씨, 공휴일, 일출/일몰, 겹침 게이지, 그라데이션/색상도 Google 이벤트로 내보내지 않는다.

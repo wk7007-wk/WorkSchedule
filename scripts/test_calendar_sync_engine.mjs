@@ -27,6 +27,7 @@ function config(overrides = {}) {
 const leaseBudgetConfig = config();
 assert.ok(leaseBudgetConfig.outboxLeaseMs > leaseBudgetConfig.outboxOperationWindowMs);
 assert.ok(leaseBudgetConfig.outboxLeaseMs > leaseBudgetConfig.providerAttemptTimeoutMs + Math.max(...leaseBudgetConfig.retryBackoffMs));
+assert.equal(leaseBudgetConfig.pastDateWritesAllowed, false);
 
 const baseSnapshot = {
   employees: { emp1: { name: '이원규', active: true }, emp2: { name: '권연옥', active: true } },
@@ -76,6 +77,29 @@ assert.equal(created.extendedProperties.private.wsCanonicalKey, 'daily|2026-07-1
 assert.equal(created.extendedProperties.private.wsEmployeeId, 'emp1');
 assert.equal(created.start.dateTime, '2026-07-14T10:00:00+09:00');
 assert.equal((await engine.processOutbox()).processed, 0, 'idempotent outbox must not duplicate events');
+
+const pastStore = new MemorySyncStore({
+  employees: baseSnapshot.employees,
+  fixed_schedules: {},
+  overrides: {
+    '2026-07-13': {
+      emp1: {
+        state: 'shift', start: '09:00', end: '18:00', role: '홀',
+        shift: { start: '09:00', end: '18:00', role: '홀' }, updated_at_ms: 90
+      }
+    }
+  },
+  status: {}
+});
+const pastProvider = new MockCalendarProvider({ clock });
+const pastEngine = new CalendarSyncEngine({ config: config(), store: pastStore, provider: pastProvider, clock, sleep: async () => {} });
+await pastStore.enqueueOutbox(core.buildOutboxItem({
+  entity: 'daily_override', date: '2026-07-13', employeeId: 'emp1',
+  row: pastStore.snapshot.overrides['2026-07-13'].emp1, nowMs
+}));
+const pastOutboxResult = await pastEngine.processOutbox();
+assert.equal(pastOutboxResult.results[0].result.status, 'skipped_past_date');
+assert.equal(pastProvider.events.size, 0, 'past canonical rows are not projected by default');
 
 const overnightEntity = {
   canonicalKey: canonicalKey('2026-07-14', 'emp1'), mappingId: 'mapping-night', date: '2026-07-14',
