@@ -32,6 +32,14 @@ assert.match(indexSource, /ops_manual_seed\.js/);
 assert.match(indexSource, /data-tab="dashboard">브리핑</);
 assert.match(indexSource, /data-tab="ops">운영메뉴얼</);
 
+for (const [id, label] of [['prevW', '이전 주'], ['prevD', '이전 날짜'], ['nextD', '다음 날짜'], ['nextW', '다음 주']]) {
+  assert.match(indexSource, new RegExp(`<button[^>]*id="${id}"[^>]*aria-label="${label}"[^>]*min-width:44px[^>]*min-height:44px`));
+}
+assert.match(indexSource, /<button class="date-display" id="dateDisp" type="button" aria-label="날짜 선택"><\/button>/);
+assert.doesNotMatch(indexSource, /<span class="date-display" id="dateDisp"/);
+assert.match(appSource, /\$\('dateDisp'\)\.addEventListener\('click',\(\)=>openDP\(\)\);/);
+assert.doesNotMatch(appSource, /dateDisp[^\n]*addEventListener\('(keydown|keyup|keypress)'/);
+
 for (const term of ['source text', 'preview queue', 'source_event_id', 'upsert_shift', 'execute_live_write', 'confirmed request preview', 'CLI 보정', 'note 실제']) {
   assert.doesNotMatch(indexSource, new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
 }
@@ -67,6 +75,8 @@ assert.match(styleSource, /\.dash-callout-card/);
 assert.match(styleSource, /\.dash-manual-item/);
 assert.match(styleSource, /\.surface-panel/);
 assert.match(styleSource, /\.ops-body/);
+assert.match(styleSource, /\.date-display\{[^}]*min-height:44px[^}]*cursor:pointer/);
+assert.match(styleSource, /\.date-display:focus-visible/);
 assert.match(indexSource, /저장 전 내용을 확인한 뒤 반영합니다\./);
 
 assert.match(manualSource, /publicManualCardModel/);

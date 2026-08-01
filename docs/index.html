@@ -5,11 +5,11 @@
 <section class="preview-banner" id="previewBanner" hidden></section>
 <div style="position:sticky;top:0;z-index:100;background:#1A1A30;border-bottom:1px solid #2E2E52;">
 <div style="display:flex;align-items:center;justify-content:center;padding:4px 8px;gap:4px;">
-<button class="btn nav-btn" id="prevW" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">◀◀</button>
-<button class="btn nav-btn" id="prevD" style="font-size:.8rem;min-width:32px;min-height:32px;padding:4px;">◀</button>
-<span class="date-display" id="dateDisp" style="cursor:pointer;min-width:90px;"></span>
-<button class="btn nav-btn" id="nextD" style="font-size:.8rem;min-width:32px;min-height:32px;padding:4px;">▶</button>
-<button class="btn nav-btn" id="nextW" style="font-size:.7rem;min-width:32px;min-height:32px;padding:4px;">▶▶</button></div>
+<button class="btn nav-btn" id="prevW" aria-label="이전 주" style="font-size:.7rem;min-width:44px;min-height:44px;padding:4px;">◀◀</button>
+<button class="btn nav-btn" id="prevD" aria-label="이전 날짜" style="font-size:.8rem;min-width:44px;min-height:44px;padding:4px;">◀</button>
+<button class="date-display" id="dateDisp" type="button" aria-label="날짜 선택"></button>
+<button class="btn nav-btn" id="nextD" aria-label="다음 날짜" style="font-size:.8rem;min-width:44px;min-height:44px;padding:4px;">▶</button>
+<button class="btn nav-btn" id="nextW" aria-label="다음 주" style="font-size:.7rem;min-width:44px;min-height:44px;padding:4px;">▶▶</button></div>
 <div style="display:flex;align-items:center;justify-content:space-between;padding:0 8px 4px;gap:4px;">
 <div style="display:flex;gap:4px;"><button class="btn emp-mgr-btn" id="empMgrBtn">직원</button><button class="btn emp-mgr-btn" id="dayoffMgrBtn" style="color:#E74C3C;border-color:#E74C3C55;">휴무</button><button class="btn emp-mgr-btn" id="workEditBtn" style="color:#2ECC71;border-color:#2ECC7144;">근무 수정</button></div>
 <div style="display:flex;gap:4px;"><button class="btn btn-sm" id="shareBtn" style="font-size:.75rem;padding:4px 8px;min-width:auto;color:#9090A8;border-color:#2E2E52;">공유</button><wbr><button class="btn btn-sm" id="urlBtn" style="font-size:.75rem;padding:4px 8px;min-width:auto;color:#707088;border-color:#2E2E52;">공유 링크</button><wbr><button class="btn btn-sm" id="refreshBtn" style="font-size:.75rem;padding:4px 8px;min-width:auto;color:#707088;border-color:#2E2E52;">↻</button></div></div></div>
