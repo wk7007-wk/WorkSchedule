@@ -81,6 +81,19 @@ assert.match(appSource, /saveQuickShift/);
 assert.match(appSource, /setShiftPreset/);
 assert.match(appSource, /원천 반영\/출력 동기화됨/);
 
+const focusStdStart = appSource.indexOf('function focusStdPanel()');
+const focusStdEnd = appSource.indexOf('const surfaceCollapseSyncs', focusStdStart);
+const focusStdSource = appSource.slice(focusStdStart, focusStdEnd);
+const focusOpenIndex = focusStdSource.indexOf("panel.classList.remove('collapsed')");
+const focusAriaIndex = focusStdSource.indexOf("panel.querySelector('.surface-toggle')?.setAttribute('aria-expanded','true')");
+const focusScrollIndex = focusStdSource.indexOf('panel.scrollIntoView');
+const focusHighlightIndex = focusStdSource.indexOf("panel.classList.add('highlight')");
+assert.ok(focusStdStart >= 0 && focusStdEnd > focusStdStart, 'focusStdPanel source block must exist');
+assert.ok(focusOpenIndex >= 0, 'focusStdPanel must open the collapsed panel');
+assert.ok(focusAriaIndex > focusOpenIndex, 'focusStdPanel must sync aria-expanded after opening');
+assert.ok(focusScrollIndex > focusAriaIndex, 'focusStdPanel must open the panel before scrolling');
+assert.ok(focusHighlightIndex > focusScrollIndex, 'focusStdPanel must preserve highlight after scrolling');
+
 assert.match(styleSource, /\.auth-mode-badge/);
 assert.match(styleSource, /\.preview-banner/);
 assert.match(styleSource, /\.ops-manual-card/);

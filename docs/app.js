@@ -596,7 +596,7 @@ function stdPreviewText(){
   return emp.name+' · '+stdDateLabel(d)+' · '+s+' ~ '+e+' · '+role;
 }
 function renderStdPreview(){const el=$('stdPreview');if(!el)return;el.innerHTML='<strong>저장 내용</strong> '+esc(stdPreviewText());}
-function focusStdPanel(){const panel=$('stdPanel');if(!panel)return;panel.scrollIntoView({behavior:'smooth',block:'start'});panel.classList.add('highlight');clearTimeout(panel._hl);panel._hl=setTimeout(()=>panel.classList.remove('highlight'),1200);}
+function focusStdPanel(){const panel=$('stdPanel');if(!panel)return;panel.classList.remove('collapsed');panel.querySelector('.surface-toggle')?.setAttribute('aria-expanded','true');panel.scrollIntoView({behavior:'smooth',block:'start'});panel.classList.add('highlight');clearTimeout(panel._hl);panel._hl=setTimeout(()=>panel.classList.remove('highlight'),1200);}
 const surfaceCollapseSyncs=[];
 function isCompactViewport(){return window.matchMedia&&window.matchMedia('(max-width: 760px)').matches;}
 function bindSurfaceCollapse(panelId,headSelector,collapseOnMobile){
