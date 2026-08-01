@@ -900,6 +900,19 @@ function rMonth(){
   con.innerHTML=h+'</div></div>';con.querySelectorAll('[data-dk]').forEach(el=>{el.addEventListener('click',()=>{const p=el.dataset.dk.split('-');S.date=new Date(+p[0],+p[1]-1,+p[2]);onDC();});});
 }
 // === week / datestrip ===
+let dateStripFocusDk='',dateStripRestoreFocus=false;
+function dateStripButtons(con){return Array.from(con.querySelectorAll('.date-strip-item:not([disabled])')).filter(el=>el.getAttribute('aria-disabled')!=='true');}
+function focusDateStripItem(con,item){
+  if(!item)return;dateStripButtons(con).forEach(el=>{el.tabIndex=el===item?0:-1;});dateStripFocusDk=item.dataset.dk||'';item.focus({preventScroll:true});item.scrollIntoView({block:'nearest',inline:'center',behavior:'auto'});
+}
+function selectDateStripItem(item){
+  if(!item||item.getAttribute('aria-disabled')==='true')return;const p=String(item.dataset.dk||'').split('-');if(p.length!==3)return;dateStripFocusDk=item.dataset.dk;dateStripRestoreFocus=true;S.date=new Date(+p[0],+p[1]-1,+p[2]);onDC();
+}
+function handleDateStripKey(e,con){
+  const item=e.target.closest('.date-strip-item');if(!item)return;const items=dateStripButtons(con),at=items.indexOf(item);if(at<0)return;
+  let next=-1;if(e.key==='ArrowLeft')next=Math.max(0,at-1);else if(e.key==='ArrowRight')next=Math.min(items.length-1,at+1);else if(e.key==='Home')next=0;else if(e.key==='End')next=items.length-1;else if(e.key==='Enter'||e.key===' '){e.preventDefault();selectDateStripItem(item);return;}else return;
+  e.preventDefault();focusDateStripItem(con,items[next]);
+}
 function renderWeek(){
   if(!S.loaded)return;const mn=getMon(S.date),ek=empIds();$('weekGrid').innerHTML='';
   const dO={};ek.forEach(id=>{dO[id]=0;});
@@ -907,17 +920,18 @@ function renderWeek(){
   $('weekOffs').innerHTML='';ek.forEach(e=>{const emp=S.emp[e];if(!emp)return;const oc=dO[e];if(!oc)return;const c=document.createElement('div');c.className='off-chip';c.innerHTML='<span style="color:'+CD+';">'+esc(emp.name)+' <span style="color:'+CO+';">휴'+oc+'</span></span>';$('weekOffs').appendChild(c);});
 }
 function renderDS(){
-  const con=$('dateStrip');if(!con)return;const today=new Date();today.setHours(0,0,0,0);const ek=empIds(),selDk=dk(S.date),mn=getMon(S.date);
-  let h='';['월','화','수','목','금','토','일'].forEach(d=>{h+='<div class="date-strip-hdr" style="position:sticky;top:0;background:#1A1A30;z-index:1;">'+d+'</div>';});
+  const con=$('dateStrip');if(!con)return;const active=document.activeElement&&document.activeElement.closest?document.activeElement.closest('.date-strip-item'):null,hadFocus=!!(active&&con.contains(active));
+  const today=new Date();today.setHours(0,0,0,0);const ek=empIds(),selDk=dk(S.date),mn=getMon(S.date);if(hadFocus){dateStripFocusDk=active.dataset.dk||selDk;dateStripRestoreFocus=true;}const focusDk=dateStripRestoreFocus&&dateStripFocusDk?dateStripFocusDk:selDk;
+  let h='';
   for(let i=-7;i<56;i++){const d=new Date(mn);d.setDate(d.getDate()+i);const k=dk(d),dw=d.getDay(),isT=sameD(d,today),isSel=k===selDk,isP=d<today;
     let cC=0,aC=0;ek.forEach(e=>{if(getShift(k,e)){aC++;if(gSt(k,e)==='confirmed')cC++;}});
-    let bC='#2E2E52';if(aC){bC=cC===aC?CK:cC?CK+'88':CD;}
-    h+='<div class="date-strip-item'+(isP?' ds-past':'')+(isT?' ds-today':'')+(isSel?' ds-selected':'')+'" data-dk="'+k+'" style="'+(isSel?'':'border-color:'+bC+';')+'">';
-    if(isT)h+='<div style="font-size:.4rem;color:#2ECC71;font-weight:700;line-height:1;">오늘</div>';
-    h+='<div class="ds-date'+((dw===0||isH(d))?' sun':dw===6?' sat':'')+'">'+d.getDate()+'</div>';
-    if(aC)h+='<div class="ds-count" style="color:'+(cC===aC?CK:CD)+';">'+aC+'명</div>';h+='</div>';}
-  con.innerHTML=h;con.querySelectorAll('.date-strip-item').forEach(el=>{el.addEventListener('click',()=>{const p=el.dataset.dk.split('-');S.date=new Date(+p[0],+p[1]-1,+p[2]);onDC();});});
-  const se=con.querySelector('[data-dk="'+selDk+'"]');if(se)setTimeout(()=>se.scrollIntoView({block:'center',behavior:'auto'}),10);
+    let bC='#4B4B70';if(aC){bC=cC===aC?CK:cC?'#65B982':CD;}const dayClass=(dw===0||isH(d))?' sun':dw===6?' sat':'',state=[isT?'오늘':'',isSel?'선택됨':'',aC?'근무 '+aC+'명':'근무 없음',aC&&cC===aC?'전체 확정':cC?'일부 확정':''].filter(Boolean).join(', '),label=d.getFullYear()+'년 '+(d.getMonth()+1)+'월 '+d.getDate()+'일 '+DOW_KR[dw]+'요일, '+state;
+    h+='<button type="button" class="date-strip-item'+(isP?' ds-past':'')+(isT?' ds-today':'')+(isSel?' ds-selected':'')+'" data-dk="'+k+'" style="--ds-border:'+bC+';" tabindex="'+(k===focusDk?'0':'-1')+'" aria-pressed="'+(isSel?'true':'false')+'" aria-disabled="false"'+(isT?' aria-current="date"':'')+' aria-label="'+esc(label)+'">';
+    h+='<span class="ds-dow'+dayClass+'" aria-hidden="true">'+DOW_KR[dw]+'</span><span class="ds-date'+dayClass+'" aria-hidden="true">'+d.getDate()+'</span>';
+    if(aC)h+='<span class="ds-count'+(cC===aC?' ds-confirmed':'')+'" aria-hidden="true">'+aC+'명</span>';h+='</button>';}
+  con.innerHTML=h;con.onclick=e=>{const item=e.target.closest('.date-strip-item');if(item)selectDateStripItem(item);};con.onkeydown=e=>handleDateStripKey(e,con);dateStripFocusDk=focusDk;
+  const focusItem=con.querySelector('[data-dk="'+focusDk+'"]'),selectedItem=con.querySelector('[data-dk="'+selDk+'"]'),restore=dateStripRestoreFocus;
+  setTimeout(()=>{const target=restore?focusItem:selectedItem;if(!target||!target.isConnected)return;if(restore){focusDateStripItem(con,target);dateStripRestoreFocus=false;}else target.scrollIntoView({block:'nearest',inline:'center',behavior:'auto'});},10);
 }
 function loadJsonFromLocalStorage(key){
   try{return JSON.parse(localStorage.getItem(key)||'null');}catch(e){return null;}
@@ -1344,8 +1358,8 @@ function openDP(){const ov=$('dpOverlay'),list=$('dpList');const today=new Date(
 function setupDel(){function h(e){const d=dk(S.date),tg=e.target.closest('[data-action]');if(tg){e.stopPropagation();const a=tg.dataset.action;if(a==='confirmAll')cfAll();else if(a==='status')sSt(d,tg.dataset.sid,tg.dataset.st);else if(a==='toggleOff')togOff(tg.dataset.oid);else if(a==='confirmOff')cfOff(tg.dataset.oid);return;}const r=e.target.closest('[data-empid]');if(r)openSh(r.dataset.empid);}['tbCon','lsCon','dayCon','peopleCon'].forEach(id=>$(id)?.addEventListener('click',h));}
 function swTab(t){S.tab=t;document.querySelectorAll('.layout-tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));$({dashboard:'pDashboard',day:'pDay',people:'pPeople',month:'pMonth',list:'pList',timebar:'pTimebar',ops:'pOps'}[t])?.classList.add('active');if(t==='month')loadMonth();rTab();}
 document.querySelectorAll('.layout-tab').forEach(t=>{t.addEventListener('click',()=>swTab(t.dataset.tab));});
-let swX=0,swY=0;$('tabContent').addEventListener('touchstart',e=>{swX=e.touches[0].clientX;swY=e.touches[0].clientY;},{passive:true});
-$('tabContent').addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-swX,dy=e.changedTouches[0].clientY-swY;if(Math.abs(dx)<60||Math.abs(dy)>Math.abs(dx)*0.7)return;S.date.setDate(S.date.getDate()+(dx<0?1:-1));onDC();},{passive:true});
+let swX=0,swY=0,swDateStrip=false;$('tabContent').addEventListener('touchstart',e=>{swX=e.touches[0].clientX;swY=e.touches[0].clientY;swDateStrip=!!e.target.closest('#dateStrip');},{passive:true});
+$('tabContent').addEventListener('touchend',e=>{if(swDateStrip){swDateStrip=false;return;}const dx=e.changedTouches[0].clientX-swX,dy=e.changedTouches[0].clientY-swY;if(Math.abs(dx)<60||Math.abs(dy)>Math.abs(dx)*0.7)return;S.date.setDate(S.date.getDate()+(dx<0?1:-1));onDC();},{passive:true});
 // === share ===
 $('shareBtn').addEventListener('click',()=>queueCompositeShare('header_share'));
 $('deliveryShareBtn')?.addEventListener('click',()=>queueCompositeShare('delivery_panel'));

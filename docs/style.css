@@ -196,21 +196,28 @@ select.form-input{appearance:none;-webkit-appearance:none;background-image:url("
 .spinner{width:24px;height:24px;border:3px solid #2E2E52;border-top-color:#2ECC71;border-radius:50%;animation:spin .6s linear infinite;margin-right:10px;}
 @keyframes spin{to{transform:rotate(360deg);}}
 
-.date-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;padding:4px 6px;background:#1A1A30;border-bottom:1px solid #2E2E52;max-height:150px;overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.date-strip{display:flex;gap:5px;padding:6px;background:#1A1A30;border-bottom:1px solid #3D3D63;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:#6F6A9E #1A1A30;}
 .date-strip::-webkit-scrollbar{display:none;}
-.date-strip-hdr{font-size:.5rem;color:#707088;text-align:center;padding:1px 0;font-weight:600;}
-.date-strip-item{padding:8px 2px;border-radius:8px;min-height:44px;text-align:center;cursor:pointer;border:1.5px solid #2E2E52;transition:background .15s,border-color .15s;}
-.date-strip-item:active{background:#2A2A45;}
-.date-strip-item .ds-date{font-size:.9rem;font-weight:800;color:#E0E0EC;line-height:1.2;}
-.date-strip-item .ds-date.sun{color:#E74C3C;}
-.date-strip-item .ds-date.sat{color:#4ECDC4;}
-.date-strip-item .ds-count{font-size:.5rem;color:#707088;line-height:1;margin-top:1px;}
-.date-strip-item.ds-past{opacity:.3;}
-.date-strip-item.ds-today .ds-date{color:#2ECC71;}
-.date-strip-item.ds-selected{background:#7C6FE0;border-color:#9B8FFF;border-width:2px;position:relative;z-index:2;box-shadow:0 0 0 2px rgba(155,143,255,0.4),0 0 12px rgba(124,111,224,0.5);}
+.date-strip-item{appearance:none;-webkit-appearance:none;flex:0 0 54px;scroll-snap-align:center;padding:5px 3px;border-radius:9px;min-height:54px;text-align:center;cursor:pointer;border:2px solid var(--ds-border,#4B4B70);background:#23233E;color:#F4F4FA;font:inherit;line-height:1;transition:background .15s,border-color .15s,box-shadow .15s;}
+.date-strip-item:hover{background:#2C2C4A;}
+.date-strip-item:active{background:#343454;}
+.date-strip-item:focus-visible{outline:3px solid #FFD866;outline-offset:2px;box-shadow:0 0 0 2px #1A1A30;position:relative;z-index:3;}
+.date-strip-item[aria-disabled="true"]{cursor:not-allowed;background:#24243B;color:#B8B8CA;border-color:#55556F;}
+.date-strip-item .ds-dow{display:block;font-size:.65rem;font-weight:750;color:#C6C6D8;line-height:1.15;}
+.date-strip-item .ds-date{display:block;font-size:.95rem;font-weight:850;color:#F4F4FA;line-height:1.15;margin-top:1px;}
+.date-strip-item .ds-dow.sun,.date-strip-item .ds-date.sun{color:#FF9B94;}
+.date-strip-item .ds-dow.sat,.date-strip-item .ds-date.sat{color:#78E8DF;}
+.date-strip-item .ds-count{display:block;font-size:.6rem;font-weight:700;color:#B8B8CA;line-height:1.1;margin-top:2px;}
+.date-strip-item .ds-count.ds-confirmed{color:#75E79C;}
+.date-strip-item.ds-past{background:#202039;}
+.date-strip-item.ds-past .ds-date{color:#C6C6D4;}
+.date-strip-item.ds-today{box-shadow:inset 0 0 0 1px #75E79C;}
+.date-strip-item.ds-today .ds-dow,.date-strip-item.ds-today .ds-date{color:#75E79C;}
+.date-strip-item.ds-selected.ds-today{box-shadow:0 0 0 2px #75E79C,0 0 0 4px #1A1A30,0 0 10px rgba(89,76,196,0.55);}
+.date-strip-item.ds-selected{background:#594CC4;border-color:#C7C1FF;position:relative;z-index:2;box-shadow:0 0 0 1px #B9B1FF,0 0 10px rgba(89,76,196,0.55);}
 .date-strip-item.ds-selected .ds-date{color:#FFF !important;font-weight:900;}
-.date-strip-item.ds-selected .ds-count{color:rgba(255,255,255,0.85);}
-.date-strip-item.ds-past.ds-selected{opacity:1;}
+.date-strip-item.ds-selected .ds-dow,.date-strip-item.ds-selected .ds-count{color:#F2F1FF;}
+.date-strip-item.ds-past.ds-selected{background:#594CC4;}
 
 .delivery-panel{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 8px;padding:8px 10px;border:1px solid #2E2E52;background:#1A1A35;border-radius:8px;}
 .delivery-copy{display:flex;flex-direction:column;gap:2px;min-width:0;}
