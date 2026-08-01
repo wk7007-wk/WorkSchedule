@@ -900,13 +900,14 @@ function rMonth(){
   con.innerHTML=h+'</div></div>';con.querySelectorAll('[data-dk]').forEach(el=>{el.addEventListener('click',()=>{const p=el.dataset.dk.split('-');S.date=new Date(+p[0],+p[1]-1,+p[2]);onDC();});});
 }
 // === week / datestrip ===
-let dateStripFocusDk='',dateStripRestoreFocus=false;
+let dateStripFocusDk='',dateStripRestoreFocus=false,dateStripFocusOwned=false;
+document.addEventListener('focusin',e=>{dateStripFocusOwned=!!(e.target.closest&&e.target.closest('#dateStrip'));});
 function dateStripButtons(con){return Array.from(con.querySelectorAll('.date-strip-item:not([disabled])')).filter(el=>el.getAttribute('aria-disabled')!=='true');}
 function focusDateStripItem(con,item){
-  if(!item)return;dateStripButtons(con).forEach(el=>{el.tabIndex=el===item?0:-1;});dateStripFocusDk=item.dataset.dk||'';item.focus({preventScroll:true});item.scrollIntoView({block:'nearest',inline:'center',behavior:'auto'});
+  if(!item)return;dateStripButtons(con).forEach(el=>{el.tabIndex=el===item?0:-1;});dateStripFocusDk=item.dataset.dk||'';dateStripFocusOwned=true;item.focus({preventScroll:true});item.scrollIntoView({block:'nearest',inline:'center',behavior:'auto'});
 }
 function selectDateStripItem(item){
-  if(!item||item.getAttribute('aria-disabled')==='true')return;const p=String(item.dataset.dk||'').split('-');if(p.length!==3)return;dateStripFocusDk=item.dataset.dk;dateStripRestoreFocus=true;S.date=new Date(+p[0],+p[1]-1,+p[2]);onDC();
+  if(!item||item.getAttribute('aria-disabled')==='true')return;const p=String(item.dataset.dk||'').split('-');if(p.length!==3)return;dateStripFocusDk=item.dataset.dk;dateStripRestoreFocus=true;dateStripFocusOwned=true;S.date=new Date(+p[0],+p[1]-1,+p[2]);onDC();
 }
 function handleDateStripKey(e,con){
   const item=e.target.closest('.date-strip-item');if(!item)return;const items=dateStripButtons(con),at=items.indexOf(item);if(at<0)return;
@@ -930,7 +931,7 @@ function renderDS(){
     h+='<span class="ds-dow'+dayClass+'" aria-hidden="true">'+DOW_KR[dw]+'</span><span class="ds-date'+dayClass+'" aria-hidden="true">'+d.getDate()+'</span>';
     if(aC)h+='<span class="ds-count'+(cC===aC?' ds-confirmed':'')+'" aria-hidden="true">'+aC+'명</span>';h+='</button>';}
   con.innerHTML=h;con.onclick=e=>{const item=e.target.closest('.date-strip-item');if(item)selectDateStripItem(item);};con.onkeydown=e=>handleDateStripKey(e,con);dateStripFocusDk=focusDk;
-  const focusItem=con.querySelector('[data-dk="'+focusDk+'"]'),selectedItem=con.querySelector('[data-dk="'+selDk+'"]'),restore=dateStripRestoreFocus;
+  const focusItem=con.querySelector('[data-dk="'+focusDk+'"]'),selectedItem=con.querySelector('[data-dk="'+selDk+'"]'),restore=dateStripRestoreFocus||dateStripFocusOwned;
   setTimeout(()=>{const target=restore?focusItem:selectedItem;if(!target||!target.isConnected)return;if(restore){focusDateStripItem(con,target);dateStripRestoreFocus=false;}else target.scrollIntoView({block:'nearest',inline:'center',behavior:'auto'});},10);
 }
 function loadJsonFromLocalStorage(key){

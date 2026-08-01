@@ -18,6 +18,8 @@ for (const key of ['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', "e.key==='
   assert.ok(stripLogic.includes(key), `missing keyboard support for ${key}`);
 }
 assert.match(stripLogic, /dateStripRestoreFocus=true/, 'activation must request focus restoration');
+assert.match(stripLogic, /dateStripFocusOwned=true/, 'async rerenders must retain date-strip focus ownership');
+assert.match(stripLogic, /restore=dateStripRestoreFocus\|\|dateStripFocusOwned/, 'late data rerenders must restore focus');
 assert.match(stripLogic, /if\(restore\)\{focusDateStripItem\(con,target\)/, 'rerender must restore focus to the active date');
 assert.match(app, /swDateStrip=.*closest\('#dateStrip'\)/,
   'date-strip touch scrolling must be isolated from page date swipe');
