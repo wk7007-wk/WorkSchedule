@@ -100,6 +100,7 @@ assert.match(styleSource, /\.ops-manual-card/);
 assert.match(styleSource, /\.dash-callout-card/);
 assert.match(styleSource, /\.dash-manual-item/);
 assert.match(styleSource, /\.surface-panel/);
+assert.match(styleSource, /\.surface-panel \.surface-head \.surface-toggle\{[^}]*width:44px;[^}]*height:44px;/);
 assert.match(styleSource, /\.ops-body/);
 assert.match(styleSource, /\.date-display\{[^}]*min-height:44px[^}]*cursor:pointer/);
 assert.match(styleSource, /\.date-display:focus-visible/);
