@@ -31,6 +31,19 @@ assert.match(indexSource, /opsCon/);
 assert.match(indexSource, /ops_manual_seed\.js/);
 assert.match(indexSource, /data-tab="dashboard">브리핑</);
 assert.match(indexSource, /data-tab="ops">운영메뉴얼</);
+assert.match(indexSource, /<meta name="viewport" content="width=device-width,initial-scale=1\.0">/);
+assert.doesNotMatch(indexSource, /user-scalable\s*=\s*no/i);
+
+for (const [id, label] of [
+  ['selStart', '근무 시작 시간'],
+  ['selEnd', '근무 종료 시간'],
+  ['empRole', '직원 역할'],
+  ['doEmpSel', '휴무 직원 선택'],
+  ['doDate', '휴무 날짜'],
+]) {
+  assert.match(indexSource, new RegExp(`<[^>]*id="${id}"[^>]*aria-label="${label}"`));
+}
+assert.match(indexSource, /<input[^>]*id="doDate"[^>]*name="dayoffDate"/);
 
 for (const [id, label] of [['prevW', '이전 주'], ['prevD', '이전 날짜'], ['nextD', '다음 날짜'], ['nextW', '다음 주']]) {
   assert.match(indexSource, new RegExp(`<button[^>]*id="${id}"[^>]*aria-label="${label}"[^>]*min-width:44px[^>]*min-height:44px`));
