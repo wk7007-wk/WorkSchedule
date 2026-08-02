@@ -15,7 +15,7 @@ body:not(.auth-locked) .auth-gate{display:none;}
 .auth-card .form-input{margin-bottom:8px;}
 .auth-card .btn{width:100%;min-height:40px;}
 .auth-msg{min-height:20px;margin-top:9px;font-size:.72rem;line-height:1.4;color:#9090A8;overflow-wrap:anywhere;}
-.auth-msg.err{color:#E74C3C;}
+.auth-msg.err{color:#FF6B6B;}
 .auth-msg.ok{color:#2ECC71;}
 ::-webkit-scrollbar{height:6px;width:6px;}
 ::-webkit-scrollbar-track{background:#1A1A30;}
