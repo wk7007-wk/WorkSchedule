@@ -23,6 +23,12 @@ body:not(.auth-locked) .auth-gate{display:none;}
 
 .date-display{display:inline-flex;align-items:center;justify-content:center;min-width:110px;min-height:44px;padding:0;border:0;background:transparent;color:#FFD700;cursor:pointer;font:inherit;font-size:1.05rem;font-weight:600;text-align:center;white-space:nowrap;}
 .date-display:focus-visible{outline:2px solid #FFD700;outline-offset:2px;border-radius:6px;}
+.ws-topbar-date,.ws-topbar-actions{min-width:0;}
+.ws-topbar-group{display:flex;min-width:0;gap:4px;}
+@media(max-width:420px){
+  .ws-topbar-actions{flex-wrap:wrap;}
+  .ws-topbar-actions .ws-topbar-group:last-child{margin-left:auto;}
+}
 
 .btn{display:inline-flex;align-items:center;justify-content:center;border:1px solid #2E2E52;background:#242444;color:#E0E0EC;border-radius:8px;cursor:pointer;font-size:.9rem;min-width:44px;min-height:44px;padding:8px 12px;transition:background .15s;user-select:none;-webkit-user-select:none;white-space:nowrap;}
 .btn:active{background:#2E2E52;}
