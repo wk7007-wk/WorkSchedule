@@ -1257,7 +1257,7 @@ function setupGauge(){const g=$('gauge');let dr=null;function xT(x){const r=g.ge
   g.addEventListener('touchend',()=>{dr=null;});
 }
 function bChips(){const c=$('shiftChips');c.innerHTML='';empIds().forEach(eid=>{const emp=S.emp[eid],ch=document.createElement('div');ch.className='emp-chip';if(eid===smE)ch.classList.add('selected');ch.innerHTML='<div class="chip-dot" style="background:'+(emp.color||'#9090A8')+'"></div>'+esc(emp.name);ch.addEventListener('click',()=>{smE=eid;c.querySelectorAll('.emp-chip').forEach(x=>x.classList.remove('selected'));ch.classList.add('selected');const raw=explicitShift(S.sc[eid]),ex=getShift(dk(S.date),eid);if(ex&&ex.start){sS(ex.start);sE(ex.end);smR=ex.role?ex.role.split(',').filter(Boolean):[];uRP();$('shiftDel').style.display=raw?'':'none';smEd=!!raw;}else{$('shiftDel').style.display='none';smEd=false;}});c.appendChild(ch);});}
-function uRP(){document.querySelectorAll('#rolePills .role-pill').forEach(p=>{p.classList.toggle('selected',smR.includes(p.dataset.role));});}
+function uRP(){document.querySelectorAll('#rolePills .role-pill').forEach(p=>{p.classList.toggle('selected',smR.includes(p.dataset.role));p.setAttribute('aria-pressed',smR.includes(p.dataset.role)?'true':'false');});}
 async function saveQuickShift(){
   try{
     if(!smE){toast('직원을 선택해주세요');return false;}

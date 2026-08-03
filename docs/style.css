@@ -176,8 +176,9 @@ select.form-input{appearance:none;-webkit-appearance:none;background-image:url("
 .emp-chip.selected{border-color:#2ECC71;background:#2ECC7118;}
 
 .role-pills{display:flex;gap:8px;margin-bottom:14px;}
-.role-pill{padding:6px 16px;background:#2A2A45;border:1px solid #2E2E52;border-radius:20px;cursor:pointer;font-size:.85rem;color:#E0E0EC;transition:background .15s;min-height:36px;display:flex;align-items:center;}
+.role-pill{padding:6px 16px;background:#2A2A45;border:1px solid #2E2E52;border-radius:20px;cursor:pointer;font-size:.85rem;color:#E0E0EC;transition:background .15s;min-height:44px;display:flex;align-items:center;font-family:inherit;}
 .role-pill.selected{background:var(--pill-color,#2ECC71);color:#121225;border-color:var(--pill-color,#2ECC71);font-weight:600;}
+.role-pill:focus-visible{outline:3px solid #FFD866;outline-offset:2px;}
 
 .presets{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
 .preset-btn{padding:8px 14px;background:#2A2A45;border:1px solid #2E2E52;border-radius:8px;color:#E0E0EC;cursor:pointer;font-size:.82rem;min-height:40px;transition:background .1s;}

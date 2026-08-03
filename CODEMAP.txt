@@ -27,6 +27,7 @@
 - `docs/manual_logic.js` — 하이닉스 메모 -> 직원용 메뉴얼 병합/정규화/충돌 감지 + 숨은 메타 유지 + intake envelope 분류 후보/briefing empty-state contract 순수 모듈
 - `scripts/test_schedule_logic.mjs` — delivery 상태 계산 + docs 이미지 출력 경로 회귀 테스트
 - `scripts/test_auth_std_logic.mjs` — PIN/GPS gate와 표준 수정 요청 객체 회귀 테스트
+- `scripts/test_role_pill_accessibility.mjs` — 빠른 근무 수정 역할 3개의 native button, `aria-pressed`, 44px target, focus-visible 계약 테스트
 - `scripts/test_manual_logic.mjs` — 운영메뉴얼 병합/출력 분류 회귀 테스트
 - `scripts/test_confirmation_panel_static.mjs` — confirmation panel queue contract/static write-boundary smoke 테스트
 - `APP_INTENT.md` — 앱이 아니라 Firebase DB 기반 웹/이미지 출력 도구라는 의도 SOT
